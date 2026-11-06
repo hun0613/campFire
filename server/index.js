@@ -8,6 +8,7 @@ import { WebSocketServer } from 'ws';
 import {
   CFG, PITS, STUMPS, NPC, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
 } from '../shared/config.js';
+import { search, searchesLeft, nextReset, videoInfo, known, addRecent, recentList, hasKey } from './youtube.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -73,7 +74,7 @@ const players = new Map(); // id -> player
 let nextId = 1;
 
 const pits = new Map(PITS.map((p) => [p.id, {
-  id: p.id, state: 'empty', owner: null, litAt: 0, endsAt: 0,
+  id: p.id, state: 'empty', owner: null, litAt: 0, endsAt: 0, music: null,
   seats: Array(CFG.SEATS_PER_PIT).fill(null),
 }]));
 const pitDef = new Map(PITS.map((p) => [p.id, p]));
@@ -152,9 +153,51 @@ function broadcast(msg, except) {
 function dist(p, x, z) {
   return Math.hypot(p.x - x, p.z - z);
 }
+// ---------------------------------------------------------------- 모닥불 음악 (유튜브)
+// 규칙: 불 붙은 모닥불에 앉은 사람만 틀 수 있고, 곡이 끝나기 전에는 아무도 바꿀 수 없다.
+//       영상 끝 / 연주자가 일어나거나 나감 / 불 꺼짐 / 재생 불가 영상 이면 멈춘다.
+const YT_ID = /^[A-Za-z0-9_-]{11}$/;
+export function parseYouTubeId(input) {
+  const s = String(input || '').trim();
+  if (YT_ID.test(s)) return s;
+  let u;
+  try { u = new URL(/^https?:\/\//i.test(s) ? s : `https://${s}`); } catch { return null; }
+  const host = u.hostname.replace(/^(www|m|music)\./, '');
+  let id = null;
+  if (host === 'youtu.be') id = u.pathname.split('/')[1];
+  else if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
+    id = u.searchParams.get('v');
+    const m = u.pathname.match(/^\/(?:shorts|embed|live|v)\/([^/?#]+)/);
+    if (!id && m) id = m[1];
+  }
+  return id && YT_ID.test(id) ? id : null;
+}
+/** 유튜브 oEmbed로 제목 확인 + 외부 재생이 막힌 영상 걸러내기 */
+async function lookupVideo(id) {
+  try {
+    const r = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}`,
+      { signal: AbortSignal.timeout(4000) });
+    if (r.status === 401 || r.status === 403) return { ok: false, why: '이 영상은 업로더가 외부 재생을 막아 뒀어요 😢' };
+    if (r.status === 404 || r.status === 400) return { ok: false, why: '영상을 찾을 수 없어요. 링크를 확인해 주세요' };
+    if (!r.ok) return { ok: true, title: '' };
+    const j = await r.json();
+    return { ok: true, title: String(j.title || '').slice(0, 80) };
+  } catch {
+    return { ok: true, title: '' }; // 유튜브 확인이 안 되면 일단 틀어 본다 (재생 오류는 클라이언트가 알려줌)
+  }
+}
+function clearMusic(pit, reason) {
+  if (!pit.music) return;
+  const by = players.get(pit.music.by);
+  if (by?.seat?.pit === pit.id && by.anim === 'guitar') by.anim = 'sit';
+  pit.music = null;
+  broadcast({ t: 'musicStop', pit: pit.id, reason });
+}
+
 function leaveSeat(p) {
   if (!p.seat) return;
   const pit = pits.get(p.seat.pit);
+  if (pit?.music?.by === p.id) clearMusic(pit, 'left');
   if (pit && pit.seats[p.seat.idx] === p.id) pit.seats[p.seat.idx] = null;
   p.seat = null;
   p.anim = 'idle';
@@ -344,6 +387,82 @@ function handle(ws, ctx, m) {
       send(ws, inv(me));
       break;
     }
+    case 'musicOpen': { // 곡 고르기 창을 열 때: 최근 곡 + 오늘 남은 검색 횟수
+      send(ws, { t: 'musicMenu', recent: recentList(), left: searchesLeft(), hasKey: hasKey(), resetAt: nextReset() });
+      break;
+    }
+    case 'search': {
+      if (now - (me.lastSearch || 0) < 2500) { send(ws, { t: 'searchFail', text: '조금만 천천히 검색해 주세요' }); return; }
+      me.lastSearch = now;
+      search(m.q, me.pid || me.name).then((r) => {
+        if (r.ok) send(ws, { t: 'searchResult', q: m.q, items: r.items, left: r.left, cached: r.cached });
+        else send(ws, { t: 'searchFail', text: r.text, exhausted: !!r.exhausted, resetAt: r.resetAt, left: searchesLeft() });
+      });
+      break;
+    }
+    case 'music': {
+      const pit = me.seat && pits.get(me.seat.pit);
+      if (!pit || pit.id !== m.pit) { send(ws, { t: 'toast', text: '모닥불에 앉아서 음악을 틀 수 있어요' }); return; }
+      if (pit.state !== 'lit') { send(ws, { t: 'toast', text: '불이 붙어 있어야 음악을 틀 수 있어요' }); return; }
+      if (pit.music) { send(ws, { t: 'toast', text: '지금 곡이 끝나면 다른 곡을 틀 수 있어요 🎵' }); return; }
+      if (now - (me.lastMusic || 0) < 3000 || ctx.musicPending) return;
+      const vid = parseYouTubeId(m.vid || m.url);
+      if (!vid) { send(ws, { t: 'musicFail', text: '곡을 찾지 못했어요. 다시 골라 주세요' }); return; }
+      me.lastMusic = now;
+      ctx.musicPending = true;
+      (async () => {
+        // 검색/최근 곡이면 이미 정보가 있고, 링크면 API(1유닛) 또는 oEmbed로 확인
+        let info = known.get(vid);
+        if (!info && hasKey()) info = (await videoInfo([vid]).catch(() => []))[0];
+        if (info) {
+          if (!info.embeddable) return { ok: false, why: '이 곡은 업로더가 외부 재생을 막아 뒀어요 😢' };
+          if (info.live) return { ok: false, why: '라이브 방송은 틀 수 없어요' };
+          return { ok: true, ...info };
+        }
+        const o = await lookupVideo(vid);
+        return o.ok ? { ok: true, vid, title: o.title, channel: '', thumb: '', duration: 0 } : o;
+      })().then((info) => {
+        ctx.musicPending = false;
+        if (!info.ok) { send(ws, { t: 'musicFail', text: info.why }); return; }
+        // 확인하는 사이 상황이 바뀌었을 수 있다
+        if (ctx.me !== me || me.seat?.pit !== pit.id || pit.state !== 'lit' || pit.music) return;
+        const startedAt = Date.now() + 1500;
+        pit.music = {
+          vid, title: info.title, channel: info.channel || '', by: me.id, byName: me.name, startedAt,
+          endsAt: info.duration ? startedAt + info.duration * 1000 + 2000 : 0,
+        };
+        me.anim = 'guitar';
+        if (info.title) addRecent({ vid, title: info.title, channel: info.channel || '', thumb: info.thumb || '', duration: info.duration || 0 });
+        broadcast({ t: 'pit', pit });
+        broadcast({ t: 'sys', text: `🎸 ${me.name}님이 ${info.title ? `「${info.title}」` : '음악'} 연주를 시작했어요` });
+        send(ws, { t: 'musicOk' });
+      }).catch((e) => { ctx.musicPending = false; console.error(e); });
+      break;
+    }
+    case 'musicInfo': { // 클라이언트가 알려주는 영상 길이 → 끝나는 시각
+      const pit = pits.get(m.pit);
+      const d = Number(m.duration);
+      if (!pit?.music || pit.music.vid !== m.vid || pit.music.endsAt || !Number.isFinite(d)) return;
+      if (d < 3 || d > 6 * 3600) return;
+      pit.music.endsAt = pit.music.startedAt + d * 1000 + 2000;
+      break;
+    }
+    case 'musicEnd': { // 영상 끝 / 재생 오류 보고
+      const pit = pits.get(m.pit);
+      if (!pit?.music || pit.music.vid !== m.vid) return;
+      const isDJ = pit.music.by === me.id;
+      if (m.reason === 'error' && isDJ) {
+        const code = m.code | 0;
+        const text = code === 101 || code === 150 ? '이 영상은 업로더가 외부 재생을 막아 뒀어요 😢' : '이 영상은 재생할 수 없어요';
+        send(ws, { t: 'toast', text });
+        clearMusic(pit, 'error');
+        broadcast({ t: 'pit', pit });
+      } else if (m.reason === 'ended' && (isDJ || (pit.music.endsAt && now >= pit.music.endsAt - 8000))) {
+        clearMusic(pit, 'ended');
+        broadcast({ t: 'pit', pit });
+      }
+      break;
+    }
     case 'chat': {
       const text = String(m.text || '').replace(/\s+/g, ' ').trim().slice(0, 120);
       if (!text || now - me.lastChat < 400) return;
@@ -406,7 +525,12 @@ setInterval(() => {
 setInterval(() => {
   const now = Date.now();
   for (const pit of pits.values()) {
+    if (pit.music?.endsAt && now >= pit.music.endsAt + 5000) {
+      clearMusic(pit, 'ended');
+      broadcast({ t: 'pit', pit });
+    }
     if (pit.state === 'lit' && now >= pit.endsAt) {
+      clearMusic(pit, 'fire');
       pit.state = 'empty';
       pit.owner = null;
       pitOwnerKey.delete(pit.id);
@@ -419,6 +543,7 @@ server.listen(PORT, HOST, () => {
   console.log(`\n🔥 불멍 캠핑장 서버 실행 중 (${isProd ? 'production' : 'dev'})`);
   console.log(`   이 컴퓨터:      http://localhost:${PORT}`);
   const lan = lanAddresses();
+  console.log(`   곡 검색:        ${hasKey() ? `켜짐 (오늘 남은 검색 ${searchesLeft()}번)` : '꺼짐 — .env 또는 환경변수에 YT_API_KEY 를 넣으면 켜져요'}`);
   if (PUBLIC_URL) {
     console.log(`   공개 주소:      ${PUBLIC_URL}\n`);
   } else if (lan.length) {

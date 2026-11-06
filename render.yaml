@@ -13,3 +13,5 @@ services:
         value: "24"
       - key: SAVE_SECRET   # 장작 저장 백업 서명용 (Render가 자동으로 만들어 줘요)
         generateValue: true
+      - key: YT_API_KEY    # 곡 검색용 YouTube Data API 키 (Render 대시보드에서 직접 입력)
+        sync: false

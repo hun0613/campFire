@@ -28,6 +28,11 @@ const G = {
   shadow: new THREE.CircleGeometry(0.42, 20),
   axeHandle: new THREE.CylinderGeometry(0.025, 0.03, 0.62, 6),
   axeHead: new THREE.BoxGeometry(0.05, 0.16, 0.2),
+  gBody: new THREE.SphereGeometry(0.15, 18, 12),
+  gHole: new THREE.CircleGeometry(0.05, 16),
+  gNeck: new THREE.BoxGeometry(0.42, 0.05, 0.03),
+  gHead: new THREE.BoxGeometry(0.09, 0.07, 0.035),
+  gString: new THREE.BoxGeometry(0.62, 0.004, 0.004),
 };
 
 const easeOut = (t) => 1 - (1 - t) ** 3;
@@ -123,6 +128,30 @@ export class Character {
     this.axe.position.set(0, -0.31, 0);
     this.axe.visible = false;
     this.arms[1].add(this.axe);
+
+    // 기타 (연주할 때만 보임) — 무릎 위, 넥은 왼쪽 위로
+    this.guitar = new THREE.Group();
+    const gWood = toon('#d9873f'), gDark = toon('#6b3d1f');
+    const lower = new THREE.Mesh(G.gBody, gWood);
+    lower.scale.set(1.15, 1.05, 0.38);
+    const upper = new THREE.Mesh(G.gBody, gWood);
+    upper.scale.set(0.85, 0.8, 0.36);
+    upper.position.x = -0.17;
+    const hole = new THREE.Mesh(G.gHole, toon('#2b1a10'));
+    hole.position.set(-0.1, 0, 0.06);
+    const neck = new THREE.Mesh(G.gNeck, gDark);
+    neck.position.set(-0.47, 0, 0.02);
+    const ghead = new THREE.Mesh(G.gHead, gDark);
+    ghead.position.set(-0.72, 0, 0.02);
+    const str = new THREE.Mesh(G.gString, toon('#f3e7c9'));
+    str.position.set(-0.37, 0, 0.045);
+    this.guitar.add(lower, upper, hole, neck, ghead, str);
+    this.guitar.traverse((o) => { o.castShadow = true; });
+    this.guitar.position.set(0.12, 0.5, 0.3);
+    this.guitar.rotation.set(0, 0, -0.42);
+    this.guitar.scale.setScalar(1.2);
+    this.guitar.visible = false;
+    this.body.add(this.guitar);
 
     // 머리
     this.head = new THREE.Group();
@@ -300,6 +329,15 @@ export class Character {
       aL = -s * amp * 0.8; aR = s * amp * 0.8;
       bodyY = Math.abs(Math.cos(this.phase)) * 0.05;
       lean = this.anim === 'run' ? 0.12 : 0.05;
+    } else if (this.anim === 'guitar') {
+      // 앉아서 기타 치기: 왼손은 넥, 오른손은 줄을 튕긴다
+      lL = lR = -1.45;
+      const beat = this.time * 9.5;
+      aL = -1.2; zL = -0.55;
+      aR = -0.82 + Math.sin(beat) * 0.16; zR = -0.38 + Math.cos(beat) * 0.05;
+      bodyY = 0.06 + Math.abs(Math.sin(this.time * 4.75)) * 0.012;
+      lean = 0.1 + Math.sin(this.time * 2.37) * 0.025;
+      headTilt = Math.sin(this.time * 2.37) * 0.12;
     } else if (this.anim === 'sit') {
       lL = lR = -1.45;
       aL = aR = -0.55;
@@ -344,6 +382,7 @@ export class Character {
       }
     }
 
+    this.guitar.visible = this.anim === 'guitar' && !A;
     const k = Math.min(1, dt * 14);
     legL.rotation.x = lerp(legL.rotation.x, lL, k);
     legR.rotation.x = lerp(legR.rotation.x, lR, k);

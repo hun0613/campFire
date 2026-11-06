@@ -17,6 +17,8 @@ import { Guide, pickTarget } from './guide.js';
 import { Preview } from './preview.js';
 import { isTouch, TouchControls } from './touch.js';
 import { initPWA } from './pwa.js';
+import { Music } from './music.js';
+import { Monitor } from './monitor.js';
 import { CFG, PITS, STUMPS, NPC, BOUNDS, RANGE, LOOKS } from '../shared/config.js';
 
 const $ = (id) => document.getElementById(id);
@@ -31,7 +33,9 @@ await Promise.race([document.fonts.load('64px Jua'), new Promise((r) => setTimeo
 // ---------------------------------------------------------------- 렌더러
 if (isTouch) document.body.classList.add('touch');
 const MAX_PR = isTouch ? 1.5 : 2;
-const renderer = new THREE.WebGLRenderer({ antialias: !isTouch, powerPreference: 'high-performance' });
+// alpha: TV 화면 자리만 투명하게 뚫어서, 캔버스 '뒤'에 있는 유튜브 영상이 보이게 한다 (앞의 물체가 영상을 제대로 가림)
+const renderer = new THREE.WebGLRenderer({ antialias: !isTouch, powerPreference: 'high-performance', alpha: true });
+renderer.setClearColor(0x000000, 1);
 renderer.setPixelRatio(Math.min(devicePixelRatio, MAX_PR));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
@@ -53,6 +57,12 @@ const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.38, 0.85);
 composer.addPass(bloom);
+// 블룸을 더할 때 투명도(알파)는 건드리지 않게 → TV 화면 구멍이 블룸에 메워지지 않는다
+Object.assign(bloom.blendMaterial, {
+  blending: THREE.CustomBlending,
+  blendEquation: THREE.AddEquation, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor,
+  blendEquationAlpha: THREE.AddEquation, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
+});
 composer.addPass(new OutputPass());
 
 const shared = { uTime: { value: 0 }, uScale: { value: 600 } };
@@ -62,6 +72,7 @@ function resize() {
   composer.setPixelRatio(Math.min(devicePixelRatio, MAX_PR));
   composer.setSize(w, h);
   labelRenderer.setSize(w, h);
+  music?.setSize(w, h);
   camera.aspect = w / h;
   camera.fov = w / h < 1 ? 60 : 42; // 세로 화면에서는 시야를 넓힌다
   camera.updateProjectionMatrix();
@@ -80,7 +91,13 @@ const effects = new Effects(glowFx, softFx);
 const sound = new Sound();
 const guide = new Guide(scene);
 
-const colliders = [...world.colliders, ...PITS.map((p) => ({ x: p.x, z: p.z, r: 0.95 }))];
+const monitors = new Map(PITS.map((d) => [d.id, new Monitor(d, scene)]));
+const colliders = [
+  ...world.colliders,
+  ...PITS.map((p) => ({ x: p.x, z: p.z, r: 0.95 })),
+  ...[...monitors.values()].map((m) => ({ x: m.pos.x, z: m.pos.z, r: 0.55 })),
+  ...[...monitors.values()].map((m) => ({ x: m.lpPos.x, z: m.lpPos.z, r: 0.38 })),
+];
 
 const firePool = [];
 for (let i = 0; i < 5; i++) {
@@ -190,7 +207,9 @@ $('status').addEventListener('click', () => { if (isTouch) document.body.classLi
 $('helpClose').onclick = () => $('help').classList.add('hidden');
 $('soundBtn').onclick = (e) => {
   sound.init();
-  e.currentTarget.textContent = sound.toggle() ? '🔇' : '🔊';
+  const muted = sound.toggle();
+  e.currentTarget.textContent = muted ? '🔇' : '🔊';
+  music.muted = muted;
 };
 
 // ---------------------------------------------------------------- 네트워크
@@ -337,6 +356,10 @@ net.on('sat', (m) => {
   if (!me) return;
   state.sitting = { pit: m.pit, idx: m.idx };
   me.x = m.x; me.z = m.z; me.ry = m.ry;
+  // 앉으면 모닥불과 옆 TV·LP가 함께 보이도록 카메라를 TV 반대편에서 비스듬히 바라보게
+  const mon = monitors.get(m.pit);
+  const pd = PITS.find((d) => d.id === m.pit);
+  if (mon && pd) cam.yaw = Math.atan2(-(mon.pos.x - pd.x), -(mon.pos.z - pd.z)) + 0.45;
   me.char.setAnim('sit');
   refreshInventory();
 });
@@ -400,6 +423,176 @@ function volAt(pos) {
   const d = camera.position.distanceTo(pos);
   return Math.max(0, Math.min(1, 1 - (d - 8) / 40));
 }
+// ---------------------------------------------------------------- 모닥불 음악
+var music = new Music({
+  layerParent: document.body,
+  before: labelRenderer.domElement,
+  hint: $('musicHint'),
+  onDuration: (pit, vid, duration) => net.send({ t: 'musicInfo', pit, vid, duration }),
+  onEnded: (pit, vid) => net.send({ t: 'musicEnd', pit, vid, reason: 'ended' }),
+  onError: (pit, vid, code) => net.send({ t: 'musicEnd', pit, vid, reason: 'error', code }),
+});
+const myMusicPit = () => (state.sitting ? pits.get(state.sitting.pit) : null);
+const amDJ = () => myMusicPit()?.music?.by === state.myId;
+
+const fmtDur = (sec) => (sec ? `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}` : '');
+const escHtml = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const music$ = { left: 0, hasKey: false, resetAt: 0, busy: false };
+
+function openMusicModal() {
+  const pit = myMusicPit();
+  if (!pit || pit.state !== 'lit') { UI.toast('불 붙은 모닥불에 앉아서 곡을 고를 수 있어요 💿'); return; }
+  if (pit.music) { UI.toast('지금 곡이 끝나면 다른 곡을 틀 수 있어요 🎵'); return; }
+  $('musicErr').classList.add('hidden');
+  $('musicModal').classList.remove('hidden');
+  music$.busy = false;
+  net.send({ t: 'musicOpen' });
+  if (!isTouch) setTimeout(() => $('musicQ').focus(), 50);
+}
+function closeMusicModal() {
+  $('musicModal').classList.add('hidden');
+  $('musicQ').blur();
+}
+function showMusicErr(text) {
+  $('musicErr').textContent = text;
+  $('musicErr').classList.toggle('hidden', !text);
+}
+function renderQuota() {
+  const el = $('musicQuota');
+  if (!music$.hasKey) { el.textContent = ''; return; }
+  if (music$.left > 0) el.innerHTML = `오늘 남은 검색 <b>${music$.left}</b>번 · 같은 검색어와 최근 곡은 횟수를 쓰지 않아요`;
+  else {
+    const at = new Date(music$.resetAt).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' });
+    el.innerHTML = `오늘 검색을 다 썼어요 · <b>${at}</b>에 다시 열려요 (최근 곡은 틀 수 있어요)`;
+  }
+  $('musicQ').disabled = music$.left <= 0;
+  $('musicSearch').disabled = music$.left <= 0;
+}
+function renderSongs(title, items, empty) {
+  $('musicListTitle').textContent = title;
+  const list = $('musicList');
+  if (!items.length) { list.innerHTML = `<div class="mm-empty">${empty}</div>`; return; }
+  list.innerHTML = items.map((it, i) => `
+    <button class="song" data-i="${i}">
+      ${it.thumb ? `<img src="${escHtml(it.thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<span class="song-noimg">💿</span>'}
+      <span class="song-txt"><b>${escHtml(it.title)}</b><small>${escHtml(it.channel || '')}${it.duration ? ` · ${fmtDur(it.duration)}` : ''}</small></span>
+      <span class="song-play">▶</span>
+    </button>`).join('');
+  list.querySelectorAll('.song').forEach((b) => b.addEventListener('click', () => playSong(items[+b.dataset.i], b)));
+}
+function playSong(it, el) {
+  const pit = myMusicPit();
+  if (!pit || music$.busy) return;
+  music$.busy = true;
+  el?.classList.add('loading');
+  net.send({ t: 'music', pit: pit.id, vid: it.vid });
+}
+$('musicForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const q = $('musicQ').value.trim();
+  if (!q) return;
+  showMusicErr('');
+  // 유튜브 링크를 붙여 넣었으면 검색 없이 바로 튼다
+  if (/youtu\.?be/i.test(q)) {
+    const pit = myMusicPit();
+    if (pit && !music$.busy) { music$.busy = true; net.send({ t: 'music', pit: pit.id, url: q }); }
+    return;
+  }
+  $('musicSearch').disabled = true;
+  $('musicSearch').textContent = '…';
+  $('musicQ').blur();
+  net.send({ t: 'search', q });
+});
+$('musicBtn').addEventListener('click', openMusicModal);
+$('musicCancel').addEventListener('click', closeMusicModal);
+$('musicQ').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMusicModal(); });
+net.on('musicMenu', (m) => {
+  Object.assign(music$, { left: m.left, hasKey: m.hasKey, resetAt: m.resetAt });
+  renderQuota();
+  renderSongs('🕘 최근에 모닥불에서 나온 곡', m.recent, m.hasKey ? '아직 없어요. 곡을 검색해 보세요!' : '아직 없어요. 유튜브 링크를 붙여 넣어 틀 수 있어요');
+  if (!m.hasKey) $('musicQ').placeholder = '유튜브 링크를 붙여 넣어 주세요';
+});
+net.on('searchResult', (m) => {
+  $('musicSearch').textContent = '검색';
+  music$.left = m.left;
+  renderQuota();
+  renderSongs(`🔍 "${m.q}" 검색 결과`, m.items, '틀 수 있는 곡을 찾지 못했어요. 다른 검색어로 해 보세요');
+});
+net.on('searchFail', (m) => {
+  $('musicSearch').textContent = '검색';
+  if (m.exhausted) { music$.left = 0; music$.resetAt = m.resetAt; } else if (m.left != null) music$.left = m.left;
+  renderQuota();
+  if (!m.exhausted) { $('musicSearch').disabled = false; $('musicQ').disabled = false; }
+  showMusicErr(m.text);
+});
+net.on('musicOk', () => { closeMusicModal(); $('musicQ').value = ''; music$.busy = false; });
+net.on('musicFail', (m) => {
+  music$.busy = false;
+  document.querySelectorAll('#musicList .song.loading').forEach((b) => b.classList.remove('loading'));
+  showMusicErr(m.text);
+});
+net.on('musicStop', (m) => {
+  if (state.sitting?.pit !== m.pit) return;
+  const text = { ended: '🎵 곡이 끝났어요. 이제 다른 곡을 틀 수 있어요', left: '🎸 연주자가 자리를 떠나서 음악이 멈췄어요', fire: '🔥 불이 꺼져서 음악이 멈췄어요' }[m.reason];
+  if (text) UI.toast(text);
+});
+
+// LP 플레이어 누르기 (화면을 짧게 탭/클릭) — 모바일 왼쪽 조이스틱 영역에서도 동작
+const lpHits = [...monitors.values()].map((m) => m.hit);
+const raycaster = new THREE.Raycaster();
+const tapStart = new Map();
+addEventListener('pointerdown', (e) => {
+  if (e.target === canvas || e.target.id === 'joyZone') tapStart.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now() });
+}, true);
+addEventListener('pointerup', (e) => {
+  const s = tapStart.get(e.pointerId);
+  tapStart.delete(e.pointerId);
+  if (!s || !me || Math.hypot(e.clientX - s.x, e.clientY - s.y) > 10 || performance.now() - s.t > 400) return;
+  raycaster.setFromCamera(new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
+  const hit = raycaster.intersectObjects(lpHits, false)[0];
+  if (!hit) return;
+  const mon = hit.object.userData.monitor;
+  const pitId = [...monitors].find(([, v]) => v === mon)?.[0];
+  if (state.sitting?.pit === pitId) openMusicModal();
+  else UI.toast('이 모닥불에 앉으면 LP로 곡을 고를 수 있어요 💿');
+}, true);
+
+// 앉아 있는 내 모닥불의 LP 위에 '눌러서 곡 고르기' 안내 (움직이지 않는 작은 표시)
+const lpTagEl = document.createElement('div');
+lpTagEl.className = 'lp-tag';
+lpTagEl.textContent = '💿 눌러서 곡 고르기';
+const lpTag = new CSS2DObject(lpTagEl);
+lpTag.visible = false;
+scene.add(lpTag);
+
+// 연주자 주위로 ♪, 연주 중인 모닥불 TV 켜기, 내가 앉은 모닥불의 음악 재생
+let noteT = 0;
+function updateMusicFx(dt) {
+  noteT += dt;
+  const emit = noteT > 0.9;
+  if (emit) noteT = 0;
+  for (const p of pitList) {
+    const m = p.state === 'lit' ? p.music : null;
+    monitors.get(p.id).update(dt, !!m);
+    if (m && emit) {
+      const ch = m.by === state.myId ? me?.char : remotes.get(m.by)?.ch;
+      if (ch && camera.position.distanceTo(ch.root.position) < 40) {
+        const pos = ch.root.position.clone();
+        pos.x += (Math.random() - 0.5) * 0.8; pos.y = 1.4 + Math.random() * 0.4; pos.z += (Math.random() - 0.5) * 0.8;
+        floatText(Math.random() < 0.5 ? '♪' : '♫', pos);
+      }
+    }
+  }
+  if (me) {
+    music.clockOffset = state.clockOffset;
+    const pit = myMusicPit();
+    music.update(dt, pit, pit && monitors.get(pit.id), serverNow(), camera);
+    const showTag = !!pit && pit.state === 'lit' && !pit.music;
+    if (showTag) lpTag.position.copy(monitors.get(pit.id).lpPos).setY(1.25);
+    lpTag.visible = showTag;
+  }
+}
+
 function floatText(text, pos) {
   const el = document.createElement('div');
   el.className = 'floater';
@@ -655,6 +848,7 @@ addEventListener('keydown', (e) => {
   }
   if (e.key === 'Enter') { e.preventDefault(); chatInput.focus(); return; }
   keys.add(e.code);
+  if (e.code === 'KeyM' && !e.repeat && state.sitting) { e.preventDefault(); openMusicModal(); return; }
   if (e.code === 'KeyE' && !e.repeat) {
     const it = findInteraction();
     if (it?.type !== 'chop') interact(it);
@@ -739,7 +933,7 @@ function updateLocal(dt) {
 
   if (state.sitting) {
     if (moving) standUp();
-    else me.char.setAnim('sit');
+    else me.char.setAnim(amDJ() ? 'guitar' : 'sit');
   }
   if (!state.sitting) {
     const chopping = me.char.action?.name === 'chop';
@@ -916,6 +1110,21 @@ function updateHud() {
     const rem = Math.ceil(pit.remaining(serverNow()) / 1000);
     UI.setFireTimer(`🔥 남은 장작 ${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}`);
   } else UI.setFireTimer(null);
+  const mp = myMusicPit();
+  let mb = null;
+  if (mp && mp.state === 'lit') {
+    if (!mp.music) mb = { text: isTouch ? '💿 곡 고르기' : '💿 곡 고르기 <kbd>M</kbd>', on: true };
+    else if (mp.music.by === state.myId) mb = { text: '🎸 연주 중 · 일어나면 멈춰요', on: false };
+    else mb = { text: '🎵 지금 곡이 끝나면 다른 곡을 틀 수 있어요', on: false };
+  }
+  const mbKey = mb ? mb.text + mb.on : '';
+  if (state._mb !== mbKey) {
+    state._mb = mbKey;
+    const b = $('musicBtn');
+    b.classList.toggle('hidden', !mb);
+    if (mb) { b.innerHTML = mb.text; b.classList.toggle('off', !mb.on); }
+  }
+  if (!mp && !$('musicModal').classList.contains('hidden')) closeMusicModal();
   const canThrow = !!state.sitting && pits.get(state.sitting.pit)?.state === 'lit';
   if (canThrow !== state._canThrow) { state._canThrow = canThrow; UI.setPowderEnabled(canThrow); }
 }
@@ -951,6 +1160,7 @@ function frame() {
   updateCamera(dt, t);
   world.update(t, dt, camera, focus, shared);
   updateFires(t, dt);
+  updateMusicFx(dt);
   updateStumps(dt);
   effects.update(dt);
   glowFx.update(dt);
@@ -969,4 +1179,4 @@ function frame() {
 requestAnimationFrame(frame);
 
 // 디버그용
-window.__game = { scene, pits, state, effects, camera, net, cam, get me() { return me; } };
+window.__game = { scene, pits, state, effects, camera, net, cam, preview, monitors, THREE, renderer, get me() { return me; } };

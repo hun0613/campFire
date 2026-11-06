@@ -201,6 +201,7 @@ export class FirePit {
     this.endsAt = p.endsAt;
     this.owner = p.owner;
     this.seats = p.seats.slice();
+    this.music = p.music || null;
   }
 
   freeSeats() { return this.seats.filter((s) => s === null).length; }
