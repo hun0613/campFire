@@ -1,0 +1,343 @@
+import http from 'node:http';
+import os from 'node:os';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { WebSocketServer } from 'ws';
+import {
+  CFG, PITS, STUMPS, NPC, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
+} from '../shared/config.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(__dirname, '..');
+const DIST = path.join(ROOT, 'dist');
+const PORT = Number(process.env.PORT) || 3000;
+const isProd = process.env.NODE_ENV === 'production';
+
+// ---------------------------------------------------------------- HTTP
+const HOST = process.env.HOST || '0.0.0.0';
+const PUBLIC_URL = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || '';
+
+function lanAddresses() {
+  const out = [];
+  for (const [name, list] of Object.entries(os.networkInterfaces())) {
+    for (const a of list || []) {
+      if (a.family === 'IPv4' && !a.internal && !a.address.startsWith('169.254.')) out.push({ name, address: a.address });
+    }
+  }
+  // 와이파이/이더넷(en*) 우선
+  out.sort((a, b) => (b.name.startsWith('en') ? 1 : 0) - (a.name.startsWith('en') ? 1 : 0));
+  return out.map((a) => `http://${a.address}:${PORT}`);
+}
+
+const server = http.createServer();
+// 같은 네트워크 접속 주소 안내용
+server.on('request', (req, res) => {
+  if (req.url === '/api/info') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    // 클라우드(Render 등)에서는 내부 IP 대신 공개 주소를 알려준다
+    const urls = PUBLIC_URL ? [PUBLIC_URL] : lanAddresses();
+    res.end(JSON.stringify({ urls, public: !!PUBLIC_URL, players: players.size }));
+  }
+});
+const passThrough = (handler) => (req, res) => { if (req.url !== '/api/info') handler(req, res); };
+
+if (!isProd) {
+  const { createServer } = await import('vite');
+  const vite = await createServer({
+    root: ROOT,
+    server: { middlewareMode: true, hmr: { server } },
+    appType: 'spa',
+  });
+  server.on('request', passThrough(vite.middlewares));
+} else {
+  const MIME = {
+    '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
+    '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.json': 'application/json', '.webmanifest': 'application/manifest+json',
+    '.ico': 'image/x-icon', '.woff2': 'font/woff2',
+  };
+  server.on('request', passThrough((req, res) => {
+    const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+    let file = path.normalize(path.join(DIST, urlPath));
+    if (!file.startsWith(DIST)) { res.writeHead(403).end(); return; }
+    if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(DIST, 'index.html');
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+    fs.createReadStream(file).pipe(res);
+  }));
+}
+
+// ---------------------------------------------------------------- 게임 상태
+const sockets = new Set();
+const players = new Map(); // id -> player
+let nextId = 1;
+
+const pits = new Map(PITS.map((p) => [p.id, {
+  id: p.id, state: 'empty', owner: null, litAt: 0, endsAt: 0,
+  seats: Array(CFG.SEATS_PER_PIT).fill(null),
+}]));
+const pitDef = new Map(PITS.map((p) => [p.id, p]));
+
+const HEX = /^#[0-9a-f]{6}$/i;
+const pickColor = (v, list) => (typeof v === 'string' && HEX.test(v) ? v : list[0]);
+
+function publicPlayer(p) {
+  return { id: p.id, name: p.name, look: p.look, x: p.x, z: p.z, ry: p.ry, anim: p.anim };
+}
+function inv(p) {
+  return { t: 'inv', wood: p.wood, chops: p.chops, powders: p.powders, canPowder: p.canPowder };
+}
+function send(ws, msg) {
+  if (ws.readyState === 1) ws.send(JSON.stringify(msg));
+}
+function broadcast(msg, except) {
+  const data = JSON.stringify(msg);
+  for (const ws of sockets) if (ws !== except && ws.readyState === 1) ws.send(data);
+}
+function dist(p, x, z) {
+  return Math.hypot(p.x - x, p.z - z);
+}
+function leaveSeat(p) {
+  if (!p.seat) return;
+  const pit = pits.get(p.seat.pit);
+  if (pit && pit.seats[p.seat.idx] === p.id) pit.seats[p.seat.idx] = null;
+  p.seat = null;
+  p.anim = 'idle';
+  if (pit) broadcast({ t: 'pit', pit });
+}
+
+function handle(ws, ctx, m) {
+  if (!m || typeof m.t !== 'string') return;
+  const now = Date.now();
+
+  if (m.t === 'join') {
+    if (ctx.me) return;
+    const name = String(m.name || '').trim().slice(0, 12) || `캠퍼${nextId}`;
+    const L = m.look || {};
+    const look = {
+      skin: pickColor(L.skin, LOOKS.skin),
+      hair: pickColor(L.hair, LOOKS.hair),
+      shirt: pickColor(L.shirt, LOOKS.shirt),
+      pants: pickColor(L.pants, LOOKS.pants),
+      hat: LOOKS.hat.some((h) => h.id === L.hat) ? L.hat : 'none',
+    };
+    const p = {
+      id: nextId++, name, look,
+      x: SPAWN.x + (Math.random() - 0.5) * 6, z: SPAWN.z + (Math.random() - 0.5) * 2, ry: Math.PI,
+      anim: 'idle', seat: null,
+      wood: 0, chops: 0, powders: [], canPowder: true,
+      lastChop: 0, lastChat: 0,
+    };
+    ctx.me = p;
+    players.set(p.id, p);
+    send(ws, { t: 'welcome', id: p.id, me: publicPlayer(p) });
+    send(ws, inv(p));
+    broadcast({ t: 'join', player: publicPlayer(p) }, ws);
+    broadcast({ t: 'sys', text: `${p.name}님이 캠핑장에 도착했어요 🏕️` });
+    return;
+  }
+
+  const me = ctx.me;
+  if (!me) return;
+
+  switch (m.t) {
+    case 'move': {
+      if (me.seat) return;
+      const x = Number(m.x), z = Number(m.z), ry = Number(m.ry);
+      if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(ry)) return;
+      me.x = Math.min(BOUNDS.maxX, Math.max(BOUNDS.minX, x));
+      me.z = Math.min(BOUNDS.maxZ, Math.max(BOUNDS.minZ, z));
+      me.ry = ry;
+      me.anim = ['idle', 'walk', 'run'].includes(m.anim) ? m.anim : 'idle';
+      break;
+    }
+    case 'chop': {
+      const stump = STUMPS[m.stump | 0];
+      if (!stump || dist(me, stump.x, stump.z) > RANGE.stump + 1.5) return;
+      if (now - me.lastChop < CFG.CHOP_COOLDOWN) return;
+      me.lastChop = now;
+      broadcast({ t: 'act', id: me.id, a: 'chop', stump: m.stump | 0 }, ws);
+      if (me.wood >= CFG.MAX_WOOD) {
+        send(ws, { t: 'toast', text: '장작을 더 들 수 없어요!' });
+        return;
+      }
+      me.chops += 1;
+      let gained = 0;
+      if (me.chops >= CFG.CHOPS_PER_WOOD) {
+        me.chops = 0;
+        me.wood += 1;
+        gained = 1;
+      }
+      send(ws, { ...inv(me), gained });
+      break;
+    }
+    case 'npc': {
+      if (dist(me, NPC.x, NPC.z) > RANGE.npc + 1.5) return;
+      let kind;
+      let given = [];
+      if (me.powders.length >= CFG.MAX_POWDERS) kind = 'full';
+      else if (!me.canPowder) kind = 'used';
+      else if (me.wood < CFG.WOOD_PER_FIRE) kind = 'need';
+      else {
+        kind = 'give';
+        const n = Math.min(CFG.POWDERS_PER_VISIT, CFG.MAX_POWDERS - me.powders.length);
+        for (let i = 0; i < n; i++) given.push(randomPowder());
+        me.powders.push(...given);
+        me.canPowder = false;
+      }
+      send(ws, { t: 'npc', kind, powders: given, wood: me.wood });
+      send(ws, inv(me));
+      break;
+    }
+    case 'build': {
+      const pit = pits.get(m.pit);
+      const def = pitDef.get(m.pit);
+      if (!pit || dist(me, def.x, def.z) > RANGE.pit + 1.5) return;
+      if (pit.state !== 'empty') return;
+      if (me.wood < CFG.WOOD_PER_FIRE) {
+        send(ws, { t: 'toast', text: `장작이 ${CFG.WOOD_PER_FIRE}개 필요해요` });
+        return;
+      }
+      me.wood -= CFG.WOOD_PER_FIRE;
+      me.canPowder = true; // 장작을 쌓았으니 다음 번에 다시 가루를 받을 수 있다
+      pit.state = 'stacked';
+      pit.owner = me.id;
+      broadcast({ t: 'pit', pit });
+      send(ws, inv(me));
+      break;
+    }
+    case 'light': {
+      const pit = pits.get(m.pit);
+      const def = pitDef.get(m.pit);
+      if (!pit || dist(me, def.x, def.z) > RANGE.pit + 1.5) return;
+      if (pit.state !== 'stacked') return;
+      pit.state = 'lit';
+      pit.litAt = now;
+      pit.endsAt = now + CFG.FIRE_DURATION;
+      broadcast({ t: 'pit', pit });
+      broadcast({ t: 'act', id: me.id, a: 'light', pit: pit.id }, ws);
+      break;
+    }
+    case 'sit': {
+      const pit = pits.get(m.pit);
+      const def = pitDef.get(m.pit);
+      if (!pit || dist(me, def.x, def.z) > RANGE.pit + 2) return;
+      if (pit.state !== 'lit') return;
+      leaveSeat(me);
+      let best = -1;
+      let bestD = Infinity;
+      pit.seats.forEach((occ, i) => {
+        if (occ !== null) return;
+        const s = seatPos(def, i);
+        const d = dist(me, s.x, s.z);
+        if (d < bestD) { bestD = d; best = i; }
+      });
+      if (best < 0) {
+        send(ws, { t: 'toast', text: '자리가 모두 찼어요' });
+        return;
+      }
+      const s = seatPos(def, best);
+      pit.seats[best] = me.id;
+      me.seat = { pit: pit.id, idx: best };
+      me.x = s.x; me.z = s.z; me.ry = s.ry; me.anim = 'sit';
+      send(ws, { t: 'sat', pit: pit.id, idx: best, x: s.x, z: s.z, ry: s.ry });
+      broadcast({ t: 'pit', pit });
+      break;
+    }
+    case 'stand': {
+      leaveSeat(me);
+      break;
+    }
+    case 'throw': {
+      if (!me.seat) return;
+      const pit = pits.get(me.seat.pit);
+      if (!pit || pit.state !== 'lit') {
+        send(ws, { t: 'toast', text: '불이 꺼져 있어요' });
+        return;
+      }
+      const idx = m.idx | 0;
+      const powder = me.powders[idx];
+      if (!powder) return;
+      me.powders.splice(idx, 1);
+      broadcast({ t: 'fx', pit: pit.id, powder, by: me.id, name: me.name });
+      send(ws, inv(me));
+      break;
+    }
+    case 'chat': {
+      const text = String(m.text || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+      if (!text || now - me.lastChat < 400) return;
+      me.lastChat = now;
+      broadcast({ t: 'chat', id: me.id, name: me.name, text });
+      break;
+    }
+    default:
+  }
+}
+
+// ---------------------------------------------------------------- WebSocket
+const wss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
+server.on('upgrade', (req, socket, head) => {
+  if (req.url && req.url.startsWith('/ws')) {
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+  }
+});
+
+wss.on('connection', (ws) => {
+  sockets.add(ws);
+  const ctx = { me: null };
+  send(ws, {
+    t: 'hello',
+    now: Date.now(),
+    pits: [...pits.values()],
+    players: [...players.values()].map(publicPlayer),
+  });
+  ws.on('message', (raw) => {
+    let m;
+    try { m = JSON.parse(raw); } catch { return; }
+    try { handle(ws, ctx, m); } catch (e) { console.error(e); }
+  });
+  ws.on('close', () => {
+    sockets.delete(ws);
+    const me = ctx.me;
+    if (!me) return;
+    leaveSeat(me);
+    players.delete(me.id);
+    broadcast({ t: 'leave', id: me.id });
+    broadcast({ t: 'sys', text: `${me.name}님이 캠핑장을 떠났어요` });
+  });
+});
+
+// 위치 스냅샷 10Hz
+setInterval(() => {
+  if (!players.size) return;
+  const list = [];
+  for (const p of players.values()) {
+    list.push([p.id, Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100, Math.round(p.ry * 100) / 100, p.anim]);
+  }
+  broadcast({ t: 'snap', now: Date.now(), p: list });
+}, 100);
+
+// 모닥불 수명 체크
+setInterval(() => {
+  const now = Date.now();
+  for (const pit of pits.values()) {
+    if (pit.state === 'lit' && now >= pit.endsAt) {
+      pit.state = 'empty';
+      pit.owner = null;
+      broadcast({ t: 'pit', pit, burnedOut: true });
+    }
+  }
+}, 500);
+
+server.listen(PORT, HOST, () => {
+  console.log(`\n🔥 불멍 캠핑장 서버 실행 중 (${isProd ? 'production' : 'dev'})`);
+  console.log(`   이 컴퓨터:      http://localhost:${PORT}`);
+  const lan = lanAddresses();
+  if (PUBLIC_URL) {
+    console.log(`   공개 주소:      ${PUBLIC_URL}\n`);
+  } else if (lan.length) {
+    console.log('   같은 네트워크:  ' + lan.join('\n                   '));
+    console.log('   → 같은 와이파이에 연결된 기기에서 위 주소로 접속하면 같은 서버에서 함께 놀 수 있어요.\n');
+  } else {
+    console.log('   (네트워크 연결을 찾지 못했어요. 와이파이를 확인하세요)\n');
+  }
+});

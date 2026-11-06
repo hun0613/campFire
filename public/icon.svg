@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#121640"/>
+      <stop offset="1" stop-color="#3b2a5c"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.68" r="0.45">
+      <stop offset="0" stop-color="#ff9a3c" stop-opacity="0.75"/>
+      <stop offset="1" stop-color="#ff9a3c" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="flame" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#ff5a14"/>
+      <stop offset="0.6" stop-color="#ff9d3c"/>
+      <stop offset="1" stop-color="#ffd36b"/>
+    </linearGradient>
+    <linearGradient id="core" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#ffd36b"/>
+      <stop offset="1" stop-color="#fff6d8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <rect width="512" height="512" fill="url(#glow)"/>
+  <g fill="#fff6e0">
+    <circle cx="96" cy="92" r="5"/><circle cx="150" cy="150" r="3"/><circle cx="410" cy="110" r="4"/>
+    <circle cx="360" cy="70" r="3"/><circle cx="440" cy="190" r="3"/><circle cx="70" cy="200" r="3"/>
+  </g>
+  <circle cx="400" cy="96" r="30" fill="#fff3d2"/>
+  <circle cx="414" cy="86" r="26" fill="#1a1d4a"/>
+  <!-- 장작 -->
+  <g stroke-linecap="round">
+    <line x1="150" y1="410" x2="362" y2="340" stroke="#7a4a2a" stroke-width="44"/>
+    <line x1="150" y1="340" x2="362" y2="410" stroke="#9a6236" stroke-width="44"/>
+  </g>
+  <circle cx="150" cy="340" r="20" fill="#e2b77d"/>
+  <circle cx="362" cy="340" r="20" fill="#e2b77d"/>
+  <!-- 불꽃 -->
+  <path d="M256 120 C 300 190, 350 230, 340 300 C 332 352, 296 378, 256 378 C 216 378, 180 352, 172 300 C 164 246, 210 220, 226 170 C 238 200, 250 210, 262 214 C 258 182, 252 150, 256 120 Z" fill="url(#flame)"/>
+  <path d="M258 220 C 286 262, 306 288, 300 318 C 294 348, 276 360, 256 360 C 236 360, 218 348, 214 320 C 210 292, 236 270, 246 246 C 252 260, 258 262, 264 262 C 262 248, 258 236, 258 220 Z" fill="url(#core)"/>
+</svg>

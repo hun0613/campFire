@@ -1,0 +1,13 @@
+# Render 블루프린트: GitHub 저장소를 연결하면 이 설정대로 자동 배포돼요.
+services:
+  - type: web
+    name: campfire-game
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/info
+    envVars:
+      - key: NODE_VERSION
+        value: "24"

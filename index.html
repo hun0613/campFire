@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0b0e24" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="불멍캠핑" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <title>불멍 캠핑장</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- 입장 화면 -->
+  <div id="join" class="overlay">
+    <div class="join-wrap">
+    <div class="card preview-card">
+      <canvas id="previewCanvas"></canvas>
+      <div class="preview-name"><span id="previewName">캠퍼</span></div>
+      <div class="preview-hint">드래그해서 돌려 보세요</div>
+    </div>
+    <div class="card join-card">
+      <div class="logo">🔥</div>
+      <div class="title">불멍 캠핑장</div>
+      <div class="subtitle">밤의 글램핑장에서 장작을 패고,<br />마법 가루로 모닥불을 물들여 보세요</div>
+      <div class="field">
+        <label>이름</label>
+        <input id="nameInput" maxlength="12" placeholder="캠퍼 이름" autocomplete="off" />
+      </div>
+      <div class="field"><label>피부</label><div class="swatches" data-key="skin"></div></div>
+      <div class="field"><label>머리색</label><div class="swatches" data-key="hair"></div></div>
+      <div class="field"><label>옷 색</label><div class="swatches" data-key="shirt"></div></div>
+      <div class="field"><label>바지</label><div class="swatches" data-key="pants"></div></div>
+      <div class="field"><label>모자</label><div class="choices" data-key="hat"></div></div>
+      <button id="joinBtn" class="btn" disabled>서버 연결 중…</button>
+      <button class="install-btn link-btn hidden">📲 홈 화면에 앱으로 설치하기</button>
+      <div id="lanInfo" class="lan hidden"></div>
+      <div class="hint pc-only">WASD 이동 · Shift 달리기 · E 상호작용 · 마우스 드래그 시점 · 휠 줌 · Enter 채팅</div>
+      <div class="hint touch-only">왼쪽 조이스틱 이동 · 오른쪽 버튼 상호작용 · 화면 드래그 시점 · 두 손가락 줌 · 💬 채팅</div>
+    </div>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="status" class="panel">
+      <div class="wood-row">
+        <span class="wood-icon">🪵</span>
+        <span class="wood-num"><b id="woodCount">0</b><small> 장작</small></span>
+        <span id="chopDots" class="dots"></span>
+      </div>
+      <div id="quest" class="quest"></div>
+    </div>
+
+    <div id="topright" class="panel small">
+      <span class="online-dot"></span><span id="online">1</span><span class="online-label">명 캠핑 중</span>
+      <button id="mapToggle" class="icon-btn touch-only-inline" title="지도">🗺️</button>
+      <button class="icon-btn install-btn hidden" title="앱으로 설치">📲</button>
+      <button id="soundBtn" class="icon-btn" title="소리">🔊</button>
+      <button id="helpBtn" class="icon-btn" title="도움말">?</button>
+    </div>
+
+    <div id="mapPanel" class="panel"><canvas id="minimap"></canvas></div>
+
+    <div id="toasts"></div>
+
+    <div id="bottom">
+      <div id="fireTimer" class="pill fire hidden"></div>
+      <div id="prompt" class="pill hidden"></div>
+      <div id="powders"></div>
+    </div>
+
+    <div id="chat">
+      <div id="chatLog"></div>
+      <div class="chat-row">
+        <input id="chatInput" maxlength="120" placeholder="Enter 를 눌러 채팅…" autocomplete="off" enterkeyhint="send" />
+        <button id="chatSend" class="chat-send">전송</button>
+      </div>
+    </div>
+    <button id="chatToggle" class="chat-toggle">💬</button>
+
+    <div id="dialog" class="hidden">
+      <div class="dname">루미</div>
+      <div class="dtext"></div>
+      <div class="dnext">▼</div>
+    </div>
+
+    <div id="help" class="overlay hidden">
+      <div class="card help-card">
+        <div class="title small">캠핑 안내서 📖</div>
+        <div class="touch-only touch-help">📱 <b>모바일</b> · 왼쪽 아래 <b>조이스틱</b>으로 이동(끝까지 밀면 달리기) · 오른쪽 아래 <b>버튼</b>으로 상호작용 · 가루는 <b>탭</b>해서 뿌리기 · 화면 드래그로 시점, 두 손가락으로 줌</div>
+        <ol>
+          <li><b>동쪽 장작 패는 곳</b>에서 통나무 앞에 서서 <kbd>E</kbd> (꾹 누르면 계속 패요)</li>
+          <li>장작 <b>5개</b>를 모아 <b>서쪽 루미</b>에게 가면 랜덤 <b>마법 가루</b>를 줘요</li>
+          <li><b>공터</b>나 <b>글램핑장 앞 화로</b>에서 <kbd>E</kbd>로 장작을 쌓고, 한 번 더 <kbd>E</kbd>로 불을 붙여요</li>
+          <li>타오르는 불 앞에서 <kbd>E</kbd>로 앉아 불멍! <kbd>1</kbd>~<kbd>9</kbd> 로 가루를 뿌려요</li>
+          <li>장작은 3분 동안 타요. 다 타면 다시 장작을 패러 가요 🪓</li>
+        </ol>
+        <div id="lanHelp" class="lan"></div>
+        <div class="keys pc-only">
+          <span><kbd>WASD</kbd> 이동</span><span><kbd>Shift</kbd> 달리기</span>
+          <span><kbd>드래그</kbd> 시점</span><span><kbd>휠</kbd> 줌</span><span><kbd>Enter</kbd> 채팅</span>
+        </div>
+        <button class="install-btn link-btn hidden">📲 홈 화면에 앱으로 설치하기</button>
+        <button class="btn" id="helpClose">알겠어요!</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="installGuide" class="overlay hidden">
+    <div class="card help-card">
+      <div class="title small">📲 앱으로 설치하기</div>
+      <div class="ig-body"></div>
+      <button class="btn" onclick="document.getElementById('installGuide').classList.add('hidden')">닫기</button>
+    </div>
+  </div>
+
+  <div id="disconnected" class="overlay hidden">
+    <div class="card">
+      <div class="title small">연결이 끊겼어요 🌙</div>
+      <button class="btn" onclick="location.reload()">다시 접속하기</button>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
