@@ -113,6 +113,17 @@ const serverNow = () => Date.now() + state.clockOffset;
 const cam = { yaw: 0, pitch: 0.78, dist: 15, curDist: 34, target: new THREE.Vector3(0, 0, 0), dragging: false };
 
 // ---------------------------------------------------------------- 입장 화면
+/** 기기마다 고정된 무작위 ID (장작 저장용, 다른 사람에게는 공개되지 않음) */
+function devicePid() {
+  let pid = store.get('pid', null);
+  if (typeof pid !== 'string' || !/^[A-Za-z0-9_-]{16,64}$/.test(pid)) {
+    const b = new Uint8Array(18);
+    crypto.getRandomValues(b);
+    pid = btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    store.set('pid', pid);
+  }
+  return pid;
+}
 const look = store.get('look', null) || {
   skin: LOOKS.skin[0],
   hair: LOOKS.hair[Math.floor(Math.random() * LOOKS.hair.length)],
@@ -167,7 +178,7 @@ function doJoin() {
   const name = $('nameInput').value.trim();
   store.set('name', name);
   store.set('look', look);
-  net.send({ t: 'join', name, look });
+  net.send({ t: 'join', name, look, pid: devicePid(), save: store.get('save', null) });
 }
 $('joinBtn').onclick = doJoin;
 $('nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') doJoin(); });
@@ -185,16 +196,14 @@ $('soundBtn').onclick = (e) => {
 // ---------------------------------------------------------------- 네트워크
 const net = new Net();
 
+// 공개 서버일 때만 '친구에게 주소 공유' 안내를 띄운다
 fetch('/api/info').then((r) => r.json()).then(({ urls, public: isPublic }) => {
-  if (!urls?.length) return;
-  const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
-  const here = isLocal ? urls[0] : location.origin;
-  const html = isPublic
-    ? `🔗 친구에게<br><b>${here}</b><br>주소를 보내면 같은 캠핑장에서 만나요`
-    : `📶 같은 와이파이의 친구는<br><b>${here}</b><br>로 접속하면 같은 캠핑장에서 만나요`;
+  if (!isPublic || !urls?.length) return;
+  const html = `🔗 친구에게<br><b>${urls[0]}</b><br>주소를 보내면 같은 캠핑장에서 만나요`;
   $('lanInfo').innerHTML = html;
   $('lanInfo').classList.remove('hidden');
   $('lanHelp').innerHTML = html;
+  $('lanHelp').classList.remove('hidden');
 }).catch(() => {});
 
 net.on('open', () => {
@@ -202,6 +211,9 @@ net.on('open', () => {
   $('joinBtn').textContent = '캠핑장 입장 🏕️';
 });
 net.on('close', () => $('disconnected').classList.remove('hidden'));
+net.on('replaced', () => {
+  $('disconnected').querySelector('.title').textContent = '다른 창에서 접속했어요 🌙';
+});
 
 net.on('hello', (m) => {
   state.clockOffset = m.now - Date.now();
@@ -220,11 +232,32 @@ net.on('welcome', (m) => {
   $('join').classList.add('hidden');
   preview.dispose();
   $('hud').classList.remove('hidden');
-  if (!store.get('helpSeen', false)) {
+  const firstTime = !store.get('helpSeen', false);
+  if (firstTime) {
     $('help').classList.remove('hidden');
     store.set('helpSeen', true);
   }
-  UI.addChat('', '🌙 불멍 캠핑장에 오신 걸 환영해요! 동쪽에서 장작을 패 보세요.', true);
+  const hintN = store.get('touchHintN', 0);
+  const showHint = touch && hintN < 3;
+  if (showHint) store.set('touchHintN', hintN + 1);
+  // 터치 안내 → (세로로 들고 있으면) 가로모드 추천, 도움말이 떠 있으면 닫은 뒤에
+  const afterHelp = () => {
+    if (showHint) touch.showHint();
+    const rotN = store.get('rotateTipN', 0);
+    if (touch && rotN < 3) {
+      setTimeout(() => {
+        if (innerHeight <= innerWidth) return;
+        store.set('rotateTipN', rotN + 1);
+        UI.toast('📱 가로로 돌리면 더 넓게 볼 수 있어요', 5000);
+      }, showHint ? 5600 : 1500);
+    }
+  };
+  if (firstTime) $('helpClose').addEventListener('click', afterHelp, { once: true });
+  else afterHelp();
+  const r = m.restored;
+  if (r && (r.wood || r.powders)) {
+    UI.addChat('', `🎒 가지고 있던 장작 ${r.wood}개${r.powders ? `, 가루 ${r.powders}개` : ''}를 그대로 챙겨 왔어요!`, true);
+  } else UI.addChat('', '🌙 불멍 캠핑장에 오신 걸 환영해요! 동쪽에서 장작을 패 보세요.', true);
   updateOnline();
 });
 
@@ -247,6 +280,7 @@ net.on('snap', (m) => {
 });
 
 net.on('inv', (m) => {
+  if (m.save) store.set('save', m.save); // 서버가 서명한 백업 (서버가 재시작돼도 장작 복원)
   const prev = state.inv;
   state.inv = { wood: m.wood, chops: m.chops, powders: m.powders, canPowder: m.canPowder };
   refreshInventory();
@@ -525,14 +559,38 @@ function sendChat() {
   const text = $('chatInput').value.trim();
   if (text) net.send({ t: 'chat', text });
   $('chatInput').value = '';
+  // 모바일: 메신저처럼 키보드를 연 채로 이어서 대화. PC: 입력 끝나면 게임으로
+  if (isTouch && text) { $('chatInput').focus(); return; }
+  closeChat();
+}
+if (isTouch) $('chatInput').placeholder = '메시지를 입력하세요…';
+function openChat() {
+  document.body.classList.add('chat-open');
+  $('chatInput').focus();
+  const log = $('chatLog');
+  requestAnimationFrame(() => { log.scrollTop = log.scrollHeight; });
+}
+function closeChat() {
   $('chatInput').blur();
   document.body.classList.remove('chat-open');
 }
+$('chatSend').addEventListener('pointerdown', (e) => e.preventDefault()); // 전송 눌러도 키보드 유지
 $('chatSend').addEventListener('click', sendChat);
+$('chatClose').addEventListener('click', closeChat);
 $('chatToggle').addEventListener('click', () => {
-  const open = document.body.classList.toggle('chat-open');
-  if (open) $('chatInput').focus();
+  if (document.body.classList.contains('chat-open')) closeChat(); else openChat();
 });
+// 모바일 키보드 높이만큼 채팅 시트를 올린다 (iOS는 화면이 줄지 않고 키보드가 덮기 때문)
+if (window.visualViewport) {
+  const vv = visualViewport;
+  const fitKeyboard = () => {
+    const kb = Math.max(0, innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty('--kb', `${kb}px`);
+    if (vv.offsetTop > 0 || scrollY > 0) scrollTo(0, 0);
+  };
+  vv.addEventListener('resize', fitKeyboard);
+  vv.addEventListener('scroll', fitKeyboard);
+}
 const chatInput = $('chatInput');
 addEventListener('keydown', (e) => {
   if (!me) return;
@@ -540,7 +598,7 @@ addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       if (e.isComposing) return;
       sendChat();
-    } else if (e.key === 'Escape') chatInput.blur();
+    } else if (e.key === 'Escape') closeChat();
     return;
   }
   if (document.activeElement?.tagName === 'INPUT') return;
@@ -574,7 +632,7 @@ canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
   if (ptrs.size === 1) { cam.dragging = true; lastPX = e.clientX; lastPY = e.clientY; }
   if (ptrs.size === 2) { cam.dragging = false; pinchD = pinchDist(); }
-  if (document.activeElement === chatInput) chatInput.blur();
+  if (document.activeElement === chatInput || document.body.classList.contains('chat-open')) closeChat();
 });
 canvas.addEventListener('pointermove', (e) => {
   if (!ptrs.has(e.pointerId)) return;

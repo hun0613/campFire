@@ -20,6 +20,10 @@ export class TouchControls {
     root.id = 'touchControls';
     root.innerHTML = `
       <div id="joyZone"><div id="joyBase"><div id="joyKnob"></div></div></div>
+      <div id="touchHint" class="hidden">
+        <div class="th-half th-left"><div class="th-ico">🕹️</div><b>이동</b><span>왼쪽 아무 데나<br>엄지를 대고 밀기</span></div>
+        <div class="th-half th-right"><div class="th-ico">👆</div><b>시점 돌리기</b><span>오른쪽을 드래그<br>두 손가락으로 줌</span></div>
+      </div>
       <button id="actionBtn" class="hidden"><span class="a-icon">✋</span><span class="a-label"></span></button>`;
     document.getElementById('hud').appendChild(root);
 
@@ -83,6 +87,21 @@ export class TouchControls {
     btn.addEventListener('pointerup', up);
     btn.addEventListener('pointercancel', up);
     btn.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  /** 화면 분할 안내를 잠깐 보여준다 (첫 터치 시 바로 사라짐) */
+  showHint(ms = 5000) {
+    const el = document.getElementById('touchHint');
+    if (!el) return;
+    el.classList.remove('hidden', 'out');
+    const hide = () => {
+      el.classList.add('out');
+      setTimeout(() => el.classList.add('hidden'), 400);
+      removeEventListener('pointerdown', hide, true);
+    };
+    clearTimeout(this._hintT);
+    this._hintT = setTimeout(hide, ms);
+    setTimeout(() => addEventListener('pointerdown', hide, true), 600);
   }
 
   setAction(action) {

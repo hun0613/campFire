@@ -415,3 +415,66 @@ body.touch .beacon { transform: scale(.85); }
   body.touch #joyZone { height: 70vh; width: 40vw; }
   body.touch #dialog { bottom: 10px; }
 }
+
+/* ---------- 모바일: 화면 절반 분할 (왼쪽 이동 / 오른쪽 시점) ---------- */
+/* 조이스틱 영역을 화면 왼쪽 절반 전체로. HUD 패널(z 5+)은 그 위에 있어서 계속 누를 수 있다 */
+body.touch #joyZone,
+body.touch.touch #joyZone { left: 0; top: 0; bottom: 0; width: 50vw; height: auto; max-width: none; z-index: 4; }
+/* 평소엔 왼쪽 아래에 희미한 조이스틱이 '여기서 이동' 표시 역할 */
+#touchHint { position: fixed; inset: 0; z-index: 4; display: flex; pointer-events: none; transition: opacity .4s; }
+#touchHint.hidden { display: none; }
+#touchHint.out { opacity: 0; }
+.th-half { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  color: #fff3dc; text-align: center; font-size: 13px; line-height: 1.5; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+.th-half b { font-size: 18px; }
+.th-half span { opacity: .85; }
+.th-ico { font-size: 34px; }
+.th-left { background: linear-gradient(to right, rgba(255,170,90,.18), rgba(255,170,90,.04)); border-right: 2px dashed rgba(255,243,220,.45); }
+.th-right { background: linear-gradient(to left, rgba(140,150,255,.18), rgba(140,150,255,.04)); }
+@media (max-height: 500px) {
+  body.touch #joyZone { top: 0; bottom: 0; height: auto; width: 50vw; }
+}
+
+/* ---------- 모바일: 옵션 버튼을 오른쪽 세로 막대로 ---------- */
+body.touch #topright {
+  flex-direction: column; align-items: center; gap: 4px;
+  top: max(10px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right));
+  padding: 6px 4px; border-radius: 20px; font-size: 12px;
+}
+body.touch #topright .online-dot { margin: 2px 0 0; }
+body.touch #topright #online { line-height: 1; margin-bottom: 2px; }
+body.touch #topright .icon-btn { margin: 0; width: 34px; height: 34px; }
+/* 지도는 세로 막대 왼쪽에 열린다 */
+body.touch #mapPanel { top: max(10px, env(safe-area-inset-top)); right: calc(max(8px, env(safe-area-inset-right)) + 54px); }
+@media (orientation: portrait) {
+  /* 세로 화면: 상태창 아래로 토스트 */
+  body.touch #toasts { top: calc(max(10px, env(safe-area-inset-top)) + 64px); max-width: calc(100vw - 90px); }
+  /* 세로 화면은 폭이 좁으니 지도는 세로 막대 아래쪽에 */
+  body.touch #mapPanel { top: calc(max(10px, env(safe-area-inset-top)) + 220px); right: max(8px, env(safe-area-inset-right)); }
+}
+
+/* ---------- 모바일 채팅: 키보드 바로 위에 붙는 하단 시트 ---------- */
+.chat-close { display: none; }
+body.touch.chat-open #chat {
+  top: auto; left: 0; right: 0; width: auto; bottom: var(--kb, 0px);
+  padding: 10px max(10px, env(safe-area-inset-right)) 10px max(10px, env(safe-area-inset-left));
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, rgba(12, 12, 32, 0), rgba(12, 12, 32, .82) 28px);
+  pointer-events: auto; z-index: 9;
+}
+body.touch.chat-open #chatLog { max-height: min(calc((100vh - var(--kb, 0px)) * .32), 220px); overflow-y: auto; mask-image: linear-gradient(to bottom, transparent, black 24px); padding-top: 18px; }
+body.touch.chat-open .chat-row { display: flex; margin-top: 8px; }
+body.touch.chat-open #chatInput { font-size: 16px; } /* 16px 미만이면 iOS가 화면을 확대함 */
+body.touch.chat-open .chat-close {
+  display: block; flex: none; width: 40px; border-radius: 14px; border: 2px solid rgba(255, 243, 220, .35);
+  background: rgba(255, 248, 232, .12); color: #fff3dc; font: inherit; font-size: 16px;
+}
+/* 채팅 중에는 조이스틱·액션버튼·가루 슬롯을 잠시 숨긴다 */
+body.touch.chat-open #touchControls,
+body.touch.chat-open #bottom,
+body.touch.chat-open .chat-toggle { display: none; }
+@media (max-height: 500px) {
+  body.touch.chat-open #chat { left: 0; right: 0; width: auto; top: auto; }
+  body.touch.chat-open #chatLog { max-height: min(calc((100vh - var(--kb, 0px)) * .3), 140px); padding-top: 10px; }
+}
+#chatInput:focus::placeholder { color: rgba(107, 74, 43, .45); }

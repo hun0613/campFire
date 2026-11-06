@@ -3,6 +3,7 @@ import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import {
   CFG, PITS, STUMPS, NPC, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
@@ -80,11 +81,66 @@ const pitDef = new Map(PITS.map((p) => [p.id, p]));
 const HEX = /^#[0-9a-f]{6}$/i;
 const pickColor = (v, list) => (typeof v === 'string' && HEX.test(v) ? v : list[0]);
 
+// ---------------------------------------------------------------- 저장 (새로고침/재접속해도 장작 유지)
+// 1) 서버 메모리: 기기별 pid 로 인벤토리·위치를 기억 → 새로고침, 앱 재실행
+// 2) 서명된 백업: 같은 내용을 서버 비밀키로 서명해서 기기에도 저장 → 서버가 재시작(잠듦)돼도 복원.
+//    서명이 있어서 기기에서 숫자를 고쳐도 받아주지 않는다.
+const SAVE_SECRET = process.env.SAVE_SECRET || crypto.randomBytes(32).toString('hex');
+if (!process.env.SAVE_SECRET && isProd) console.warn('⚠️  SAVE_SECRET 이 없어 서버 재시작 후에는 기기 백업을 복원할 수 없어요.');
+const SAVE_TTL = 14 * 24 * 3600 * 1000;
+const PID = /^[A-Za-z0-9_-]{16,64}$/;
+const saves = new Map(); // pid -> { wood, chops, powders, canPowder, x, z, at }
+const pitOwnerKey = new Map(); // pitId -> pid (공개되지 않음)
+const sign = (pid, data) => crypto.createHmac('sha256', SAVE_SECRET).update(`${pid}|${data}`).digest('base64url');
+
+function snapshotOf(p) {
+  return { wood: p.wood, chops: p.chops, powders: p.powders, canPowder: p.canPowder };
+}
+function remember(p) {
+  if (!p.pid) return;
+  saves.set(p.pid, { ...snapshotOf(p), powders: [...p.powders], x: p.x, z: p.z, at: Date.now() });
+}
+function validSnapshot(s) {
+  if (!s || typeof s !== 'object') return null;
+  const wood = s.wood | 0, chops = s.chops | 0;
+  if (wood < 0 || wood > CFG.MAX_WOOD || chops < 0 || chops >= CFG.CHOPS_PER_WOOD) return null;
+  if (!Array.isArray(s.powders) || s.powders.length > CFG.MAX_POWDERS) return null;
+  const powders = s.powders.filter((q) => q && HEX.test(q.color) && typeof q.effect === 'string' && typeof q.name === 'string')
+    .map((q) => ({ ...q }));
+  return { wood, chops, powders, canPowder: s.canPowder !== false };
+}
+/** 서버 기억 → 없으면 서명된 기기 백업 순서로 복원 */
+function restore(pid, backup) {
+  const mem = saves.get(pid);
+  if (mem && Date.now() - mem.at < SAVE_TTL) return { ...validSnapshot(mem), x: mem.x, z: mem.z, fresh: Date.now() - mem.at < 30 * 60 * 1000 };
+  if (backup && typeof backup.data === 'string' && typeof backup.sig === 'string' && backup.data.length < 4000) {
+    const expected = sign(pid, backup.data);
+    if (expected.length === backup.sig.length && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(backup.sig))) {
+      try {
+        const d = JSON.parse(backup.data);
+        if (Date.now() - d.at < SAVE_TTL) return validSnapshot(d);
+      } catch { /* 무시 */ }
+    }
+  }
+  return null;
+}
+// 오래된 기억 정리
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of saves) if (now - v.at > SAVE_TTL) saves.delete(k);
+}, 3600 * 1000);
+
 function publicPlayer(p) {
   return { id: p.id, name: p.name, look: p.look, x: p.x, z: p.z, ry: p.ry, anim: p.anim };
 }
 function inv(p) {
-  return { t: 'inv', wood: p.wood, chops: p.chops, powders: p.powders, canPowder: p.canPowder };
+  remember(p);
+  const msg = { t: 'inv', ...snapshotOf(p) };
+  if (p.pid) {
+    const data = JSON.stringify({ ...snapshotOf(p), at: Date.now() });
+    msg.save = { data, sig: sign(p.pid, data) };
+  }
+  return msg;
 }
 function send(ws, msg) {
   if (ws.readyState === 1) ws.send(JSON.stringify(msg));
@@ -120,16 +176,41 @@ function handle(ws, ctx, m) {
       pants: pickColor(L.pants, LOOKS.pants),
       hat: LOOKS.hat.some((h) => h.id === L.hat) ? L.hat : 'none',
     };
+    const pid = typeof m.pid === 'string' && PID.test(m.pid) ? m.pid : null;
+    // 같은 기기로 다시 들어오면(다른 탭 등) 예전 접속은 정리한다
+    if (pid) {
+      for (const [otherWs, otherCtx] of ctxs) {
+        if (otherCtx.me?.pid === pid && otherWs !== ws) {
+          remember(otherCtx.me);
+          otherCtx.replaced = true;
+          send(otherWs, { t: 'replaced' });
+          otherWs.close();
+        }
+      }
+    }
+    const saved = pid ? restore(pid, m.save) : null;
     const p = {
-      id: nextId++, name, look,
+      id: nextId++, pid, name, look,
       x: SPAWN.x + (Math.random() - 0.5) * 6, z: SPAWN.z + (Math.random() - 0.5) * 2, ry: Math.PI,
       anim: 'idle', seat: null,
-      wood: 0, chops: 0, powders: [], canPowder: true,
+      wood: saved?.wood ?? 0, chops: saved?.chops ?? 0, powders: saved?.powders ?? [], canPowder: saved?.canPowder ?? true,
       lastChop: 0, lastChat: 0,
     };
+    // 방금 전까지 있던 자리로 (새로고침)
+    if (saved?.fresh && Number.isFinite(saved.x)) {
+      p.x = Math.min(BOUNDS.maxX, Math.max(BOUNDS.minX, saved.x));
+      p.z = Math.min(BOUNDS.maxZ, Math.max(BOUNDS.minZ, saved.z));
+    }
     ctx.me = p;
     players.set(p.id, p);
-    send(ws, { t: 'welcome', id: p.id, me: publicPlayer(p) });
+    // 내가 쌓아둔 장작더미는 다시 내 것으로
+    if (pid) {
+      for (const [pitId, key] of pitOwnerKey) {
+        const pit = pits.get(pitId);
+        if (key === pid && pit.state !== 'empty') { pit.owner = p.id; broadcast({ t: 'pit', pit }); }
+      }
+    }
+    send(ws, { t: 'welcome', id: p.id, me: publicPlayer(p), restored: saved ? { wood: p.wood, powders: p.powders.length } : null });
     send(ws, inv(p));
     broadcast({ t: 'join', player: publicPlayer(p) }, ws);
     broadcast({ t: 'sys', text: `${p.name}님이 캠핑장에 도착했어요 🏕️` });
@@ -201,6 +282,7 @@ function handle(ws, ctx, m) {
       me.canPowder = true; // 장작을 쌓았으니 다음 번에 다시 가루를 받을 수 있다
       pit.state = 'stacked';
       pit.owner = me.id;
+      if (me.pid) pitOwnerKey.set(pit.id, me.pid);
       broadcast({ t: 'pit', pit });
       send(ws, inv(me));
       break;
@@ -281,9 +363,11 @@ server.on('upgrade', (req, socket, head) => {
   }
 });
 
+const ctxs = new Map(); // ws -> ctx
 wss.on('connection', (ws) => {
   sockets.add(ws);
   const ctx = { me: null };
+  ctxs.set(ws, ctx);
   send(ws, {
     t: 'hello',
     now: Date.now(),
@@ -297,12 +381,14 @@ wss.on('connection', (ws) => {
   });
   ws.on('close', () => {
     sockets.delete(ws);
+    ctxs.delete(ws);
     const me = ctx.me;
     if (!me) return;
+    remember(me);
     leaveSeat(me);
     players.delete(me.id);
     broadcast({ t: 'leave', id: me.id });
-    broadcast({ t: 'sys', text: `${me.name}님이 캠핑장을 떠났어요` });
+    if (!ctx.replaced) broadcast({ t: 'sys', text: `${me.name}님이 캠핑장을 떠났어요` });
   });
 });
 
@@ -323,6 +409,7 @@ setInterval(() => {
     if (pit.state === 'lit' && now >= pit.endsAt) {
       pit.state = 'empty';
       pit.owner = null;
+      pitOwnerKey.delete(pit.id);
       broadcast({ t: 'pit', pit, burnedOut: true });
     }
   }

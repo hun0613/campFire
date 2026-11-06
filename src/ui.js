@@ -5,12 +5,13 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export const UI = {
-  toast(text) {
+  toast(text, ms = 3300) {
     const el = document.createElement('div');
     el.className = 'toast';
     el.textContent = text;
+    if (ms !== 3300) el.style.animation = `toastIn .35s cubic-bezier(.2, 1.4, .4, 1), toastOut .4s ease ${ms - 500}ms forwards`;
     $('toasts').appendChild(el);
-    setTimeout(() => el.remove(), 3300);
+    setTimeout(() => el.remove(), ms);
   },
 
   setOnline(n) { $('online').textContent = n; },
