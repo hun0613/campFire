@@ -137,6 +137,7 @@ html, body {
 .msg b { color: #ffc77a; font-weight: normal; margin-right: 6px; }
 .msg.sys { background: rgba(255, 157, 60, .25); color: #ffe0b8; }
 #chatInput {
+  display: block; resize: none; overflow: hidden; white-space: nowrap; line-height: 1.35; height: auto; box-sizing: border-box;
   width: 100%; padding: 10px 14px; border-radius: 14px; border: 2px solid rgba(241, 223, 186, .5);
   background: rgba(255, 248, 232, .18); color: #fff6e6; font: inherit; font-size: 15px; outline: none; backdrop-filter: blur(4px);
 }

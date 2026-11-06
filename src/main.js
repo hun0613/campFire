@@ -581,27 +581,52 @@ $('chatToggle').addEventListener('click', () => {
   if (document.body.classList.contains('chat-open')) closeChat(); else openChat();
 });
 // 모바일 키보드 높이만큼 채팅 시트를 올린다 (iOS는 화면이 줄지 않고 키보드가 덮기 때문)
+// - iOS Safari: 키보드가 떠도 레이아웃 높이는 그대로고 innerHeight 가 같이 줄어들며,
+//   입력창을 보여주려고 화면을 위로 밀어 올린다(visualViewport.offsetTop).
+//   → 기준은 변하지 않는 레이아웃 높이(clientHeight), 보이는 영역의 '바닥'에 시트를 붙인다.
+//   (예전엔 scrollTo(0,0)으로 밀어올린 화면을 되돌려서 입력창이 키보드 뒤로 숨었다)
 if (window.visualViewport) {
   const vv = visualViewport;
+  const root = document.documentElement;
   const fitKeyboard = () => {
-    const kb = Math.max(0, innerHeight - vv.height - vv.offsetTop);
-    document.documentElement.style.setProperty('--kb', `${kb}px`);
-    if (vv.offsetTop > 0 || scrollY > 0) scrollTo(0, 0);
+    const layoutH = root.clientHeight;
+    const kb = Math.max(0, Math.round(layoutH - (vv.offsetTop + vv.height)));
+    root.style.setProperty('--kb', `${kb}px`);
   };
-  vv.addEventListener('resize', fitKeyboard);
-  vv.addEventListener('scroll', fitKeyboard);
+  // 키보드 애니메이션 동안 iOS는 resize 이벤트를 늦게/드문드문 보내므로 잠깐 매 프레임 맞춘다
+  let until = 0;
+  const follow = () => { fitKeyboard(); if (performance.now() < until) requestAnimationFrame(follow); };
+  const burst = () => { const run = performance.now() >= until; until = performance.now() + 900; if (run) follow(); };
+  vv.addEventListener('resize', burst);
+  vv.addEventListener('scroll', burst);
+  chatInputEl().addEventListener('focus', burst);
+  chatInputEl().addEventListener('blur', () => {
+    burst();
+    // 키보드가 닫히면 iOS가 밀어올린 화면을 원래대로
+    setTimeout(() => { if (scrollY || root.scrollTop || document.body.scrollTop) scrollTo(0, 0); }, 120);
+  });
 }
+function chatInputEl() { return $('chatInput'); }
 const chatInput = $('chatInput');
+// 채팅 입력은 <textarea> (안드로이드 Chrome이 <input> 위에 비밀번호·카드·주소 자동완성 막대를 띄워 입력창을 가리기 때문)
+// 안드로이드 키보드의 '보내기'는 keydown 대신 줄바꿈으로 들어오는 경우가 많아서 여기서 전송 처리
+chatInput.addEventListener('input', () => {
+  if (chatInput.value.includes('\n')) {
+    chatInput.value = chatInput.value.replace(/\n/g, '');
+    sendChat();
+  }
+});
 addEventListener('keydown', (e) => {
   if (!me) return;
   if (document.activeElement === chatInput) {
     if (e.key === 'Enter') {
       if (e.isComposing) return;
+      e.preventDefault();
       sendChat();
     } else if (e.key === 'Escape') closeChat();
     return;
   }
-  if (document.activeElement?.tagName === 'INPUT') return;
+  if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
   if (UI.dialogOpen()) {
     if (['KeyE', 'Space', 'Enter', 'Escape'].includes(e.code)) { e.preventDefault(); UI.dialogNext(); }
     return;
