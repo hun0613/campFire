@@ -457,13 +457,13 @@ body.touch #mapPanel { top: max(10px, env(safe-area-inset-top)); right: calc(max
 /* ---------- 모바일 채팅: 키보드 바로 위에 붙는 하단 시트 ---------- */
 .chat-close { display: none; }
 body.touch.chat-open #chat {
-  top: auto; left: 0; right: 0; width: auto; bottom: var(--kb, 0px);
+  left: 0; right: 0; width: auto; bottom: auto; top: var(--vvb, 100%); transform: translateY(-100%);
   padding: 10px max(10px, env(safe-area-inset-right)) 10px max(10px, env(safe-area-inset-left));
   padding-bottom: max(10px, env(safe-area-inset-bottom));
   background: linear-gradient(to bottom, rgba(12, 12, 32, 0), rgba(12, 12, 32, .82) 28px);
   pointer-events: auto; z-index: 9;
 }
-body.touch.chat-open #chatLog { max-height: min(calc((100vh - var(--kb, 0px)) * .32), 220px); overflow-y: auto; mask-image: linear-gradient(to bottom, transparent, black 24px); padding-top: 18px; }
+body.touch.chat-open #chatLog { max-height: min(calc(var(--vvh, 100vh) * .32), 220px); overflow-y: auto; mask-image: linear-gradient(to bottom, transparent, black 24px); padding-top: 18px; }
 body.touch.chat-open .chat-row { display: flex; margin-top: 8px; }
 body.touch.chat-open #chatInput { font-size: 16px; } /* 16px 미만이면 iOS가 화면을 확대함 */
 body.touch.chat-open .chat-close {
@@ -475,7 +475,9 @@ body.touch.chat-open #touchControls,
 body.touch.chat-open #bottom,
 body.touch.chat-open .chat-toggle { display: none; }
 @media (max-height: 500px) {
-  body.touch.chat-open #chat { left: 0; right: 0; width: auto; top: auto; }
-  body.touch.chat-open #chatLog { max-height: min(calc((100vh - var(--kb, 0px)) * .3), 140px); padding-top: 10px; }
+  body.touch.chat-open #chat { left: 0; right: 0; width: auto; }
+  body.touch.chat-open #chatLog { max-height: min(calc(var(--vvh, 100vh) * .3), 140px); padding-top: 10px; }
 }
 #chatInput:focus::placeholder { color: rgba(107, 74, 43, .45); }
+/* 키보드가 떠 있으면 아이폰 홈 바 여백(safe-area)은 필요 없다 → 키보드에 딱 붙게 */
+body.touch.chat-open.kb-open #chat { padding-bottom: 8px; }

@@ -587,33 +587,42 @@ $('chatToggle').addEventListener('click', () => {
 //   (예전엔 scrollTo(0,0)으로 밀어올린 화면을 되돌려서 입력창이 키보드 뒤로 숨었다)
 // - 안드로이드 '전체화면' PWA: 키보드가 떠도 화면이 상태바 높이만큼 덜 줄어드는 버그가 있어서
 //   키보드 높이를 브라우저(VirtualKeyboard API)에게 직접 받는다.
+// ▶ 방식: '레이아웃 높이 - 키보드 높이'로 bottom 을 계산하면 브라우저마다 기준 높이가 달라서
+//   (iOS는 innerHeight가 줄고, 안드로이드 Chrome은 주소창 때문에 clientHeight가 실제와 다름)
+//   키보드 위에 틈이 생기거나 가려졌다. 그래서 '지금 눈에 보이는 영역의 바닥 좌표'
+//   (visualViewport.offsetTop + height)를 직접 구해 시트의 top 으로 쓰고, 시트를 자기 높이만큼 끌어올린다.
+// ▶ 안드로이드 '전체화면' PWA는 키보드가 떠도 화면 크기가 제대로 안 줄어서
+//   VirtualKeyboard API가 알려주는 키보드 높이를 쓴다.
+const root = document.documentElement;
 const vkMode = 'virtualKeyboard' in navigator && matchMedia('(display-mode: fullscreen)').matches;
+let vkH = 0;
+function fitKeyboard() {
+  const vv = window.visualViewport;
+  let top, h;
+  if (vkMode) { h = innerHeight - vkH; top = h; } else if (vv) { h = vv.height; top = vv.offsetTop + vv.height; } else { h = innerHeight; top = innerHeight; }
+  root.style.setProperty('--vvb', `${Math.round(top)}px`);
+  root.style.setProperty('--vvh', `${Math.round(h)}px`);
+  document.body.classList.toggle('kb-open', vkMode ? vkH > 100 : root.clientHeight - h > 120);
+}
 if (vkMode) {
   navigator.virtualKeyboard.overlaysContent = true;
-  navigator.virtualKeyboard.addEventListener('geometrychange', (e) => {
-    document.documentElement.style.setProperty('--kb', `${Math.round(e.target.boundingRect.height)}px`);
-  });
+  navigator.virtualKeyboard.addEventListener('geometrychange', (e) => { vkH = e.target.boundingRect.height; fitKeyboard(); });
 }
-if (window.visualViewport && !vkMode) {
-  const vv = visualViewport;
-  const root = document.documentElement;
-  const fitKeyboard = () => {
-    const layoutH = root.clientHeight;
-    const kb = Math.max(0, Math.round(layoutH - (vv.offsetTop + vv.height)));
-    root.style.setProperty('--kb', `${kb}px`);
-  };
-  // 키보드 애니메이션 동안 iOS는 resize 이벤트를 늦게/드문드문 보내므로 잠깐 매 프레임 맞춘다
+{
+  // 키보드 애니메이션 동안 resize 이벤트가 늦게/드문드문 오므로 잠깐 매 프레임 맞춘다
   let until = 0;
   const follow = () => { fitKeyboard(); if (performance.now() < until) requestAnimationFrame(follow); };
   const burst = () => { const run = performance.now() >= until; until = performance.now() + 900; if (run) follow(); };
-  vv.addEventListener('resize', burst);
-  vv.addEventListener('scroll', burst);
+  window.visualViewport?.addEventListener('resize', burst);
+  window.visualViewport?.addEventListener('scroll', burst);
+  addEventListener('resize', burst);
   chatInputEl().addEventListener('focus', burst);
   chatInputEl().addEventListener('blur', () => {
     burst();
     // 키보드가 닫히면 iOS가 밀어올린 화면을 원래대로
     setTimeout(() => { if (scrollY || root.scrollTop || document.body.scrollTop) scrollTo(0, 0); }, 120);
   });
+  fitKeyboard();
 }
 function chatInputEl() { return $('chatInput'); }
 const chatInput = $('chatInput');
