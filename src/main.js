@@ -585,7 +585,16 @@ $('chatToggle').addEventListener('click', () => {
 //   입력창을 보여주려고 화면을 위로 밀어 올린다(visualViewport.offsetTop).
 //   → 기준은 변하지 않는 레이아웃 높이(clientHeight), 보이는 영역의 '바닥'에 시트를 붙인다.
 //   (예전엔 scrollTo(0,0)으로 밀어올린 화면을 되돌려서 입력창이 키보드 뒤로 숨었다)
-if (window.visualViewport) {
+// - 안드로이드 '전체화면' PWA: 키보드가 떠도 화면이 상태바 높이만큼 덜 줄어드는 버그가 있어서
+//   키보드 높이를 브라우저(VirtualKeyboard API)에게 직접 받는다.
+const vkMode = 'virtualKeyboard' in navigator && matchMedia('(display-mode: fullscreen)').matches;
+if (vkMode) {
+  navigator.virtualKeyboard.overlaysContent = true;
+  navigator.virtualKeyboard.addEventListener('geometrychange', (e) => {
+    document.documentElement.style.setProperty('--kb', `${Math.round(e.target.boundingRect.height)}px`);
+  });
+}
+if (window.visualViewport && !vkMode) {
   const vv = visualViewport;
   const root = document.documentElement;
   const fitKeyboard = () => {
