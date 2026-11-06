@@ -4,7 +4,7 @@ export const CFG = {
   WOOD_PER_FIRE: 5,        // 모닥불 하나에 필요한 장작 수 (= 루미에게 가루를 받기 위한 장작 수)
   CHOPS_PER_WOOD: 3,       // 도끼질 몇 번에 장작 1개
   MAX_WOOD: 30,
-  FIRE_DURATION: 180_000,  // 모닥불 지속 시간 (ms)
+  FIRE_DURATION: 600_000,  // 모닥불 지속 시간 (ms)
   POWDERS_PER_VISIT: 3,    // 한 번에 받는 가루 수
   MAX_POWDERS: 9,
   SEATS_PER_PIT: 4,
