@@ -19,6 +19,7 @@ import { isTouch, TouchControls } from './touch.js';
 import { initPWA } from './pwa.js';
 import { Music } from './music.js';
 import { Monitor } from './monitor.js';
+import { Woodcut } from './woodcut.js';
 import { CFG, PITS, STUMPS, NPC, BOUNDS, RANGE, LOOKS } from '../shared/config.js';
 
 const $ = (id) => document.getElementById(id);
@@ -92,6 +93,8 @@ const sound = new Sound();
 const guide = new Guide(scene);
 
 const monitors = new Map(PITS.map((d) => [d.id, new Monitor(d, scene)]));
+const woodcut = new Woodcut(scene, STUMPS);
+for (const s of world.stumpMeshes) s.log.visible = false; // 그루터기 위 통나무는 woodcut 이 그린다
 const colliders = [
   ...world.colliders,
   ...PITS.map((p) => ({ x: p.x, z: p.z, r: 0.95 })),
@@ -282,6 +285,7 @@ net.on('welcome', (m) => {
 });
 
 net.on('join', (m) => { addRemote(m.player); updateOnline(); });
+net.on('carry', (m) => remotes.get(m.id)?.ch.setCarry(m.n));
 net.on('leave', (m) => {
   const r = remotes.get(m.id);
   if (r) { r.ch.dispose(); remotes.delete(m.id); }
@@ -303,10 +307,10 @@ net.on('inv', (m) => {
   if (m.save) store.set('save', m.save); // 서버가 서명한 백업 (서버가 재시작돼도 장작 복원)
   const prev = state.inv;
   state.inv = { wood: m.wood, chops: m.chops, powders: m.powders, canPowder: m.canPowder };
+  if (m.gained && me && state.lastStumpIdx != null) splitLog(state.lastStumpIdx, me.char);
+  me?.char.setCarry(m.wood);
   refreshInventory();
   if (m.gained && me) {
-    const s = state.lastStump;
-    if (s) effects.split(new THREE.Vector3(s.x, 0.7, s.z));
     floatText('+1 🪵', me.char.root.position.clone().setY(2.3));
     sound.wood();
     if (m.wood === CFG.WOOD_PER_FIRE && m.canPowder) UI.toast('장작 5개 완성! 서쪽 루미에게 가 보세요 ✨');
@@ -375,9 +379,11 @@ net.on('act', (m) => {
         if (!s) return;
         effects.chips(new THREE.Vector3(s.x, 0.66, s.z));
         sound.chop(volAt(new THREE.Vector3(s.x, 0, s.z)) * 0.7);
-        bounceLog(m.stump);
+        if (m.split) splitLog(m.stump, r.ch); else woodcut.hit(m.stump);
       },
     });
+  } else if (m.a === 'place') {
+    r.ch.play('place', { onImpact: () => woodcut.place(m.stump) });
   } else if (m.a === 'light') {
     r.ch.play('light');
   }
@@ -408,6 +414,13 @@ net.on('chat', (m) => {
 net.on('sys', (m) => UI.addChat('', m.text, true));
 net.on('toast', (m) => UI.toast(m.text));
 
+/** 통나무가 갈라짐 → 쪼갠 사람이 허리 숙여 줍고, 조각이 그 사람 장작 더미로 날아간다 */
+function splitLog(idx, ch) {
+  if (!woodcut.split(idx, ch)) return;
+  ch.carryPending += 1;
+  setTimeout(() => { if (!ch.busy()) ch.play('gather'); }, 420);
+}
+
 function addRemote(p) {
   if (p.id === state.myId || remotes.has(p.id)) return;
   const ch = new Character(p.look, { name: p.name });
@@ -415,6 +428,7 @@ function addRemote(p) {
   ch.root.rotation.y = p.ry;
   scene.add(ch.root);
   remotes.set(p.id, { ch, tx: p.x, tz: p.z, try: p.ry, anim: p.anim, name: p.name });
+  ch.setCarry(p.carry || 0);
 }
 function updateOnline() { UI.setOnline(remotes.size + (me ? 1 : 0)); }
 
@@ -603,8 +617,6 @@ function floatText(text, pos) {
   scene.add(o);
   setTimeout(() => { scene.remove(o); el.remove(); }, 1300);
 }
-const logBounce = STUMPS.map(() => 0);
-function bounceLog(i) { logBounce[i] = 1; }
 function lerpAngle(a, b, t) {
   const d = ((((b - a + Math.PI) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) - Math.PI;
   return a + d * t;
@@ -637,7 +649,9 @@ function promptFor(it) {
   const W = CFG.WOOD_PER_FIRE;
   const inv = state.inv;
   if (!it) return [null];
-  if (it.type === 'chop') return ['<kbd>E</kbd> 장작 패기 <small>(꾹 누르기)</small>'];
+  if (it.type === 'chop') {
+    return woodcut.stateOf(it.idx) === 'empty' ? ['<kbd>E</kbd> 통나무 올리기 <small>(꾹 누르면 계속 패요)</small>'] : ['<kbd>E</kbd> 장작 패기 <small>(꾹 누르기)</small>'];
+  }
   if (it.type === 'npc') return ['<kbd>E</kbd> 루미와 이야기하기'];
   if (it.type === 'pit') {
     const p = it.pit;
@@ -685,12 +699,22 @@ function tryChop(it) {
   me.z = s.z - (dz / d) * 0.95;
   me.ry = Math.atan2(dx, dz);
   state.lastStump = s;
+  state.lastStumpIdx = it.idx;
+  const st = woodcut.stateOf(it.idx);
+  if (st === 'splitting') return; // 쪼갠 장작이 모이는 중
+  if (st === 'empty') {
+    // 옆에서 통나무를 들어 그루터기에 올린다
+    net.send({ t: 'place', stump: it.idx });
+    me.char.play('place', { onImpact: () => { woodcut.place(it.idx); sound.pop?.(); } });
+    return;
+  }
+  if (state.inv.wood >= CFG.MAX_WOOD) { UI.toast('장작을 더 들 수 없어요! 모닥불에 써 보세요 🔥'); return; }
   me.char.play('chop', {
     onImpact: () => {
       effects.chips(new THREE.Vector3(s.x, 0.66, s.z));
       sound.chop(1);
       state.shake = 0.12;
-      bounceLog(it.idx);
+      woodcut.hit(it.idx);
       net.send({ t: 'chop', stump: it.idx });
     },
   });
@@ -736,7 +760,7 @@ const touch = isTouch ? new TouchControls({
 function actionFor(it) {
   if (UI.dialogOpen()) return { icon: '▶', label: '다음' };
   if (!it) return null;
-  if (it.type === 'chop') return { icon: '🪓', label: '꾹 패기' };
+  if (it.type === 'chop') return woodcut.stateOf(it.idx) === 'empty' ? { icon: '🪵', label: '통나무 올리기' } : { icon: '🪓', label: '꾹 패기' };
   if (it.type === 'npc') return { icon: '💬', label: '대화' };
   if (it.type === 'seated') return { icon: '🚶', label: '일어나기' };
   if (it.type === 'pit') {
@@ -1140,12 +1164,7 @@ function updateLabels() {
 }
 
 function updateStumps(dt) {
-  world.stumpMeshes.forEach((s, i) => {
-    if (logBounce[i] > 0) logBounce[i] = Math.max(0, logBounce[i] - dt * 4);
-    const b = logBounce[i];
-    s.log.scale.set(1 + b * 0.25, 1 - b * 0.3, 1 + b * 0.25);
-    s.log.position.y = 0.51 - b * 0.05;
-  });
+  woodcut.update(dt);
 }
 
 const clock = new THREE.Clock();

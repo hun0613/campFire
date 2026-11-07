@@ -149,10 +149,12 @@ setInterval(() => {
 }, 3600 * 1000);
 
 function publicPlayer(p) {
-  return { id: p.id, name: p.name, look: p.look, x: p.x, z: p.z, ry: p.ry, anim: p.anim };
+  return { id: p.id, name: p.name, look: p.look, x: p.x, z: p.z, ry: p.ry, anim: p.anim, carry: p.wood };
 }
 function inv(p) {
   remember(p);
+  // 품에 안은 장작 더미가 다른 사람에게도 보이도록
+  if (p._carry !== p.wood) { p._carry = p.wood; broadcast({ t: 'carry', id: p.id, n: p.wood }); }
   const msg = { t: 'inv', ...snapshotOf(p) };
   if (p.pid) {
     const data = JSON.stringify({ ...snapshotOf(p), at: Date.now() });
@@ -298,8 +300,8 @@ function handle(ws, ctx, m) {
       if (!stump || dist(me, stump.x, stump.z) > RANGE.stump + 1.5) return;
       if (now - me.lastChop < CFG.CHOP_COOLDOWN) return;
       me.lastChop = now;
-      broadcast({ t: 'act', id: me.id, a: 'chop', stump: m.stump | 0 }, ws);
       if (me.wood >= CFG.MAX_WOOD) {
+        broadcast({ t: 'act', id: me.id, a: 'chop', stump: m.stump | 0 }, ws);
         send(ws, { t: 'toast', text: '장작을 더 들 수 없어요!' });
         return;
       }
@@ -310,7 +312,15 @@ function handle(ws, ctx, m) {
         me.wood += 1;
         gained = 1;
       }
+      // split: 이번 도끼질로 통나무가 갈라졌는지 (다른 사람 화면에서도 쪼개지는 연출)
+      broadcast({ t: 'act', id: me.id, a: 'chop', stump: m.stump | 0, split: !!gained }, ws);
       send(ws, { ...inv(me), gained });
+      break;
+    }
+    case 'place': { // 그루터기에 새 통나무 올리기 (연출만 공유)
+      const stump = STUMPS[m.stump | 0];
+      if (!stump || dist(me, stump.x, stump.z) > RANGE.stump + 1.5) return;
+      broadcast({ t: 'act', id: me.id, a: 'place', stump: m.stump | 0 }, ws);
       break;
     }
     case 'npc': {

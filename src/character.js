@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { toon } from './toon.js';
+import { makeHalf, makeLog } from './woodcut.js';
 
 const G = {
   head: new THREE.SphereGeometry(0.42, 28, 20),
@@ -153,6 +154,30 @@ export class Character {
     this.guitar.visible = false;
     this.body.add(this.guitar);
 
+    // 품에 안은 장작 더미 (장작 수만큼 쌓임, 최대 8조각까지 보임)
+    this.carry = new THREE.Group();
+    this.carryHome = new THREE.Vector3(0, 0.6, 0.36);
+    this.carry.position.copy(this.carryHome);
+    this.carryPieces = [];
+    for (let k = 0; k < 8; k++) {
+      const h = makeHalf();
+      h.scale.set(0.62, 1.15, 0.62);
+      h.rotation.set(0, (k % 2) * Math.PI, Math.PI / 2); // 눕혀서
+      h.position.set(0, Math.floor(k / 2) * 0.11, (k % 2 ? -1 : 1) * 0.07);
+      h.visible = false;
+      this.carry.add(h);
+      this.carryPieces.push(h);
+    }
+    this.body.add(this.carry);
+    this.carryN = 0;
+    this.carryPending = 0;
+    this.carryBounce = 0;
+    this.stashed = false;
+    // 그루터기에 올릴 때 손에 드는 통나무
+    this.handLog = makeLog();
+    this.handLog.visible = false;
+    this.body.add(this.handLog);
+
     // 머리
     this.head = new THREE.Group();
     this.head.position.y = 1.18;
@@ -298,12 +323,50 @@ export class Character {
 
   /** 'chop' | 'throw' | 'wave' 같은 단발 동작 */
   play(name, opts = {}) {
-    const dur = { chop: 0.62, throw: 0.55, wave: 1.2, light: 0.7 }[name] || 0.5;
+    const dur = { chop: 0.62, throw: 0.55, wave: 1.2, light: 0.7, place: 1.0, gather: 0.6 }[name] || 0.5;
     this.action = { name, t: 0, dur, impact: opts.onImpact, done: opts.onDone, hit: false };
     if (name === 'chop') this.axe.visible = true;
   }
 
   setAnim(a) { this.anim = a; }
+
+  /** 가진 장작 수 → 품의 더미 (날아오는 중인 조각은 도착하면 보인다) */
+  setCarry(n) {
+    this.carryN = n;
+    this.#showCarry();
+  }
+  /** 쪼갠 장작 조각이 더미에 도착 */
+  bumpCarry() {
+    this.carryPending = Math.max(0, this.carryPending - 1);
+    this.carryBounce = 1;
+    this.#showCarry();
+  }
+  #showCarry() {
+    const n = Math.max(0, Math.min(8, this.carryN - this.carryPending));
+    this.carryPieces.forEach((p, k) => { p.visible = k < n; });
+    this.carry.visible = n > 0;
+  }
+  /** 장작 더미 맨 위 (월드 좌표) */
+  carryWorldPos(out = new THREE.Vector3()) {
+    const n = Math.max(0, Math.min(8, this.carryN - this.carryPending));
+    this.carry.updateWorldMatrix(true, false);
+    return this.carry.localToWorld(out.set(0, Math.floor(n / 2) * 0.11 + 0.08, 0));
+  }
+  /** 장작을 패거나 앉을 때는 더미를 옆 바닥에 내려 두고, 걷기 시작하면 다시 안는다 */
+  #stash(on) {
+    if (this.stashed === on || !this.root.parent) return;
+    this.stashed = on;
+    if (on) {
+      const p = this.root.localToWorld(new THREE.Vector3(0.62, 0, -0.25));
+      this.root.parent.add(this.carry);
+      this.carry.position.set(p.x, 0.07, p.z);
+      this.carry.rotation.set(0, this.root.rotation.y + 0.4, 0);
+    } else {
+      this.body.add(this.carry);
+      this.carry.position.copy(this.carryHome).add(new THREE.Vector3(0, -0.25, 0.1));
+      this.carry.rotation.set(0, 0, 0);
+    }
+  }
 
   handWorldPos(out = new THREE.Vector3()) {
     return this.handR.getWorldPosition(out);
@@ -352,6 +415,13 @@ export class Character {
       headTilt = Math.sin(this.time * 0.7) * 0.04;
     }
 
+    // 장작을 안고 있으면 두 팔로 더미를 받친다 (걸을 때도 팔을 흔들지 않음)
+    const holding = this.carry.visible && !this.stashed;
+    if (holding && (this.anim === 'idle' || this.anim === 'walk' || this.anim === 'run')) {
+      aL = aR = -1.05; zL = 0.42; zR = -0.42;
+      lean = Math.max(lean, 0.02) - 0.04;
+    }
+
     // 단발 동작
     const A = this.action;
     if (A) {
@@ -374,15 +444,49 @@ export class Character {
       } else if (A.name === 'wave') {
         aR = -2.7;
         zR = 0.4 + Math.sin(p * Math.PI * 6) * 0.35;
+      } else if (A.name === 'place') {
+        // 허리 숙여 통나무 들기 → 가슴 높이로 → 앞으로 내밀어 그루터기에 올리기
+        const L = this.handLog;
+        L.visible = p < 0.82;
+        if (p < 0.35) {
+          const e = easeOut(p / 0.35);
+          lean = 0.55 * e; bodyY = -0.06 * e; aL = aR = -0.55; lL = lR = -0.5 * e;
+          L.position.set(0, 0.22, 0.4);
+        } else if (p < 0.7) {
+          const e = easeOut((p - 0.35) / 0.35);
+          lean = lerp(0.55, 0.08, e); bodyY = lerp(-0.06, 0, e); aL = aR = lerp(-0.55, -1.15, e); lL = lR = lerp(-0.5, 0, e);
+          L.position.set(0, lerp(0.22, 0.62, e), 0.4);
+        } else {
+          const e = easeOut((p - 0.7) / 0.3);
+          lean = 0.08 + 0.12 * e; aL = aR = lerp(-1.15, -1.45, e);
+          L.position.set(0, lerp(0.62, 0.55, e), lerp(0.4, 0.78, e));
+        }
+        zL = 0.32; zR = -0.32;
+        if (!A.hit && p >= 0.8) { A.hit = true; A.impact?.(); }
+      } else if (A.name === 'gather') {
+        // 허리 숙여 쪼갠 장작 줍기
+        const e = Math.sin(p * Math.PI);
+        lean = 0.6 * e; bodyY = -0.07 * e; lL = lR = -0.55 * e;
+        aL = aR = -0.4 - 0.5 * e; zL = 0.25; zR = -0.25;
+        if (!A.hit && p >= 0.85) { A.hit = true; A.impact?.(); }
       }
       if (p >= 1) {
         this.action = null;
         this.axe.visible = false;
+        this.handLog.visible = false;
         A.done?.();
       }
     }
 
     this.guitar.visible = this.anim === 'guitar' && !A;
+    // 장작 더미: 패거나 앉아 있으면 바닥에 내려 두고, 걸으면 다시 안는다 (천천히 품으로)
+    const busyHere = (A && (A.name === 'chop' || A.name === 'place' || A.name === 'gather')) || this.anim === 'sit' || this.anim === 'guitar';
+    if (busyHere) this.#stash(true);
+    else if (this.stashed && (this.anim === 'walk' || this.anim === 'run')) this.#stash(false);
+    if (!this.stashed) this.carry.position.lerp(this.carryHome, Math.min(1, dt * 10));
+    this.carryBounce = Math.max(0, this.carryBounce - dt * 5);
+    const cb = this.carryBounce;
+    this.carry.scale.set(1 + cb * 0.12, 1 - cb * 0.12, 1 + cb * 0.12);
     const k = Math.min(1, dt * 14);
     legL.rotation.x = lerp(legL.rotation.x, lL, k);
     legR.rotation.x = lerp(legR.rotation.x, lR, k);
@@ -403,6 +507,7 @@ export class Character {
   }
 
   dispose() {
+    this.carry.removeFromParent();
     this.root.removeFromParent();
     this.labelEl.remove();
   }
