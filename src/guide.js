@@ -8,7 +8,7 @@ const PILLAR_VS = `varying float vY; void main(){ vY = uv.y; gl_Position = proje
 const PILLAR_FS = `uniform vec3 uColor; uniform float uTime; uniform float uOn; varying float vY;
 void main(){
   float a = pow(1.0 - vY, 1.6) * (0.35 + 0.65 * uOn) * (0.8 + 0.2 * sin(uTime * 3.0 - vY * 12.0));
-  gl_FragColor = vec4(uColor * (1.0 + uOn), a * 0.55);
+  gl_FragColor = vec4(uColor * (1.0 + 0.4 * uOn), a * 0.28); // 은은하게 (예전 0.55)
 }`;
 
 function makeBeacon(scene, { x, z, color, icon, title, sub }) {
@@ -67,7 +67,7 @@ export class Guide {
       const on = target?.kind === k ? 1 : 0;
       b.mat.uniforms.uTime.value = this.time;
       b.mat.uniforms.uOn.value += (on - b.mat.uniforms.uOn.value) * Math.min(1, dt * 4);
-      b.ring.material.opacity = 0.25 + 0.35 * on + Math.sin(this.time * 3) * 0.1 * on;
+      b.ring.material.opacity = 0.15 + 0.22 * on + Math.sin(this.time * 3) * 0.06 * on;
       b.ring.scale.setScalar(1 + Math.sin(this.time * 2.5) * 0.05 * on);
       b.el.classList.toggle('on', !!on);
       if (me) {

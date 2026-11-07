@@ -109,9 +109,11 @@ export class GuestbookStand {
     scene.add(pool);
     this.pool = pool;
     // 실제 조명 (독서대와 주변을 비춘다)
-    this.light = new THREE.PointLight('#ffbf73', 2.2, 6, 1.6);
-    this.light.position.set(pos.x + 0.3, 1.0, pos.z + 1.4);
-    scene.add(this.light);
+    // 실제 조명은 LightPool 이 가까이 있을 때만 켠다
+    this.lightSpot = {
+      pos: new THREE.Vector3(pos.x + 0.3, 1.0, pos.z + 1.4), color: new THREE.Color('#ffbf73'), distance: 6,
+      intensity: () => 2.2 + Math.sin(this.t * 2.3) * 0.25 + this.pulse * 4,
+    };
 
     // 멀리서도 보이는 떠 있는 표시
     const wrap = document.createElement('div');
@@ -137,7 +139,6 @@ export class GuestbookStand {
     this.pulse = Math.max(0, this.pulse - dt * 0.6);
     const near = mePos ? Math.hypot(mePos.x - this.pos.x, mePos.z - this.pos.z) < 1.9 : false;
     if (this._near !== near) { this._near = near; this.tagEl.classList.toggle('near', near); }
-    this.light.intensity = 2.2 + Math.sin(this.t * 2.3) * 0.25 + this.pulse * 4;
     this.pool.material.opacity = 0.3 + this.pulse * 0.3;
     this.halo.material.opacity = 0.42 + Math.sin(this.t * 2.3) * 0.06 + this.pulse * 0.5;
     this.halo.scale.setScalar(1.3 + this.pulse * 1.2);

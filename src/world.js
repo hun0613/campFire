@@ -115,13 +115,14 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   const decks = [];
   const updaters = [];
   const bulbs = []; // {x,y,z,color}
-  const lampLights = [];
+  // 가로등·루미 공방 조명 자리. 실제 조명은 main.js 의 LightPool 이 가까운 곳에만 몇 개 켠다 (조명 수가 많으면 폰이 뜨거워짐)
+  const lightSpots = [];
   const addCol = (x, z, r) => colliders.push({ x, z, r });
   const rand = mulberry32(42);
 
   // ---------- 하늘 (sky.js). 예전 별 배치가 쓰던 난수를 그대로 소비해서 나머지 배치(나무 등)가 바뀌지 않게 한다
   for (let i = 0; i < 2200; i++) { rand(); rand(); rand(); if (!(rand() < 0.08)) rand(); }
-  const sky = createSky(scene);
+  const sky = createSky(scene, { lowSpec });
 
   // ---------- 조명
   const hemi = new THREE.HemisphereLight('#6f7fd8', '#1a2418', 0.45);
@@ -196,12 +197,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     g.add(pole, cap, cage, bulb, halo);
     scene.add(g);
     addCol(x, z, 0.25);
-    if (withLight) {
-      const L = new THREE.PointLight(color, intensity, 15, 1.6);
-      L.position.set(x, 2.8, z);
-      scene.add(L);
-      lampLights.push(L);
-    }
+    if (withLight) lightSpots.push({ pos: new THREE.Vector3(x, 2.8, z), color: new THREE.Color(color), intensity, distance: 15 });
     // 바닥에 은은한 빛 웅덩이
     const pool = new THREE.Mesh(new THREE.PlaneGeometry(7, 7), new THREE.MeshBasicMaterial({ map: radialTexture(), color: '#ffae5c', transparent: true, opacity: 0.12, depthWrite: false, blending: THREE.AdditiveBlending }));
     pool.rotation.x = -Math.PI / 2;
@@ -470,10 +466,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     orb.position.set(1.25, 1.35, 1.5);
     g.add(orb);
     updaters.push((t) => { orb.position.y = 1.35 + Math.sin(t * 2) * 0.05; });
-    const L = new THREE.PointLight('#d7b0ff', 6, 11, 1.6);
-    L.position.set(NPC.x + 3.2, 1.8, NPC.z);
-    scene.add(L);
-    lampLights.push(L);
+    lightSpots.push({ pos: new THREE.Vector3(NPC.x + 3.2, 1.8, NPC.z), color: new THREE.Color('#d7b0ff'), intensity: 6, distance: 11 });
     addCol(NPC.x + 1.25, NPC.z - 1.1, 0.75);
     addCol(NPC.x + 1.25, NPC.z, 0.75);
     addCol(NPC.x + 1.25, NPC.z + 1.1, 0.75);
@@ -646,7 +639,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
 
   return {
     colliders,
-    lampLights,
+    lightSpots,
     stumpMeshes,
     heightAt,
     moonLight,

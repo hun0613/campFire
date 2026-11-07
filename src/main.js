@@ -21,6 +21,7 @@ import { Music } from './music.js';
 import { Monitor } from './monitor.js';
 import { Woodcut } from './woodcut.js';
 import { GuestbookStand } from './guestbook.js';
+import { LightPool } from './lightpool.js';
 import { CFG, PITS, STUMPS, NPC, BOUNDS, RANGE, LOOKS, GUESTBOOK } from '../shared/config.js';
 
 const $ = (id) => document.getElementById(id);
@@ -34,14 +35,20 @@ await Promise.race([document.fonts.load('64px Jua'), new Promise((r) => setTimeo
 
 // ---------------------------------------------------------------- 렌더러
 if (isTouch) document.body.classList.add('touch');
-const MAX_PR = isTouch ? 1.5 : 2;
+// 화면 배율: 레티나 같은 고해상도 화면에서 2~3배로 그리면 GPU가 몇 배로 일해서 기기가 뜨거워진다.
+// 배율은 최대 1.5배, 그리고 전체 픽셀 수가 예산(PC 320만 · 폰 220만)을 넘지 않게 맞춘다
+const MAX_PR = 1.5;
+const PIXEL_BUDGET = isTouch ? 2.2e6 : 3.2e6;
+const renderPR = (w = innerWidth, h = innerHeight) => Math.max(0.75, Math.min(devicePixelRatio, MAX_PR, Math.sqrt(PIXEL_BUDGET / (w * h))));
 // alpha: TV 화면 자리만 투명하게 뚫어서, 캔버스 '뒤'에 있는 유튜브 영상이 보이게 한다 (앞의 물체가 영상을 제대로 가림)
-const renderer = new THREE.WebGLRenderer({ antialias: !isTouch, powerPreference: 'high-performance', alpha: true });
+// antialias 는 끈다: 장면은 composer 의 별도 버퍼에 그려서 캔버스 안티에일리어싱은 효과 없이 메모리·대역폭만 쓴다
+// powerPreference 는 기본값: 'high-performance' 는 외장 GPU를 강제로 깨워 노트북을 뜨겁게 한다
+const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
 renderer.setClearColor(0x000000, 1);
-renderer.setPixelRatio(Math.min(devicePixelRatio, MAX_PR));
+renderer.setPixelRatio(renderPR());
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap; // (PCFSoft 는 three r187 에서 없어져 PCF 로 동작)
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 $('app').appendChild(renderer.domElement);
@@ -59,6 +66,8 @@ const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.38, 0.85);
 composer.addPass(bloom);
+// 빛 번짐(블룸)은 원래 흐릿한 효과라 절반 해상도로 계산해도 티가 거의 안 난다 — GPU 부담은 크게 준다
+{ const set = bloom.setSize.bind(bloom); bloom.setSize = (w, h) => set(Math.round(w / 2), Math.round(h / 2)); }
 // 블룸을 더할 때 투명도(알파)는 건드리지 않게 → TV 화면 구멍이 블룸에 메워지지 않는다
 Object.assign(bloom.blendMaterial, {
   blending: THREE.CustomBlending,
@@ -71,7 +80,8 @@ const shared = { uTime: { value: 0 }, uScale: { value: 600 } };
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h);
-  composer.setPixelRatio(Math.min(devicePixelRatio, MAX_PR));
+  renderer.setPixelRatio(renderPR(w, h));
+  composer.setPixelRatio(renderPR(w, h));
   composer.setSize(w, h);
   labelRenderer.setSize(w, h);
   music?.setSize(w, h);
@@ -97,6 +107,8 @@ const monitors = new Map(PITS.map((d) => [d.id, new Monitor(d, scene)]));
 const woodcut = new Woodcut(scene, STUMPS);
 for (const s of world.stumpMeshes) s.log.visible = false; // 그루터기 위 통나무는 woodcut 이 그린다
 const gbStand = new GuestbookStand(scene, GUESTBOOK);
+const lightSpots = [...world.lightSpots, gbStand.lightSpot];
+const lampPool = new LightPool(scene, isTouch ? 2 : 3);
 const colliders = [
   ...world.colliders,
   { x: GUESTBOOK.x, z: GUESTBOOK.z, r: 1.35 },
@@ -105,8 +117,9 @@ const colliders = [
   ...[...monitors.values()].map((m) => ({ x: m.lpPos.x, z: m.lpPos.z, r: 0.38 })),
 ];
 
+// 모닥불 조명은 가까운 불 몇 곳에만 (폰은 더 적게) — 조명 수가 곧 발열이다
 const firePool = [];
-for (let i = 0; i < 5; i++) {
+for (let i = 0; i < (isTouch ? 3 : 4); i++) {
   const L = new THREE.PointLight('#ff8a3a', 0, 16, 1.5);
   scene.add(L);
   firePool.push(L);
@@ -1364,8 +1377,26 @@ function updateStumps(dt) {
   woodcut.update(dt);
 }
 
+// ---- 프레임 제한 (발열 줄이기)
+// - 120Hz/144Hz 화면에서도 초당 60번까지만 그린다
+// - 조작이 없을 때(앉아서 불멍, 가만히 서 있기) 초당 30번으로 낮추고, 움직이거나 화면을 만지면 바로 60번으로 (PC · 폰 모두)
+// - PC에서 다른 창을 보고 있을 때도 30번
+let lastInputAt = 0;
+const markInput = () => { lastInputAt = performance.now(); };
+for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchmove']) addEventListener(ev, markInput, { passive: true, capture: true });
+let lastDraw = 0;
+function targetFps(now) {
+  if (!document.hasFocus() && !isTouch) return 30;
+  const busy = now - lastInputAt < 1500 || keys.size > 0 || touch?.active || cam.dragging || me?.char.busy?.();
+  return busy ? 60 : 30;
+}
+
 const clock = new THREE.Clock();
-function frame() {
+function frame(now = performance.now()) {
+  requestAnimationFrame(frame);
+  const interval = 1000 / targetFps(now);
+  if (now - lastDraw < interval - 3) return;
+  lastDraw = now;
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = clock.elapsedTime;
   shared.uTime.value = t;
@@ -1381,6 +1412,7 @@ function frame() {
   updateMusicFx(dt);
   updateStumps(dt);
   gbStand.update(dt, me);
+  lampPool.update(dt, focus, lightSpots);
   effects.update(dt);
   glowFx.update(dt);
   softFx.update(dt);
@@ -1393,7 +1425,6 @@ function frame() {
 
   composer.render();
   labelRenderer.render(scene, camera);
-  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 

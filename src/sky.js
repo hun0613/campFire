@@ -14,7 +14,7 @@ const NOISE = `
   float n3(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
     return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
                mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z); }
-  float fbm(vec3 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * n3(p); p *= 2.03; a *= 0.5; } return s; }
+  float fbm(vec3 p){ float a = 0.5, s = 0.0; for (int i = 0; i < OCT; i++) { s += a * n3(p); p *= 2.03; a *= 0.5; } return s; }
 `;
 
 /** 하늘 방향(고도/방위)으로 단위 벡터. 방위: 0=북(-z), +=동(+x) */
@@ -22,7 +22,7 @@ function dirAt(alt, az) {
   return new THREE.Vector3(Math.sin(az) * Math.cos(alt), Math.sin(alt), -Math.cos(az) * Math.cos(alt));
 }
 
-export function createSky(scene) {
+export function createSky(scene, { lowSpec = false } = {}) {
   const rand = mulberry32(2024);
   const group = new THREE.Group();
   scene.add(group);
@@ -43,6 +43,7 @@ export function createSky(scene) {
         uGaze,
       },
       vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      defines: { OCT: lowSpec ? 3 : 5 },
       fragmentShader: `uniform vec3 top, mid, bottom, moonDir, mwN; uniform float uGaze; varying vec3 vP;
         ${NOISE}
         void main(){
@@ -55,12 +56,14 @@ export function createSky(scene) {
           // 은하수: 큰 원을 따라 흐르는 뿌연 빛 + 가운데 어두운 먼지 띠
           float k = dot(d, mwN);
           float band = exp(-k * k / 0.022);
+          float lift = smoothstep(0.02, 0.35, h) * (1.0 - pow(m, 6.0));
+          // 은하수가 없는 곳은 무늬 계산을 건너뛴다 (하늘 대부분 — GPU 부담을 크게 줄임)
+          if (band * lift < 0.004) { gl_FragColor = vec4(c, 1.0); return; }
           float cloud = fbm(d * 5.0 + 3.1);
           float fine = fbm(d * 16.0 - 1.7);
           float glow = band * (0.35 + 0.9 * cloud) * (0.55 + 0.6 * fine);
           float dust = exp(-pow(k - 0.025, 2.0) / 0.0016) * smoothstep(0.35, 0.75, fbm(d * 9.0 + 7.0));
           glow *= 1.0 - 0.75 * dust;
-          float lift = smoothstep(0.02, 0.35, h) * (1.0 - pow(m, 6.0));
           vec3 mw = mix(vec3(0.42, 0.44, 0.78), vec3(0.95, 0.82, 0.78), cloud * fine);
           c += mw * glow * lift * (0.16 + 0.12 * uGaze);
           gl_FragColor = vec4(c, 1.0);
