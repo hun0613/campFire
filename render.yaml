@@ -15,3 +15,7 @@ services:
         generateValue: true
       - key: YT_API_KEY    # 곡 검색용 YouTube Data API 키 (Render 대시보드에서 직접 입력)
         sync: false
+      - key: NOTION_TOKEN  # 방명록 저장용 노션 연결 키 (Render 대시보드에서 직접 입력)
+        sync: false
+      - key: NOTION_GUESTBOOK_DB  # 방명록 노션 데이터베이스 ID
+        value: 5c18c9a4ca29407fa760afe913914120

@@ -42,6 +42,10 @@ macOS에서 "node 수신 연결 허용" 창이 뜨면 **허용**을 눌러 주�
 - 로컬에서는 `.env.example`을 복사해 `.env`로 저장하고 `YT_API_KEY`를 채우면 돼요. `.env`는 GitHub에 올라가지 않아요.
 - 모닥불 LP의 곡 검색은 YouTube Data API 키가 필요해요. Render 환경변수 `YT_API_KEY`에 넣어요. 무료 한도(하루 10,000유닛) 안에서만 검색하고, 다 쓰면 검색만 멈춰요(요금 없음).
 - 공개 주소는 Render가 알려 주는 `RENDER_EXTERNAL_URL`을 자동으로 써요. 다른 곳에 올릴 때는 환경변수 `PUBLIC_URL`로 지정해요.
+- **방명록(노션)**: 광장 방명록은 노션 데이터베이스에 저장돼요. 노션 연결 키를 Render 환경변수 `NOTION_TOKEN`에 넣어요(로컬은 `.env`). 키가 없으면 서버 메모리에만 저장되고 재시작하면 사라져요.
+  1. https://www.notion.so/profile/integrations 에서 새 내부 통합(Internal)을 만들고 **Internal Integration Secret**을 복사해 `NOTION_TOKEN`에 넣어요.
+  2. 노션의 「불멍 캠핑장 방명록」 페이지 오른쪽 위 `•••` → **연결(Connections)** → 방금 만든 통합을 추가해요.
+  3. 노션에서 줄을 지우면 1분쯤 뒤 게임에서도 사라져요.
 
 ## 게임 흐름
 1. 동쪽 **장작 패는 곳** 통나무 앞에서 `E` (꾹) → 도끼질 3번에 장작 1개

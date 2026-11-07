@@ -20,7 +20,8 @@ import { initPWA } from './pwa.js';
 import { Music } from './music.js';
 import { Monitor } from './monitor.js';
 import { Woodcut } from './woodcut.js';
-import { CFG, PITS, STUMPS, NPC, BOUNDS, RANGE, LOOKS } from '../shared/config.js';
+import { GuestbookStand } from './guestbook.js';
+import { CFG, PITS, STUMPS, NPC, BOUNDS, RANGE, LOOKS, GUESTBOOK } from '../shared/config.js';
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -95,8 +96,10 @@ const guide = new Guide(scene);
 const monitors = new Map(PITS.map((d) => [d.id, new Monitor(d, scene)]));
 const woodcut = new Woodcut(scene, STUMPS);
 for (const s of world.stumpMeshes) s.log.visible = false; // 그루터기 위 통나무는 woodcut 이 그린다
+const gbStand = new GuestbookStand(scene, GUESTBOOK);
 const colliders = [
   ...world.colliders,
+  { x: GUESTBOOK.x, z: GUESTBOOK.z, r: 1.35 },
   ...PITS.map((p) => ({ x: p.x, z: p.z, r: 0.95 })),
   ...[...monitors.values()].map((m) => ({ x: m.pos.x, z: m.pos.z, r: 0.55 })),
   ...[...monitors.values()].map((m) => ({ x: m.lpPos.x, z: m.lpPos.z, r: 0.38 })),
@@ -558,6 +561,99 @@ net.on('musicStop', (m) => {
   if (text) UI.toast(text);
 });
 
+// ---------------------------------------------------------------- 방명록
+const gb$ = { items: [], page: 0, busy: false, mineIds: new Set(), newId: null };
+const GB_PER_PAGE = 5;
+const gbOpen = () => !$('gbModal').classList.contains('hidden');
+function fmtDay(at) {
+  const d = new Date(at);
+  return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+function openGuestbook() {
+  $('gbErr').classList.add('hidden');
+  $('gbModal').classList.remove('hidden');
+  if (!gb$.items.length) $('gbBook').innerHTML = '<div class="gb-empty">방명록을 펼치는 중…</div>';
+  gb$.page = 0;
+  renderGuestbook();
+  net.send({ t: 'gbOpen' });
+  if (!isTouch) setTimeout(() => $('gbText').focus(), 50);
+}
+function closeGuestbook() {
+  $('gbModal').classList.add('hidden');
+  $('gbText').blur();
+}
+function renderGuestbook() {
+  const n = gb$.items.length;
+  const pages = Math.max(1, Math.ceil(n / GB_PER_PAGE));
+  gb$.page = Math.min(gb$.page, pages - 1);
+  $('gbSub').textContent = n ? `지금까지 ${n}개의 이야기가 남겨졌어요` : '캠핑장에서 보낸 시간을 한 줄 남겨 주세요';
+  const list = gb$.items.slice(gb$.page * GB_PER_PAGE, (gb$.page + 1) * GB_PER_PAGE);
+  if (n) {
+    $('gbBook').innerHTML = list.map((e) => `
+      <div class="gb-entry${gb$.mineIds.has(e.id) ? ' mine' : ''}${gb$.newId === e.id ? ' new' : ''}">
+        <div class="gb-text">${escHtml(e.text)}</div>
+        <div class="gb-meta"><b>${escHtml(e.name)}</b> · ${fmtDay(e.at)}</div>
+      </div>`).join('');
+  } else if (gb$.loaded) {
+    $('gbBook').innerHTML = '<div class="gb-empty">아직 아무도 남기지 않았어요.<br>첫 번째 방명록의 주인공이 되어 주세요 ✨</div>';
+  }
+  $('gbBook').scrollTop = 0;
+  $('gbPage').textContent = `${gb$.page + 1} / ${pages}쪽`;
+  $('gbPrev').disabled = gb$.page <= 0;
+  $('gbNext').disabled = gb$.page >= pages - 1;
+}
+function gbCount() { $('gbCount').textContent = `${$('gbText').value.length} / 300`; }
+$('gbText').addEventListener('input', gbCount);
+$('gbText').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeGuestbook(); });
+$('gbPrev').addEventListener('click', () => { gb$.page--; renderGuestbook(); });
+$('gbNext').addEventListener('click', () => { gb$.page++; renderGuestbook(); });
+$('gbClose').addEventListener('click', closeGuestbook);
+$('gbModal').addEventListener('click', (e) => { if (e.target === $('gbModal')) closeGuestbook(); });
+$('gbForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = $('gbText').value.trim();
+  if (!text || gb$.busy) return;
+  gb$.busy = true;
+  $('gbSend').disabled = true;
+  $('gbSend').textContent = '남기는 중…';
+  $('gbErr').classList.add('hidden');
+  net.send({ t: 'gbWrite', text });
+});
+function gbDone() {
+  gb$.busy = false;
+  $('gbSend').disabled = false;
+  $('gbSend').textContent = '✍️ 남기기';
+}
+net.on('gbList', (m) => {
+  gb$.items = m.items || [];
+  gb$.loaded = true;
+  if (gbOpen()) renderGuestbook();
+});
+net.on('gbWrote', (m) => {
+  gbDone();
+  $('gbText').value = '';
+  gbCount();
+  gb$.mineIds.add(m.entry.id);
+  gb$.newId = m.entry.id;
+  gb$.items = [m.entry, ...gb$.items.filter((e) => e.id !== m.entry.id)];
+  gb$.page = 0;
+  renderGuestbook();
+  gbStand.ping();
+  sound.pop?.();
+  UI.toast('📖 방명록을 남겼어요! 다녀가 줘서 고마워요');
+  net.send({ t: 'chat', text: '📖 방명록에 한마디 남겼어요' });
+});
+net.on('gbFail', (m) => {
+  gbDone();
+  $('gbErr').textContent = m.text;
+  $('gbErr').classList.remove('hidden');
+});
+net.on('gbNew', (m) => {
+  gb$.items = [m.entry, ...gb$.items.filter((e) => e.id !== m.entry.id)];
+  gbStand.ping();
+  if (gbOpen() && gb$.page === 0) renderGuestbook();
+});
+
 // LP 플레이어 누르기 (화면을 짧게 탭/클릭) — 모바일 왼쪽 조이스틱 영역에서도 동작
 const lpHits = [...monitors.values()].map((m) => m.hit);
 const raycaster = new THREE.Raycaster();
@@ -644,6 +740,8 @@ function findInteraction() {
   });
   const dn = Math.hypot(me.x - NPC.x, me.z - NPC.z);
   if (dn < RANGE.npc && dn < bestD) { best = { type: 'npc' }; bestD = dn; }
+  const dg = Math.hypot(me.x - GUESTBOOK.x, me.z - GUESTBOOK.z);
+  if (dg < RANGE.guestbook && dg < bestD) { best = { type: 'guestbook' }; bestD = dg; }
   for (const pit of pitList) {
     const d = Math.hypot(me.x - pit.pos.x, me.z - pit.pos.z);
     if (d < RANGE.pit && d < bestD) { best = { type: 'pit', pit }; bestD = d; }
@@ -659,6 +757,7 @@ function promptFor(it) {
     return woodcut.stateOf(it.idx) === 'empty' ? ['<kbd>E</kbd> 통나무 올리기 <small>(꾹 누르면 계속 패요)</small>'] : ['<kbd>E</kbd> 장작 패기 <small>(꾹 누르기)</small>'];
   }
   if (it.type === 'npc') return ['<kbd>E</kbd> 루미와 이야기하기'];
+  if (it.type === 'guestbook') return ['<kbd>E</kbd> 방명록 펼쳐 보기 📖'];
   if (it.type === 'pit') {
     const p = it.pit;
     if (p.state === 'empty') {
@@ -683,6 +782,9 @@ function interact(it) {
   else if (it.type === 'npc') {
     net.send({ t: 'npc' });
     // NPC가 나를 바라보도록
+  } else if (it.type === 'guestbook') {
+    faceTo(GUESTBOOK.x, GUESTBOOK.z);
+    openGuestbook();
   } else if (it.type === 'pit') {
     const p = it.pit;
     faceTo(p.pos.x, p.pos.z);
@@ -768,6 +870,7 @@ function actionFor(it) {
   if (!it) return null;
   if (it.type === 'chop') return woodcut.stateOf(it.idx) === 'empty' ? { icon: '🪵', label: '통나무 올리기' } : { icon: '🪓', label: '꾹 패기' };
   if (it.type === 'npc') return { icon: '💬', label: '대화' };
+  if (it.type === 'guestbook') return { icon: '📖', label: '방명록' };
   if (it.type === 'seated') return { icon: '🚶', label: '일어나기' };
   if (it.type === 'pit') {
     const p = it.pit;
@@ -871,6 +974,10 @@ addEventListener('keydown', (e) => {
   if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
   if (UI.dialogOpen()) {
     if (['KeyE', 'Space', 'Enter', 'Escape'].includes(e.code)) { e.preventDefault(); UI.dialogNext(); }
+    return;
+  }
+  if (gbOpen()) {
+    if (e.code === 'Escape') closeGuestbook();
     return;
   }
   if (!$('help').classList.contains('hidden')) {
@@ -1215,6 +1322,7 @@ function frame() {
   updateFires(t, dt);
   updateMusicFx(dt);
   updateStumps(dt);
+  gbStand.update(dt, me);
   effects.update(dt);
   glowFx.update(dt);
   softFx.update(dt);

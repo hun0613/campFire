@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { TENTS, STUMPS, NPC, WOODYARD, BOUNDS } from '../shared/config.js';
+import { TENTS, STUMPS, NPC, WOODYARD, BOUNDS, GUESTBOOK } from '../shared/config.js';
 
 // 목적지 안내: 멀리서 보이는 빛기둥 + 표지, 미니맵
 
@@ -125,6 +125,7 @@ export class Guide {
     };
     place(WOODYARD.x, WOODYARD.z, '🪓', '장작', target?.kind === 'wood', '#ffa040');
     place(NPC.x + 1, NPC.z, '✨', '루미', target?.kind === 'npc', '#b38cff');
+    place(GUESTBOOK.x, GUESTBOOK.z, '📖', '방명록', false, '#ffc46b');
     if (target?.kind === 'pit') {
       g.strokeStyle = '#ffc46b'; g.lineWidth = 2;
       g.beginPath(); g.arc(X(target.x), Z(target.z), 7 * pulse, 0, Math.PI * 2); g.stroke();

@@ -8,6 +8,7 @@ import { WebSocketServer } from 'ws';
 import {
   CFG, PITS, STUMPS, NPC, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
 } from '../shared/config.js';
+import * as guestbook from './guestbook.js';
 import { search, searchesLeft, nextReset, videoInfo, known, addRecent, recentList, hasKey, quotaState, restoreQuota } from './youtube.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -491,6 +492,29 @@ function handle(ws, ctx, m) {
         clearMusic(pit, 'ended');
         broadcast({ t: 'pit', pit });
       }
+      break;
+    }
+    case 'gbOpen': { // 방명록 펼치기
+      guestbook.list().then((items) => send(ws, { t: 'gbList', items: items.slice(0, 300), saved: guestbook.notionOn() }));
+      break;
+    }
+    case 'gbWrite': {
+      const text = String(m.text || '').replace(/\r/g, '').replace(/[\u0000-\u0009\u000b-\u001f]/g, '').replace(/\n{3,}/g, '\n\n').trim().slice(0, guestbook.MAX_LEN);
+      if (!text) { send(ws, { t: 'gbFail', text: '방명록에 남길 말을 적어 주세요' }); return; }
+      if (now - (me.lastGb || 0) < 5000 || me.gbPending) { send(ws, { t: 'gbFail', text: '방금 남겼어요. 잠시 후에 다시 남길 수 있어요' }); return; }
+      me.lastGb = now;
+      me.gbPending = true;
+      guestbook.write(me.name, text)
+        .then((entry) => {
+          send(ws, { t: 'gbWrote', entry });
+          broadcast({ t: 'gbNew', entry, by: me.id }, ws);
+        })
+        .catch((e) => {
+          console.error('[guestbook] 노션 저장 실패:', e.message);
+          me.lastGb = 0;
+          send(ws, { t: 'gbFail', text: '방명록을 저장하지 못했어요. 잠시 후 다시 시도해 주세요' });
+        })
+        .finally(() => { me.gbPending = false; });
       break;
     }
     case 'chat': {

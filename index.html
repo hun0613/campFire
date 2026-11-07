@@ -109,6 +109,7 @@
           <li>타오르는 불 앞에서 <kbd>E</kbd>로 앉아 불멍! <kbd>1</kbd>~<kbd>9</kbd> 로 가루를 뿌려요</li>
           <li>앉은 채로 옆의 <b>💿 LP 플레이어</b>를 누르면(<kbd>M</kbd>) 곡을 검색해서 틀 수 있어요. 기타를 치며 옆 TV로 음악이 나오고, 같은 모닥불에 앉은 사람만 들려요</li>
           <li>장작은 10분 동안 타요. 다 타면 다시 장작을 패러 가요 🪓</li>
+          <li>광장의 <b>📖 방명록</b>에서 한마디를 남기고, 다른 캠퍼들의 방명록도 구경할 수 있어요</li>
           <li>화면을 위로 끌어 올리면 <b>밤하늘</b>을 올려다볼 수 있어요. 은하수와 별자리, 가끔 떨어지는 별똥별 🌠</li>
         </ol>
         <div id="lanHelp" class="lan hidden"></div>
@@ -135,6 +136,25 @@
       <div id="musicList" class="mm-list"></div>
       <div class="mm-rules">이 모닥불에 앉은 사람만 들을 수 있어요 · 곡이 끝나기 전엔 바꿀 수 없어요 · 일어나면 멈춰요</div>
       <button class="btn ghost" id="musicCancel">닫기</button>
+    </div>
+  </div>
+
+  <div id="gbModal" class="overlay hidden">
+    <div class="card help-card gb-card">
+      <div class="title small">📖 불멍 캠핑장 방명록</div>
+      <div class="gb-sub" id="gbSub">캠핑장에서 보낸 시간을 한 줄 남겨 주세요</div>
+      <form id="gbForm" class="gb-write" autocomplete="off">
+        <textarea id="gbText" rows="3" maxlength="300" placeholder="오늘 캠핑은 어땠나요? 다음에 올 캠퍼에게 한마디도 좋아요 🔥" spellcheck="false"></textarea>
+        <div class="gb-write-row"><span id="gbCount" class="gb-count">0 / 300</span><button id="gbSend" class="mm-go" type="submit">✍️ 남기기</button></div>
+      </form>
+      <div id="gbErr" class="mm-err hidden"></div>
+      <div id="gbBook" class="gb-book"></div>
+      <div class="gb-nav">
+        <button id="gbPrev" class="gb-flip" type="button">◀</button>
+        <span id="gbPage" class="gb-page"></span>
+        <button id="gbNext" class="gb-flip" type="button">▶</button>
+      </div>
+      <button class="btn ghost" id="gbClose">닫기</button>
     </div>
   </div>
 
