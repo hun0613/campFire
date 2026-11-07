@@ -608,3 +608,32 @@ body.stargaze .gb-tag { opacity: .12; }
 .gb-reply::before { content: '↳'; float: left; margin-right: 6px; color: #e08a3a; font-size: 14px; line-height: 20px; }
 .gb-reply-by { display: block; font-size: 12px; color: var(--orange-2); margin-bottom: 2px; }
 .gb-reply .gb-text { font-size: 14px; line-height: 21px; }
+
+/* ---------- 모바일: 모닥불에 앉아 있을 때 UI를 가장자리로 (가운데 아래 모닥불이 잘 보이게) */
+body.touch.seated #bottom { left: 0; right: 0; width: auto; transform: none; }
+body.touch.seated #joyBase { opacity: 0; transition: opacity .3s; }
+/* 남은 장작: 화면 위 가운데 작은 알약 */
+body.touch.seated #fireTimer {
+  position: fixed; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  font-size: 13px; padding: 5px 13px; pointer-events: none;
+}
+/* TV 눌러 듣기 안내: 남은 장작 바로 아래 */
+body.touch.seated #musicHint { position: fixed; top: calc(max(10px, env(safe-area-inset-top)) + 40px); left: 50%; transform: translateX(-50%); max-width: 60vw; }
+/* 마법 가루: 조이스틱이 있던 왼쪽 아래 */
+body.touch.seated #powders {
+  position: fixed; left: calc(16px + env(safe-area-inset-left)); bottom: calc(18px + env(safe-area-inset-bottom));
+  justify-content: flex-start; max-width: min(46vw, 280px); min-width: 0;
+}
+/* 곡 고르기 · 연주 중: 오른쪽 아래, 일어나기 버튼 위 */
+body.touch.seated #musicBtn {
+  position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(124px + env(safe-area-inset-bottom));
+  max-width: 40vw;
+}
+/* 세로 화면은 아래 공간이 넉넉해서 가루를 조금 더 위로 */
+@media (orientation: portrait) {
+  /* 세로 화면은 위쪽이 좁아서 남은 장작을 상태창 바로 아래 왼쪽에 둔다 */
+  body.touch.seated #fireTimer { left: max(10px, env(safe-area-inset-left)); transform: none; top: calc(max(10px, env(safe-area-inset-top)) + 82px); }
+  body.touch.seated #musicHint { top: calc(max(10px, env(safe-area-inset-top)) + 122px); }
+  body.touch.seated #powders { bottom: calc(26px + env(safe-area-inset-bottom)); max-width: 52vw; }
+  body.touch.seated #musicBtn { bottom: calc(130px + env(safe-area-inset-bottom)); }
+}

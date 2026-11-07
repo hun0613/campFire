@@ -117,6 +117,8 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   const bulbs = []; // {x,y,z,color}
   // 가로등·루미 공방 조명 자리. 실제 조명은 main.js 의 LightPool 이 가까운 곳에만 몇 개 켠다 (조명 수가 많으면 폰이 뜨거워짐)
   const lightSpots = [];
+  // 카메라와 보는 곳 사이에 서면 반투명해지는 기둥들 (main.js 에서 처리)
+  const occluders = [];
   const addCol = (x, z, r) => colliders.push({ x, z, r });
   const rand = mulberry32(42);
 
@@ -185,6 +187,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 2.8, 8), toon('#3b3229'));
     pole.position.y = 1.4;
     pole.castShadow = true;
+    occluders.push({ mesh: pole, x, z, r: 0.09 });
     const cap = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.22, 8), toon('#3b3229'));
     cap.position.y = 3.2;
     const cage = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.14, 0.34, 8, 1, true), toon('#4a3e32', { side: THREE.DoubleSide, wireframe: false, transparent: true, opacity: 0.35 }));
@@ -215,6 +218,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     cpole.position.set(0, 2.7, 0);
     cpole.castShadow = true;
     scene.add(cpole);
+    occluders.push({ mesh: cpole, x: 0, z: 0, r: 0.13 });
     addCol(0, 0, 0.3);
     const wireMat = new THREE.LineBasicMaterial({ color: '#2a2320' });
     const colors = ['#ffcf7a', '#ff9b6a', '#ffe9a8', '#9fe3ff', '#ffa8d6', '#b8ff9a'];
@@ -227,6 +231,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
       pole.position.set(px, 1.8, pz);
       pole.castShadow = true;
       scene.add(pole);
+      occluders.push({ mesh: pole, x: px, z: pz, r: 0.09 });
       addCol(px, pz, 0.25);
       const end = new THREE.Vector3(px, 3.55, pz);
       const pts = [];
@@ -640,6 +645,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   return {
     colliders,
     lightSpots,
+    occluders,
     stumpMeshes,
     heightAt,
     moonLight,

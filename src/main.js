@@ -435,7 +435,13 @@ net.on('sat', (m) => {
   // 앉으면 모닥불과 옆 TV·LP가 함께 보이도록 카메라를 TV 반대편에서 비스듬히 바라보게
   const mon = monitors.get(m.pit);
   const pd = PITS.find((d) => d.id === m.pit);
-  if (mon && pd) cam.yaw = Math.atan2(-(mon.pos.x - pd.x), -(mon.pos.z - pd.z)) + 0.45;
+  if (mon && pd) {
+    // TV · LP가 함께 보이는 기본 방향 근처에서, 내 캐릭터가 카메라와 불 사이에 끼지 않는 각도를 고른다
+    const base = Math.atan2(-(mon.pos.x - pd.x), -(mon.pos.z - pd.z));
+    const seatA = Math.atan2(m.x - pd.x, m.z - pd.z);
+    const diff = (a) => Math.abs(Math.atan2(Math.sin(a - seatA), Math.cos(a - seatA)));
+    cam.yaw = [0.45, -0.45, 0.85, -0.85].map((o) => base + o).reduce((best, a) => (diff(a) > diff(best) ? a : best));
+  }
   me.char.setAnim('sit');
   refreshInventory();
   if (!stargazeHinted) {
@@ -1246,6 +1252,31 @@ function updateCamera(dt, t) {
 }
 const lookTmp = new THREE.Vector3();
 
+// ---- 카메라와 보는 곳(앉아 있으면 모닥불, 아니면 내 캐릭터) 사이를 가리는 기둥은 반투명하게
+const fadedMats = new Map();
+const fadeMat = (m) => {
+  if (!fadedMats.has(m)) { const f = m.clone(); f.transparent = true; f.opacity = 0.18; f.depthWrite = false; fadedMats.set(m, f); }
+  return fadedMats.get(m);
+};
+for (const o of world.occluders) o.orig = o.mesh.material;
+function updateOccluders() {
+  const pit = state.sitting && pits.get(state.sitting.pit);
+  const tx = pit ? pit.pos.x : focus.x, tz = pit ? pit.pos.z : focus.z;
+  const cx = camera.position.x, cz = camera.position.z;
+  const dx = tx - cx, dz = tz - cz, len2 = dx * dx + dz * dz || 1;
+  for (const o of world.occluders) {
+    // 기둥(세로 원기둥)과 카메라→목표 선분 사이의 거리 (위에서 내려다본 평면 기준)
+    const t = ((o.x - cx) * dx + (o.z - cz) * dz) / len2;
+    let hide = false;
+    if (t > 0.02 && t < 0.98) {
+      const px = cx + dx * t, pz = cz + dz * t;
+      hide = Math.hypot(o.x - px, o.z - pz) < (pit ? 1.1 : 0.55) + o.r;
+    }
+    const want = hide ? fadeMat(o.orig) : o.orig;
+    if (o.mesh.material !== want) o.mesh.material = want;
+  }
+}
+
 // 별 보기: 하늘을 올려다보면 화면 UI가 옅어지고, 별똥별이 떨어지면 알려 준다
 let gazing = false, lastWish = -1e9, stargazeHinted = false;
 function updateStargaze(t, dt) {
@@ -1326,6 +1357,9 @@ function directionText(t) {
 
 function updateHud() {
   if (!me) return;
+  // 모바일: 앉아 있을 때는 UI를 화면 가장자리로 옮겨 모닥불이 잘 보이게 (CSS body.seated)
+  const seated = !!state.sitting;
+  if (document.body.classList.contains('seated') !== seated) document.body.classList.toggle('seated', seated);
   const it = findInteraction();
   let [html, dim] = promptFor(it);
   if (isTouch && html) {
@@ -1406,6 +1440,7 @@ function frame(now = performance.now()) {
   updateRemotes(dt);
   updateNpc(dt);
   updateCamera(dt, t);
+  updateOccluders();
   world.update(t, dt, camera, focus, shared);
   updateStargaze(t, dt);
   updateFires(t, dt);
