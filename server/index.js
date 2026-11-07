@@ -227,6 +227,7 @@ function leaveSeat(p) {
 function handle(ws, ctx, m) {
   if (!m || typeof m.t !== 'string') return;
   const now = Date.now();
+  if (m.t === 'ping') { send(ws, { t: 'pong' }); return; } // 화면을 다시 켰을 때 연결 확인용
 
   if (m.t === 'join') {
     if (ctx.me) return;

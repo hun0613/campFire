@@ -65,3 +65,27 @@ async function install() {
   }
   box.classList.remove('hidden');
 }
+
+/**
+ * 안드로이드 앱(홈 화면 설치)에서 가로로 들면 위 상태 표시줄과 아래 내비게이션 바(뒤로·홈)를 숨긴다.
+ * - 전체 화면은 사용자가 화면을 눌러야만 켤 수 있어서, 가로 상태에서 첫 터치 때 켠다
+ * - 키보드를 쓸 때(채팅·방명록·곡 검색)는 입력창이 가려지지 않게 잠깐 풀었다가, 다시 누르면 돌아온다
+ * - 아이폰은 가로 모드에서 위 상태 표시줄이 저절로 숨고, 아래 홈 막대는 시스템이 숨길 수 없게 막아 둔다
+ */
+export function initFullscreen() {
+  const el = document.documentElement;
+  if (!isStandalone || !isAndroid || !el.requestFullscreen) return;
+  const landscape = () => innerWidth > innerHeight;
+  const typing = () => ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+  const enter = () => {
+    if (document.fullscreenElement || !landscape() || typing()) return;
+    el.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+  };
+  const leave = () => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); };
+  addEventListener('pointerup', (e) => {
+    if (['INPUT', 'TEXTAREA'].includes(e.target?.tagName)) return;
+    enter();
+  }, true);
+  addEventListener('focusin', (e) => { if (['INPUT', 'TEXTAREA'].includes(e.target?.tagName)) leave(); });
+  addEventListener('resize', () => { if (!landscape()) leave(); });
+}

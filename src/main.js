@@ -16,7 +16,7 @@ import { Sound } from './audio.js';
 import { Guide, pickTarget } from './guide.js';
 import { Preview } from './preview.js';
 import { isTouch, TouchControls } from './touch.js';
-import { initPWA } from './pwa.js';
+import { initPWA, initFullscreen } from './pwa.js';
 import { Music } from './music.js';
 import { Monitor } from './monitor.js';
 import { Woodcut } from './woodcut.js';
@@ -210,6 +210,7 @@ $('nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') doJoi
 
 $('helpBtn').onclick = () => $('help').classList.remove('hidden');
 initPWA();
+initFullscreen();
 $('mapToggle').onclick = () => document.body.classList.toggle('map-open');
 $('status').addEventListener('click', () => { if (isTouch) document.body.classList.toggle('quest-open'); });
 $('helpClose').onclick = () => $('help').classList.add('hidden');
@@ -236,10 +237,62 @@ fetch('/api/info').then((r) => r.json()).then(({ urls, public: isPublic }) => {
 net.on('open', () => {
   $('joinBtn').disabled = false;
   $('joinBtn').textContent = '캠핑장 입장 🏕️';
+  // 화면을 껐다 켜서 다시 접속한 경우: 입장 화면 없이 바로 들어간다
+  let auto = false;
+  try { auto = sessionStorage.getItem('autojoin') === '1'; sessionStorage.removeItem('autojoin'); } catch { /* 무시 */ }
+  if (auto) {
+    doJoin();
+    // 자동 입장은 터치 없이 일어나서 소리가 잠겨 있다. 처음 화면을 누를 때 소리를 켠다
+    addEventListener('pointerdown', () => sound.init(), { once: true, capture: true });
+  }
 });
-net.on('close', () => $('disconnected').classList.remove('hidden'));
+
+// ---- 연결이 끊기면 (폰 화면 끄기, 앱 전환, 서버 재시작) 저절로 다시 접속
+// 서버가 응답하면 새로 고쳐서 바로 입장한다. 장작·가루는 이 기기에 저장돼 있어서 그대로 돌아온다
+let reconnecting = false;
+function reconnect() {
+  if (reconnecting || state.replaced) return;
+  reconnecting = true;
+  const box = $('disconnected');
+  box.querySelector('.title').textContent = '다시 연결하는 중… 🌙';
+  box.querySelector('.btn').classList.add('hidden');
+  box.classList.remove('hidden');
+  const attempt = async (n) => {
+    if (document.hidden) { setTimeout(() => attempt(n), 1000); return; } // 화면이 꺼져 있으면 켜질 때까지 기다림
+    try {
+      const r = await fetch('/api/info', { cache: 'no-store' });
+      if (r.ok) {
+        try { if (me) sessionStorage.setItem('autojoin', '1'); } catch { /* 무시 */ }
+        location.reload();
+        return;
+      }
+    } catch { /* 아직 연결 안 됨 */ }
+    if (n >= 30) {
+      box.querySelector('.title').textContent = '연결이 끊겼어요 🌙';
+      box.querySelector('.btn').classList.remove('hidden');
+      reconnecting = false;
+      return;
+    }
+    setTimeout(() => attempt(n + 1), Math.min(4000, 700 + n * 300));
+  };
+  attempt(0);
+}
+net.on('close', reconnect);
+// 화면을 다시 켰을 때: 연결이 겉으로는 살아 있어도 실제로는 죽어 있을 수 있어서 확인한다
+let pongAt = 0;
+net.on('pong', () => { pongAt = performance.now(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || reconnecting || state.replaced) return;
+  if (net.ws.readyState > 1) { reconnect(); return; }
+  const sent = performance.now();
+  net.send({ t: 'ping' });
+  setTimeout(() => {
+    if (!document.hidden && pongAt < sent && !reconnecting) { try { net.ws.close(); } catch { /* 무시 */ } reconnect(); }
+  }, 3500);
+});
 net.on('quota', (m) => store.set('quota', { data: m.data, sig: m.sig })); // 서버 재시작 대비 검색 사용량 보관
 net.on('replaced', () => {
+  state.replaced = true;
   $('disconnected').querySelector('.title').textContent = '다른 창에서 접속했어요 🌙';
 });
 
@@ -562,7 +615,7 @@ net.on('musicStop', (m) => {
 });
 
 // ---------------------------------------------------------------- 방명록
-const gb$ = { items: [], page: 0, busy: false, mineIds: new Set(), newId: null };
+const gb$ = { items: [], page: 0, busy: false, mineIds: new Set(), newId: null, openedAt: 0 };
 const GB_PER_PAGE = 5;
 const gbOpen = () => !$('gbModal').classList.contains('hidden');
 function fmtDay(at) {
@@ -572,6 +625,7 @@ function fmtDay(at) {
 function openGuestbook() {
   $('gbErr').classList.add('hidden');
   $('gbModal').classList.remove('hidden');
+  gb$.openedAt = performance.now();
   if (!gb$.items.length) $('gbBook').innerHTML = '<div class="gb-empty">방명록을 펼치는 중…</div>';
   gb$.page = 0;
   renderGuestbook();
@@ -608,7 +662,10 @@ $('gbText').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeGu
 $('gbPrev').addEventListener('click', () => { gb$.page--; renderGuestbook(); });
 $('gbNext').addEventListener('click', () => { gb$.page++; renderGuestbook(); });
 $('gbClose').addEventListener('click', closeGuestbook);
-$('gbModal').addEventListener('click', (e) => { if (e.target === $('gbModal')) closeGuestbook(); });
+// 바깥(어두운 배경)을 누르면 닫기. 단, 모바일 버튼으로 연 직후 손을 떼며 생기는 클릭은 무시한다
+$('gbModal').addEventListener('click', (e) => {
+  if (e.target === $('gbModal') && performance.now() - gb$.openedAt > 600) closeGuestbook();
+});
 $('gbForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const text = $('gbText').value.trim();

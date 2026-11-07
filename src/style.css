@@ -587,3 +587,18 @@ body.stargaze #topright, body.stargaze #bottom { opacity: 0.35; }
 .gb-tag.near { opacity: 0; }
 body.stargaze .gb-tag { opacity: .12; }
 @keyframes gbBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.gb-card { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+/* 가로 모드 폰처럼 화면이 낮을 때: 쓰는 칸과 목록을 줄여 한 화면에 들어오게 */
+@media (max-height: 520px) {
+  .gb-card { padding-top: 12px; padding-bottom: 12px; }
+  .gb-card .title.small { font-size: 18px; }
+  .gb-sub { display: none; }
+  .gb-write { margin-top: 6px; }
+  .gb-write textarea { height: 58px; padding: 7px 10px; font-size: 15px; }
+  .gb-write-row { margin-top: 4px; }
+  .gb-write-row .mm-go { height: 34px; }
+  .gb-book { min-height: 70px; max-height: none; margin-top: 8px; }
+  .gb-entry { padding: 7px 12px 7px 16px; }
+  .gb-nav { margin-top: 4px; }
+  .gb-card .btn { margin-top: 6px; padding-top: 8px; padding-bottom: 8px; }
+}
