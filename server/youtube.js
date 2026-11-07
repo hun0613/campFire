@@ -4,8 +4,9 @@
 // - 같은 검색어는 하루 동안 저장해 둔 결과를 다시 쓴다 (한도 안 씀)
 // - API 키가 없거나 한도를 다 쓰면 검색만 막히고, 최근 곡/링크 붙여넣기는 계속 된다
 const KEY = process.env.YT_API_KEY || '';
-const DAILY_UNITS = Number(process.env.YT_DAILY_UNITS) || 9500; // 10,000 중 여유분을 남긴다
+const DAILY_UNITS = Number(process.env.YT_DAILY_UNITS) || 9600; // 10,000 중 여유분을 남긴다 (검색 95번 = 9,595)
 const SEARCH_COST = 100;
+const PER_SEARCH = SEARCH_COST + 1; // 검색 100 + 결과 곡 정보 확인 1 = 실제로 검색 1번에 쓰는 양
 const PER_PLAYER_DAILY = 15;
 const CACHE_TTL = 24 * 3600 * 1000;
 
@@ -43,7 +44,7 @@ export function restoreQuota(s) {
 export function searchesLeft() {
   rollDay();
   if (!KEY || quota.exhausted) return 0;
-  return Math.max(0, Math.floor((DAILY_UNITS - quota.used) / SEARCH_COST));
+  return Math.max(0, Math.floor((DAILY_UNITS - quota.used) / PER_SEARCH));
 }
 
 // ---------------------------------------------------------------- 캐시 / 곡 정보
