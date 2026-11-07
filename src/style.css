@@ -530,3 +530,14 @@ body.touch .music-btn.off { font-size: 12px; }
 body.touch .music-hint { font-size: 12.5px; }
 
 html { background-color: #0b0e24; }
+
+/* ---------- 별 보기: 하늘을 올려다보면 UI가 옅어진다 */
+#status, #topright, #mapPanel, #bottom, .beacon { transition: opacity 0.8s ease; }
+body.stargaze #status, body.stargaze #mapPanel, body.stargaze .beacon { opacity: 0.12; }
+body.stargaze #topright, body.stargaze #bottom { opacity: 0.35; }
+.const-label {
+  font-family: Jua, sans-serif; font-size: 13px; letter-spacing: 0.08em;
+  color: rgba(214, 226, 255, 0.85); text-shadow: 0 0 8px rgba(120, 150, 255, 0.8);
+  opacity: 0; transition: opacity 1.6s ease; pointer-events: none; white-space: nowrap;
+}
+.const-label.on { opacity: 1; }

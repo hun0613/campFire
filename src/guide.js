@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { TENTS, STUMPS, NPC, WOODYARD, BOUNDS } from '../shared/config.js';
 
-// 목적지 안내: 멀리서 보이는 빛기둥 + 표지, 발밑 화살표, 미니맵
+// 목적지 안내: 멀리서 보이는 빛기둥 + 표지, 미니맵
 
 const PILLAR_VS = `varying float vY; void main(){ vY = uv.y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 const PILLAR_FS = `uniform vec3 uColor; uniform float uTime; uniform float uOn; varying float vY;
@@ -49,24 +49,6 @@ export class Guide {
       npc: makeBeacon(scene, { x: NPC.x + 1, z: NPC.z, color: '#b38cff', icon: '✨', title: '루미의 가루 공방', sub: '서쪽 · 장작 5개 → 마법 가루' }),
     };
 
-    // 발밑 화살표 (셰브론 3개)
-    const shape = new THREE.Shape();
-    shape.moveTo(0, 0.35); shape.lineTo(0.42, -0.05); shape.lineTo(0.42, -0.3);
-    shape.lineTo(0, 0.1); shape.lineTo(-0.42, -0.3); shape.lineTo(-0.42, -0.05); shape.closePath();
-    const geo = new THREE.ShapeGeometry(shape);
-    geo.rotateX(-Math.PI / 2); // +y → -z 방향
-    this.arrow = new THREE.Group();
-    this.chevrons = [];
-    for (let i = 0; i < 3; i++) {
-      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffc46b').multiplyScalar(2), transparent: true, opacity: 0.8, depthWrite: false }));
-      m.position.z = -(1.3 + i * 0.55);
-      m.renderOrder = 3;
-      this.arrow.add(m);
-      this.chevrons.push(m);
-    }
-    this.arrow.visible = false;
-    scene.add(this.arrow);
-
     // 미니맵
     this.canvas = document.getElementById('minimap');
     this.ctx = this.canvas.getContext('2d');
@@ -93,18 +75,6 @@ export class Guide {
         if (b._d !== d) { b._d = d; b.distEl.textContent = `${d}m`; }
       }
     }
-
-    // 화살표
-    if (me && target) {
-      const dx = target.x - me.x, dz = target.z - me.z;
-      const d = Math.hypot(dx, dz);
-      this.arrow.visible = d > 4;
-      this.arrow.position.set(me.x, 0.06, me.z);
-      this.arrow.rotation.y = Math.atan2(-dx, -dz);
-      this.chevrons.forEach((c, i) => {
-        c.material.opacity = 0.25 + 0.65 * Math.max(0, Math.sin(this.time * 5 - i * 0.9));
-      });
-    } else this.arrow.visible = false;
 
     this.#drawMap(me, target, pits, remotes, camYaw);
   }

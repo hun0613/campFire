@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { toon, glow, radialTexture, textTexture, mulberry32 } from './toon.js';
+import { createSky } from './sky.js';
 import { TENTS, PITS, STUMPS, NPC, WOODYARD, BOUNDS } from '../shared/config.js';
 
 const W = { minX: -60, maxX: 60, minZ: -42, maxZ: 42 };
@@ -118,79 +119,9 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   const addCol = (x, z, r) => colliders.push({ x, z, r });
   const rand = mulberry32(42);
 
-  // ---------- 하늘
-  const skyGroup = new THREE.Group();
-  scene.add(skyGroup);
-  const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(500, 32, 16),
-    new THREE.ShaderMaterial({
-      side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: {
-        top: { value: new THREE.Color('#050822') },
-        mid: { value: new THREE.Color('#141a48') },
-        bottom: { value: new THREE.Color('#3b2f63') },
-        moonDir: { value: new THREE.Vector3(-0.45, 0.42, -0.78).normalize() },
-      },
-      vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: `uniform vec3 top, mid, bottom, moonDir; varying vec3 vP;
-        void main(){
-          float h = vP.y;
-          vec3 c = mix(bottom, mid, smoothstep(-0.02, 0.25, h));
-          c = mix(c, top, smoothstep(0.25, 0.9, h));
-          float m = max(dot(normalize(vP), moonDir), 0.0);
-          c += vec3(0.25, 0.27, 0.45) * pow(m, 18.0) * 0.6;
-          gl_FragColor = vec4(c, 1.0);
-        }`,
-    }),
-  );
-  sky.renderOrder = -10;
-  skyGroup.add(sky);
-
-  // 별
-  {
-    const n = 2200;
-    const pos = new Float32Array(n * 3);
-    const ph = new Float32Array(n);
-    const sz = new Float32Array(n);
-    for (let i = 0; i < n; i++) {
-      const u = rand() * Math.PI * 2;
-      const v = 0.04 + rand() * 0.96;
-      const y = v ** 0.8;
-      const r = Math.sqrt(1 - y * y);
-      pos.set([Math.cos(u) * r * 460, y * 460, Math.sin(u) * r * 460], i * 3);
-      ph[i] = rand() * 100;
-      sz[i] = rand() < 0.08 ? 3.2 : 1.2 + rand() * 1.4;
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    geo.setAttribute('aPhase', new THREE.BufferAttribute(ph, 1));
-    geo.setAttribute('aSize', new THREE.BufferAttribute(sz, 1));
-    const mat = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 }, uPR: { value: Math.min(devicePixelRatio, 2) } },
-      transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending,
-      vertexShader: `attribute float aPhase; attribute float aSize; uniform float uTime; uniform float uPR; varying float vA;
-        void main(){ vA = 0.55 + 0.45 * sin(uTime * (0.6 + fract(aPhase) * 1.5) + aPhase);
-          gl_PointSize = aSize * uPR; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-      fragmentShader: `varying float vA; void main(){ float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard;
-          gl_FragColor = vec4(vec3(1.0, 0.97, 0.9) * 1.6, smoothstep(0.5, 0.0, d) * vA); }`,
-    });
-    const stars = new THREE.Points(geo, mat);
-    stars.renderOrder = -9;
-    skyGroup.add(stars);
-    updaters.push((t) => { mat.uniforms.uTime.value = t; });
-  }
-
-  // 달
-  {
-    const dir = new THREE.Vector3(-0.45, 0.42, -0.78).normalize();
-    const moon = new THREE.Mesh(new THREE.SphereGeometry(13, 32, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff3d2').multiplyScalar(2.2), fog: false }));
-    moon.position.copy(dir).multiplyScalar(420);
-    skyGroup.add(moon);
-    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTexture(), color: '#b9c4ff', transparent: true, opacity: 0.35, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
-    halo.scale.setScalar(120);
-    halo.position.copy(moon.position);
-    skyGroup.add(halo);
-  }
+  // ---------- 하늘 (sky.js). 예전 별 배치가 쓰던 난수를 그대로 소비해서 나머지 배치(나무 등)가 바뀌지 않게 한다
+  for (let i = 0; i < 2200; i++) { rand(); rand(); rand(); if (!(rand() < 0.08)) rand(); }
+  const sky = createSky(scene);
 
   // ---------- 조명
   const hemi = new THREE.HemisphereLight('#6f7fd8', '#1a2418', 0.45);
@@ -719,8 +650,8 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     stumpMeshes,
     heightAt,
     moonLight,
+    sky,
     update(t, dt, camera, focus, shared) {
-      skyGroup.position.copy(camera.position);
       moonLight.position.copy(focus).add(moonOffset);
       moonLight.target.position.copy(focus);
       for (const u of updaters) u(t, dt, shared);

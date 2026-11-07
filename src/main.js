@@ -130,6 +130,8 @@ const remotes = new Map();
 const keys = new Set();
 const serverNow = () => Date.now() + state.clockOffset;
 
+const ORBIT_MIN = 0.14; // 이보다 더 내리면 카메라가 고개를 들어 하늘을 본다
+const PITCH_MIN = ORBIT_MIN - 1.0;
 const cam = { yaw: 0, pitch: 0.78, dist: 15, curDist: 34, target: new THREE.Vector3(0, 0, 0), dragging: false };
 
 // ---------------------------------------------------------------- 입장 화면
@@ -367,6 +369,10 @@ net.on('sat', (m) => {
   if (mon && pd) cam.yaw = Math.atan2(-(mon.pos.x - pd.x), -(mon.pos.z - pd.z)) + 0.45;
   me.char.setAnim('sit');
   refreshInventory();
+  if (!stargazeHinted) {
+    stargazeHinted = true;
+    setTimeout(() => UI.toast(isTouch ? '🌌 오른쪽 화면을 위로 쓸어 올리면 밤하늘을 올려다볼 수 있어요' : '🌌 화면을 위로 드래그하면 밤하늘을 올려다볼 수 있어요', 5000), 2500);
+  }
 });
 
 net.on('act', (m) => {
@@ -908,7 +914,7 @@ canvas.addEventListener('pointermove', (e) => {
   if (!cam.dragging) return;
   const k = isTouch ? 1.4 : 1;
   cam.yaw -= (e.clientX - lastPX) * 0.006 * k;
-  cam.pitch = Math.min(1.25, Math.max(0.22, cam.pitch + (e.clientY - lastPY) * 0.004 * k));
+  cam.pitch = Math.min(1.25, Math.max(PITCH_MIN, cam.pitch + (e.clientY - lastPY) * 0.004 * k));
   lastPX = e.clientX; lastPY = e.clientY;
 });
 const ptrEnd = (e) => {
@@ -1034,20 +1040,46 @@ function updateCamera(dt, t) {
   cam.target.lerp(camTarget, Math.min(1, dt * (me ? 6 : 1)));
   cam.curDist += (dist - cam.curDist) * Math.min(1, dt * 3);
   cam.curPitch = (cam.curPitch ?? pitch) + (pitch - (cam.curPitch ?? pitch)) * Math.min(1, dt * 3);
+  // 낮게 내려가면 카메라는 캐릭터 뒤 낮은 곳에 머물고, 고개를 들어 하늘을 올려다본다
   const cp = cam.curPitch;
+  const orbit = Math.max(cp, ORBIT_MIN);
+  const tilt = me ? Math.max(0, ORBIT_MIN - cp) : 0;
+  cam.gaze = THREE.MathUtils.smoothstep(tilt, 0.08, 0.75);
+  const d = cam.curDist * (1 - 0.35 * cam.gaze);
   camera.position.set(
-    cam.target.x + Math.sin(cam.yaw) * Math.cos(cp) * cam.curDist,
-    cam.target.y + Math.sin(cp) * cam.curDist,
-    cam.target.z + Math.cos(cam.yaw) * Math.cos(cp) * cam.curDist,
+    cam.target.x + Math.sin(cam.yaw) * Math.cos(orbit) * d,
+    cam.target.y + Math.sin(orbit) * d,
+    cam.target.z + Math.cos(cam.yaw) * Math.cos(orbit) * d,
   );
   if (state.shake > 0) {
     state.shake -= dt;
     camera.position.x += (Math.random() - 0.5) * state.shake * 0.4;
     camera.position.y += (Math.random() - 0.5) * state.shake * 0.4;
   }
-  camera.lookAt(cam.target);
+  if (tilt > 0) {
+    const el = -orbit + tilt * 1.2; // 위로 고개 드는 각도 (최대 약 65°)
+    lookTmp.set(-Math.sin(cam.yaw) * Math.cos(el), Math.sin(el), -Math.cos(cam.yaw) * Math.cos(el)).add(camera.position);
+    camera.lookAt(lookTmp);
+  } else camera.lookAt(cam.target);
+  // 올려다볼수록 화각을 넓혀 하늘을 크게 담는다
+  const fov = 42 + 18 * cam.gaze;
+  if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
   focus.copy(cam.target).setY(0);
 }
+const lookTmp = new THREE.Vector3();
+
+// 별 보기: 하늘을 올려다보면 화면 UI가 옅어지고, 별똥별이 떨어지면 알려 준다
+let gazing = false, lastWish = -1e9, stargazeHinted = false;
+function updateStargaze(t, dt) {
+  const shot = world.sky.update(t, dt, camera, cam.gaze || 0);
+  const on = (cam.gaze || 0) > 0.45;
+  if (on !== gazing) { gazing = on; document.body.classList.toggle('stargaze', on); }
+  if (shot && t - lastWish > 40) {
+    lastWish = t;
+    UI.toast(WISHES[Math.floor(Math.random() * WISHES.length)], 3500);
+  }
+}
+const WISHES = ['🌠 별똥별이에요! 얼른 소원을 빌어 봐요', '🌠 방금 별똥별 봤어요?', '🌠 별이 떨어졌어요… 소원 하나 ✨'];
 
 const FIRE_COLOR = new THREE.Color('#ff7a2a');
 function updateFires(t, dt) {
@@ -1111,7 +1143,7 @@ function directionText(t) {
   const dirs = ['북', '북동', '동', '남동', '남', '남서', '서', '북서'];
   const a = (Math.atan2(dx, -dz) + Math.PI * 2) % (Math.PI * 2);
   const name = dirs[Math.round(a / (Math.PI / 4)) % 8];
-  return `<div class="q-dir">🧭 ${t.label}까지 <b>${name}쪽 ${Math.round(d)}m</b> · 바닥 화살표를 따라가요</div>`;
+  return `<div class="q-dir">🧭 ${t.label}까지 <b>${name}쪽 ${Math.round(d)}m</b> · 미니맵을 참고해요</div>`;
 }
 
 function updateHud() {
@@ -1179,6 +1211,7 @@ function frame() {
   updateNpc(dt);
   updateCamera(dt, t);
   world.update(t, dt, camera, focus, shared);
+  updateStargaze(t, dt);
   updateFires(t, dt);
   updateMusicFx(dt);
   updateStumps(dt);
