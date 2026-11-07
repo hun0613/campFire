@@ -29,6 +29,17 @@ function rollDay() {
   const d = ptDay();
   if (quota.day !== d) { quota.day = d; quota.used = 0; quota.exhausted = false; perPlayer.clear(); }
 }
+/** 서버가 재시작돼도 오늘 쓴 양을 잃지 않도록 내보내고/되돌려 받는다 (서명은 index.js 에서) */
+export function quotaState() { rollDay(); return { day: quota.day, used: quota.used, exhausted: quota.exhausted }; }
+export function restoreQuota(s) {
+  rollDay();
+  if (!s || s.day !== quota.day) return false;
+  const used = Math.min(DAILY_UNITS + 1000, Math.max(0, Number(s.used) || 0));
+  let changed = false;
+  if (used > quota.used) { quota.used = used; changed = true; }
+  if (s.exhausted && !quota.exhausted) { quota.exhausted = true; changed = true; }
+  return changed;
+}
 export function searchesLeft() {
   rollDay();
   if (!KEY || quota.exhausted) return 0;

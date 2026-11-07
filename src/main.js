@@ -195,7 +195,7 @@ function doJoin() {
   const name = $('nameInput').value.trim();
   store.set('name', name);
   store.set('look', look);
-  net.send({ t: 'join', name, look, pid: devicePid(), save: store.get('save', null) });
+  net.send({ t: 'join', name, look, pid: devicePid(), save: store.get('save', null), quota: store.get('quota', null) });
 }
 $('joinBtn').onclick = doJoin;
 $('nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') doJoin(); });
@@ -230,6 +230,7 @@ net.on('open', () => {
   $('joinBtn').textContent = '캠핑장 입장 🏕️';
 });
 net.on('close', () => $('disconnected').classList.remove('hidden'));
+net.on('quota', (m) => store.set('quota', { data: m.data, sig: m.sig })); // 서버 재시작 대비 검색 사용량 보관
 net.on('replaced', () => {
   $('disconnected').querySelector('.title').textContent = '다른 창에서 접속했어요 🌙';
 });

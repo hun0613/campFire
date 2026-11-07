@@ -8,7 +8,7 @@ import { WebSocketServer } from 'ws';
 import {
   CFG, PITS, STUMPS, NPC, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
 } from '../shared/config.js';
-import { search, searchesLeft, nextReset, videoInfo, known, addRecent, recentList, hasKey } from './youtube.js';
+import { search, searchesLeft, nextReset, videoInfo, known, addRecent, recentList, hasKey, quotaState, restoreQuota } from './youtube.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -125,6 +125,23 @@ function restore(pid, backup) {
   }
   return null;
 }
+// 검색 한도 기록: 서명해서 모든 기기에 맡겨 두고, 서버가 다시 켜지면 들어오는 기기에서 돌려받는다
+function quotaMsg() {
+  const data = JSON.stringify(quotaState());
+  return { t: 'quota', data, sig: sign('quota', data) };
+}
+function restoreQuotaFrom(backup) {
+  if (!backup || typeof backup.data !== 'string' || typeof backup.sig !== 'string' || backup.data.length > 300) return;
+  const expected = sign('quota', backup.data);
+  if (expected.length !== backup.sig.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(backup.sig))) return;
+  try {
+    if (restoreQuota(JSON.parse(backup.data))) {
+      console.log(`🔍 기기에 맡겨 둔 검색 기록으로 오늘 사용량을 되찾았어요 (남은 검색 ${searchesLeft()}번)`);
+      broadcast(quotaMsg());
+    }
+  } catch { /* 무시 */ }
+}
+
 // 오래된 기억 정리
 setInterval(() => {
   const now = Date.now();
@@ -232,6 +249,7 @@ function handle(ws, ctx, m) {
       }
     }
     const saved = pid ? restore(pid, m.save) : null;
+    restoreQuotaFrom(m.quota);
     const p = {
       id: nextId++, pid, name, look,
       x: SPAWN.x + (Math.random() - 0.5) * 6, z: SPAWN.z + (Math.random() - 0.5) * 2, ry: Math.PI,
@@ -255,6 +273,7 @@ function handle(ws, ctx, m) {
     }
     send(ws, { t: 'welcome', id: p.id, me: publicPlayer(p), restored: saved ? { wood: p.wood, powders: p.powders.length } : null });
     send(ws, inv(p));
+    send(ws, quotaMsg());
     broadcast({ t: 'join', player: publicPlayer(p) }, ws);
     broadcast({ t: 'sys', text: `${p.name}님이 캠핑장에 도착했어요 🏕️` });
     return;
@@ -395,6 +414,7 @@ function handle(ws, ctx, m) {
       if (now - (me.lastSearch || 0) < 2500) { send(ws, { t: 'searchFail', text: '조금만 천천히 검색해 주세요' }); return; }
       me.lastSearch = now;
       search(m.q, me.pid || me.name).then((r) => {
+        if (!r.cached) broadcast(quotaMsg()); // 사용량이 바뀌었으니 모두에게 새 기록을 맡긴다
         if (r.ok) send(ws, { t: 'searchResult', q: m.q, items: r.items, left: r.left, cached: r.cached });
         else send(ws, { t: 'searchFail', text: r.text, exhausted: !!r.exhausted, resetAt: r.resetAt, left: searchesLeft() });
       });
