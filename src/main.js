@@ -647,6 +647,7 @@ function renderGuestbook() {
       <div class="gb-entry${gb$.mineIds.has(e.id) ? ' mine' : ''}${gb$.newId === e.id ? ' new' : ''}">
         <div class="gb-text">${escHtml(e.text)}</div>
         <div class="gb-meta"><b>${escHtml(e.name)}</b> · ${fmtDay(e.at)}</div>
+        ${e.reply ? `<div class="gb-reply"><span class="gb-reply-by">🔥 캠핑장 주인장</span><div class="gb-text">${escHtml(e.reply)}</div></div>` : ''}
       </div>`).join('');
   } else if (gb$.loaded) {
     $('gbBook').innerHTML = '<div class="gb-empty">아직 아무도 남기지 않았어요.<br>첫 번째 방명록의 주인공이 되어 주세요 ✨</div>';

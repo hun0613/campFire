@@ -1,6 +1,7 @@
 // 방명록: 노션 데이터베이스를 저장소로 쓴다
 // - 쓰면 노션에 한 줄 추가 → 사장님이 노션에서 보고 지울 수 있다
 // - 게임에 보여 줄 목록도 노션에서 읽어 온다 (1분마다 새로 고침 → 노션에서 지우면 게임에서도 사라짐)
+// - 노션의 '운영자 답글' 칸에 적으면 게임 속 방명록에 답글로 보인다
 // - 노션 키가 없으면(로컬 테스트 등) 서버 메모리에만 저장한다 (서버를 끄면 사라짐)
 const TOKEN = process.env.NOTION_TOKEN || '';
 const DB = (process.env.NOTION_GUESTBOOK_DB || '5c18c9a4ca29407fa760afe913914120').replace(/-/g, ''); // 기본값: 「불멍 캠핑장 방명록」 데이터베이스
@@ -10,6 +11,7 @@ const MAX_ITEMS = 300;
 export const MAX_LEN = 300;
 export const NAME_PROP = '이름';
 export const TEXT_PROP = '내용';
+export const REPLY_PROP = '운영자 답글'; // 운영자가 노션에서 적는 답글
 
 export const notionOn = () => !!(TOKEN && DB);
 
@@ -36,6 +38,7 @@ function fromPage(pg) {
     id: pg.id,
     name: plain(pr[NAME_PROP]?.title).slice(0, 24) || '익명의 캠퍼',
     text: plain(pr[TEXT_PROP]?.rich_text).slice(0, MAX_LEN * 2),
+    reply: plain(pr[REPLY_PROP]?.rich_text).trim().slice(0, 1000),
     at: Date.parse(pg.created_time) || 0,
   };
 }
