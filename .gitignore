@@ -6,3 +6,6 @@ ref/
 .env
 .env.*
 !.env.example
+
+# 기획서 원본·PDF는 로컬에만 둔다
+docs/
