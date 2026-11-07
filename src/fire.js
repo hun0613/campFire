@@ -89,6 +89,7 @@ export class FirePit {
     this.core = DEFAULT_CORE.clone();
     this.tip = DEFAULT_TIP.clone();
     this.flicker = 1;
+    this.viewDim = 1; // 카메라가 아주 가까우면(1인칭 등) 불꽃 입자가 겹쳐 하얗게 뜨지 않도록 밝기를 낮춘다 (main.js 에서 설정)
 
     const g = new THREE.Group();
     g.position.copy(this.pos);
@@ -259,6 +260,8 @@ export class FirePit {
       const u = pts.material.uniforms;
       u.uIntensity.value = I;
       u.uHeight.value = this.height;
+      u.uBaseBright ??= u.uBright.value;
+      u.uBright.value = u.uBaseBright * (pts === this.embers ? 1 : this.viewDim);
     }
     this.flames.material.uniforms.uCore.value.copy(this.core);
     this.flames.material.uniforms.uTip.value.copy(this.tip);
@@ -267,7 +270,7 @@ export class FirePit {
     this.embers.material.uniforms.uTip.value.copy(this.tip);
 
     this.halo.material.color.copy(this.tip);
-    this.halo.material.opacity = I * 0.22 * this.flicker;
+    this.halo.material.opacity = I * 0.22 * this.flicker * this.viewDim;
     this.halo.scale.setScalar(2.4 * (0.8 + 0.2 * this.height));
     this.halo.position.y = 0.8 * this.height;
     this.groundGlow.material.color.copy(this.tip).lerp(DEFAULT_TIP, 0.3);

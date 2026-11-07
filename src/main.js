@@ -64,7 +64,7 @@ const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 15
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.38, 0.85);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.42, 0.32, 0.85);
 composer.addPass(bloom);
 // 빛 번짐(블룸)은 원래 흐릿한 효과라 절반 해상도로 계산해도 티가 거의 안 난다 — GPU 부담은 크게 준다
 { const set = bloom.setSize.bind(bloom); bloom.setSize = (w, h) => set(Math.round(w / 2), Math.round(h / 2)); }
@@ -148,7 +148,9 @@ const serverNow = () => Date.now() + state.clockOffset;
 
 const ORBIT_MIN = 0.14; // 이보다 더 내리면 카메라가 고개를 들어 하늘을 본다
 const PITCH_MIN = ORBIT_MIN - 1.0;
-const cam = { yaw: 0, pitch: 0.78, dist: 15, curDist: 34, target: new THREE.Vector3(0, 0, 0), dragging: false };
+// 시점: 'tp' 3인칭 / 'fp' 1인칭 (기기에 기억)
+const view = { fp: store.get('view', 'tp') === 'fp' };
+const cam = { look: 0, yaw: 0, pitch: 0.78, dist: 15, curDist: 34, target: new THREE.Vector3(0, 0, 0), dragging: false };
 
 // ---------------------------------------------------------------- 입장 화면
 /** 기기마다 고정된 무작위 ID (장작 저장용, 다른 사람에게는 공개되지 않음) */
@@ -222,7 +224,20 @@ $('joinBtn').onclick = doJoin;
 $('nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') doJoin(); });
 
 $('helpBtn').onclick = () => $('help').classList.remove('hidden');
+function setView(fp) {
+  view.fp = fp;
+  store.set('view', fp ? 'fp' : 'tp');
+  cam.look = state.sitting ? -0.14 : 0;
+  fpPos.set(0, 0, 0);
+  $('viewBtn').textContent = fp ? '🎥' : '👁️';
+  $('viewBtn').title = fp ? '3인칭으로 보기 (V)' : '1인칭으로 보기 (V)';
+  document.body.classList.toggle('fp', fp);
+  if (me) UI.toast(fp ? '👁️ 1인칭 시점 · 다시 누르면 3인칭으로 돌아가요' : '🎥 3인칭 시점', 2200);
+}
+$('viewBtn').onclick = (e) => { e.currentTarget.blur(); setView(!view.fp); };
 initPWA();
+$('viewBtn').textContent = view.fp ? '🎥' : '👁️';
+document.body.classList.toggle('fp', view.fp);
 initFullscreen();
 $('mapToggle').onclick = () => document.body.classList.toggle('map-open');
 $('status').addEventListener('click', () => { if (isTouch) document.body.classList.toggle('quest-open'); });
@@ -435,7 +450,10 @@ net.on('sat', (m) => {
   // 앉으면 모닥불과 옆 TV·LP가 함께 보이도록 카메라를 TV 반대편에서 비스듬히 바라보게
   const mon = monitors.get(m.pit);
   const pd = PITS.find((d) => d.id === m.pit);
-  if (mon && pd) {
+  if (view.fp && pd) {
+    cam.yaw = Math.atan2(-(pd.x - m.x), -(pd.z - m.z));
+    cam.look = -0.14;
+  } else if (mon && pd) {
     // TV · LP가 함께 보이는 기본 방향 근처에서, 내 캐릭터가 카메라와 불 사이에 끼지 않는 각도를 고른다
     const base = Math.atan2(-(mon.pos.x - pd.x), -(mon.pos.z - pd.z));
     const seatA = Math.atan2(m.x - pd.x, m.z - pd.z);
@@ -1064,6 +1082,7 @@ addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); chatInput.focus(); return; }
   keys.add(e.code);
   if (e.code === 'KeyM' && !e.repeat && state.sitting) { e.preventDefault(); openMusicModal(); return; }
+  if (e.code === 'KeyV' && !e.repeat) { setView(!view.fp); return; }
   if (e.code === 'KeyE' && !e.repeat) {
     const it = findInteraction();
     if (it?.type !== 'chop') interact(it);
@@ -1098,7 +1117,8 @@ canvas.addEventListener('pointermove', (e) => {
   if (!cam.dragging) return;
   const k = isTouch ? 1.4 : 1;
   cam.yaw -= (e.clientX - lastPX) * 0.006 * k;
-  cam.pitch = Math.min(1.25, Math.max(PITCH_MIN, cam.pitch + (e.clientY - lastPY) * 0.004 * k));
+  if (view.fp) cam.look = Math.min(1.25, Math.max(-1.1, cam.look - (e.clientY - lastPY) * 0.004 * k)); // 1인칭: 위로 끌면 올려다보기
+  else cam.pitch = Math.min(1.25, Math.max(PITCH_MIN, cam.pitch + (e.clientY - lastPY) * 0.004 * k));
   lastPX = e.clientX; lastPY = e.clientY;
 });
 const ptrEnd = (e) => {
@@ -1167,6 +1187,7 @@ function updateLocal(dt) {
       me.char.setAnim(run ? 'run' : 'walk');
     } else {
       me.char.setAnim('idle');
+      if (view.fp && !me.char.busy()) me.ry = lerpAngle(me.ry, cam.yaw + Math.PI, Math.min(1, dt * 8));
     }
     // 장작 패기 (E 꾹 누르기)
     if (!blocked && keys.has('KeyE') && !me.char.busy()) {
@@ -1207,7 +1228,34 @@ function updateRemotes(dt) {
 
 const focus = new THREE.Vector3();
 const camTarget = new THREE.Vector3();
+const fpPos = new THREE.Vector3(), fpHead = new THREE.Vector3(), fpDir = new THREE.Vector3();
 function updateCamera(dt, t) {
+  if (me) me.char.root.visible = !view.fp; // 1인칭이면 내 화면에서만 내 캐릭터를 숨긴다 (다른 사람에겐 보임)
+  if (view.fp && me) {
+    // 눈높이: 머리 위치를 따라가되 걸을 때 흔들림은 부드럽게
+    me.char.head.getWorldPosition(fpHead);
+    fpHead.y += 0.08;
+    if (fpPos.lengthSq() === 0 || fpPos.distanceTo(fpHead) > 3) fpPos.copy(fpHead);
+    else fpPos.lerp(fpHead, Math.min(1, dt * 12));
+    const el = cam.look;
+    fpDir.set(-Math.sin(cam.yaw) * Math.cos(el), Math.sin(el), -Math.cos(cam.yaw) * Math.cos(el));
+    // 앉아 있으면 불까지 2m 남짓이라 너무 가깝다 → 눈 위치를 살짝 뒤 · 위로 빼서 불 전체가 보이게
+    camera.position.copy(fpPos).addScaledVector(fpDir, state.sitting ? -0.75 : 0.3);
+    if (state.sitting) camera.position.y += 0.25;
+    if (state.shake > 0) {
+      state.shake -= dt;
+      camera.position.x += (Math.random() - 0.5) * state.shake * 0.2;
+      camera.position.y += (Math.random() - 0.5) * state.shake * 0.2;
+    }
+    lookTmp.copy(camera.position).add(fpDir);
+    camera.lookAt(lookTmp);
+    cam.gaze = THREE.MathUtils.smoothstep(el, 0.35, 1.0);
+    const fov = (innerWidth < innerHeight ? 82 : 72) + 8 * cam.gaze; // 1인칭은 시야를 넓게 (가까운 불·사람이 화면을 꽉 채우지 않게)
+    if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    cam.target.set(me.x, 1.0, me.z);
+    focus.set(me.x, 0, me.z);
+    return;
+  }
   let dist = cam.dist, pitch = cam.pitch;
   if (!me) {
     cam.yaw += dt * 0.04;
@@ -1260,6 +1308,7 @@ const fadeMat = (m) => {
 };
 for (const o of world.occluders) o.orig = o.mesh.material;
 function updateOccluders() {
+  if (view.fp) { for (const o of world.occluders) if (o.mesh.material !== o.orig) o.mesh.material = o.orig; return; }
   const pit = state.sitting && pits.get(state.sitting.pit);
   const tx = pit ? pit.pos.x : focus.x, tz = pit ? pit.pos.z : focus.z;
   const cx = camera.position.x, cz = camera.position.z;
@@ -1293,7 +1342,16 @@ const WISHES = ['🌠 별똥별이에요! 얼른 소원을 빌어 봐요', '🌠
 const FIRE_COLOR = new THREE.Color('#ff7a2a');
 function updateFires(t, dt) {
   const now = serverNow();
-  for (const p of pitList) p.update(t, dt, now);
+  // 카메라가 불에 가까울수록(1인칭, 앉아서 보기) 불꽃 밝기와 빛 번짐을 줄여 하얗게 뜨지 않게
+  let nearLit = Infinity;
+  for (const p of pitList) {
+    const d = camera.position.distanceTo(p.pos);
+    p.viewDim = 0.38 + 0.62 * THREE.MathUtils.smoothstep(d, 2.5, 9);
+    if (p.state === 'lit' && d < nearLit) nearLit = d;
+    p.update(t, dt, now);
+  }
+  const bloomTarget = 0.22 + 0.2 * THREE.MathUtils.smoothstep(nearLit, 2.5, 9);
+  bloom.strength += (bloomTarget - bloom.strength) * Math.min(1, dt * 3);
   // 가까운 모닥불에 실제 조명 배정
   const lit = pitList.filter((p) => p.intensity > 0.02)
     .map((p) => ({ p, d: p.pos.distanceToSquared(focus) }))
