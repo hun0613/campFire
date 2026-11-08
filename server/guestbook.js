@@ -19,9 +19,9 @@ let items = []; // [{ id, name, text, at }] 최신순
 let loadedAt = 0;
 let loading = null;
 
-async function notion(path, body) {
+async function notion(path, body, method = 'POST') {
   const r = await fetch(`https://api.notion.com/v1/${path}`, {
-    method: 'POST',
+    method,
     headers: { Authorization: `Bearer ${TOKEN}`, 'Notion-Version': VERSION, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(8000),
@@ -88,6 +88,36 @@ export async function write(name, text) {
   items.unshift(entry);
   if (items.length > MAX_ITEMS) items.length = MAX_ITEMS;
   return entry;
+}
+
+// ---------------------------------------------------------------- 관리자 페이지용
+/** 노션에서 바로 다시 읽어 온다 (관리자 페이지는 항상 최신 목록을 본다) */
+export async function refresh() {
+  if (notionOn()) await reload();
+  return items;
+}
+
+const validId = (id) => typeof id === 'string' && /^[0-9a-f-]{32,36}$|^local-/.test(id);
+
+/** 운영자 답글 달기 · 고치기 (빈 문자열이면 답글 지우기) */
+export async function setReply(id, reply) {
+  if (!validId(id)) throw new Error('잘못된 방명록 ID');
+  const text = String(reply ?? '').trim().slice(0, 1000);
+  if (notionOn() && !id.startsWith('local-')) {
+    await notion(`pages/${id}`, {
+      properties: { [REPLY_PROP]: { rich_text: text ? [{ text: { content: text } }] : [] } },
+    }, 'PATCH');
+  }
+  const e = items.find((x) => x.id === id);
+  if (e) e.reply = text;
+  return e || { id, reply: text };
+}
+
+/** 방명록 지우기 (노션에서는 휴지통으로 옮긴다 → 30일 안에 노션에서 되살릴 수 있다) */
+export async function remove(id) {
+  if (!validId(id)) throw new Error('잘못된 방명록 ID');
+  if (notionOn() && !id.startsWith('local-')) await notion(`pages/${id}`, { archived: true }, 'PATCH');
+  items = items.filter((x) => x.id !== id);
 }
 
 // 서버가 켜질 때 미리 한 번 읽어 둔다

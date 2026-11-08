@@ -2,7 +2,7 @@
 // - 빌드된 정적 파일(/assets/*)은 캐시 우선 → 두 번째 실행부터 빠르게 로딩
 // - 페이지는 네트워크 우선 (멀티플레이 게임이라 항상 최신 서버에 붙도록)
 // - 서버가 꺼져 있으면 안내 화면
-const CACHE = 'campfire-v3';
+const CACHE = 'campfire-v4';
 const PRECACHE = ['/', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png', '/icon.svg'];
 
 self.addEventListener('install', (e) => {
@@ -27,6 +27,7 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== location.origin) return;
   if (url.pathname.startsWith('/ws') || url.pathname.startsWith('/api')) return;
+  if (url.pathname.startsWith('/admin')) return; // 관리자 페이지는 캐시하지 않는다 (게임 첫 화면 캐시를 덮어쓰지 않게)
 
   if (req.mode === 'navigate') {
     e.respondWith(

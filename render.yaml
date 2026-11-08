@@ -19,5 +19,7 @@ services:
         sync: false
       - key: NOTION_GUESTBOOK_DB  # 방명록 노션 데이터베이스 ID
         value: 5c18c9a4ca29407fa760afe913914120
+      - key: ADMIN_PASSWORD  # 관리자 페이지(/admin) 비밀번호 (Render 대시보드에서 직접 입력, 8자 이상)
+        sync: false
       - key: VITE_GTM_ID  # 이용 분석용 Google Tag Manager 컨테이너 ID (빌드할 때 페이지에 들어가요, 공개 값)
         value: GTM-NKJLDBKJ

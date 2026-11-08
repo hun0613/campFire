@@ -9,6 +9,7 @@ import {
   CFG, PITS, STUMPS, NPC, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
 } from '../shared/config.js';
 import * as guestbook from './guestbook.js';
+import { handleAdmin, adminOn } from './admin.js';
 import { search, searchesLeft, nextReset, videoInfo, known, addRecent, recentList, hasKey, quotaState, restoreQuota } from './youtube.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -43,7 +44,14 @@ server.on('request', (req, res) => {
     res.end(JSON.stringify({ urls, public: !!PUBLIC_URL, players: players.size }));
   }
 });
-const passThrough = (handler) => (req, res) => { if (req.url !== '/api/info') handler(req, res); };
+// 관리자 페이지: /admin → admin.html, /api/admin/* → 관리자 API
+server.on('request', (req, res) => {
+  if (req.url === '/admin' || req.url === '/admin/') req.url = '/admin.html';
+  if (req.url?.startsWith('/api/admin/')) handleAdmin(req, res, () => ({ players: players.size }));
+});
+const passThrough = (handler) => (req, res) => {
+  if (req.url !== '/api/info' && !req.url?.startsWith('/api/admin/')) handler(req, res);
+};
 
 if (!isProd) {
   const { createServer } = await import('vite');
@@ -599,6 +607,7 @@ server.listen(PORT, HOST, () => {
   console.log(`   이 컴퓨터:      http://localhost:${PORT}`);
   const lan = lanAddresses();
   console.log(`   곡 검색:        ${hasKey() ? `켜짐 (오늘 남은 검색 ${searchesLeft()}번)` : '꺼짐 — .env 또는 환경변수에 YT_API_KEY 를 넣으면 켜져요'}`);
+  console.log(`   관리자 페이지:  ${adminOn() ? `켜짐 (/admin)` : '꺼짐 — ADMIN_PASSWORD(8자 이상)를 넣으면 켜져요'}`);
   if (PUBLIC_URL) {
     console.log(`   공개 주소:      ${PUBLIC_URL}\n`);
   } else if (lan.length) {
