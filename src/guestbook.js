@@ -9,8 +9,8 @@ export class GuestbookStand {
     this.pos = new THREE.Vector3(pos.x, 0, pos.z);
     const root = new THREE.Group();
     root.position.copy(this.pos);
-    // 처음 들어오는 쪽(남쪽, 카메라 쪽)을 바라본다
-    root.rotation.y = Math.atan2(-pos.x * 0.4, 6);
+    // 광장 입구(남쪽)를 정면으로 본다 (게시판과 나란히)
+    root.rotation.y = 0;
     root.scale.setScalar(1.45);
     this.root = root;
 
@@ -22,7 +22,7 @@ export class GuestbookStand {
     // 비스듬한 책 받침
     const top = new THREE.Group();
     top.position.set(0, 1.12, 0);
-    top.rotation.x = -0.42;
+    top.rotation.x = 0.42; // 앞(남쪽)이 낮고 뒤가 높게: 입구 쪽에 선 사람이 책을 읽는 방향
     const board = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.06, 0.66), wood);
     const lip = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.07, 0.05), dark);
     lip.position.set(0, 0.05, 0.31);

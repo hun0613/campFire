@@ -45,8 +45,8 @@ function makeBeacon(scene, { x, z, color, icon, title, sub }) {
 export class Guide {
   constructor(scene) {
     this.beacons = {
-      wood: makeBeacon(scene, { x: WOODYARD.x, z: WOODYARD.z, color: '#ffa040', icon: '🪓', title: '장작 패는 곳', sub: '동쪽 · 통나무 앞에서 E' }),
-      npc: makeBeacon(scene, { x: NPC.x + 1, z: NPC.z, color: '#b38cff', icon: '✨', title: '루미의 가루 공방', sub: '서쪽 · 장작 5개 → 마법 가루' }),
+      wood: makeBeacon(scene, { x: WOODYARD.x, z: WOODYARD.z, color: '#ffa040', icon: '🪓', title: '장작 패는 곳', sub: '동쪽 장작 마당 · 통나무 앞에서 E' }),
+      npc: makeBeacon(scene, { x: NPC.x + NPC.front.x, z: NPC.z + NPC.front.z, color: '#b38cff', icon: '✨', title: '루미의 가루 공방', sub: '장작 패는 곳 길 건너 · 장작 5개 → 마법 가루' }),
     };
 
     // 미니맵
@@ -124,7 +124,7 @@ export class Guide {
       g.font = '15px sans-serif';
     };
     place(WOODYARD.x, WOODYARD.z, '🪓', '장작', target?.kind === 'wood', '#ffa040');
-    place(NPC.x + 1, NPC.z, '✨', '루미', target?.kind === 'npc', '#b38cff');
+    place(NPC.x + NPC.front.x, NPC.z + NPC.front.z, '✨', '루미', target?.kind === 'npc', '#b38cff');
     place(GUESTBOOK.x, GUESTBOOK.z, '📖', '방명록', false, '#ffc46b');
     place(BOARD.x, BOARD.z, '📌', '', false, '#ffc46b'); // 방명록과 가까워 글자는 생략
     if (target?.kind === 'pit') {
@@ -172,7 +172,7 @@ export function pickTarget({ me, inv, sitting, pitList, myId, CFG }) {
   }, null)?.p;
   const mine = pitList.find((p) => p.owner === myId && p.state === 'stacked');
   if (mine) return { x: mine.pos.x, z: mine.pos.z, kind: 'pit', label: '쌓아둔 장작' };
-  if (inv.wood >= W && inv.canPowder && inv.powders.length < CFG.MAX_POWDERS) return { x: NPC.x + 1, z: NPC.z, kind: 'npc', label: '루미' };
+  if (inv.wood >= W && inv.canPowder && inv.powders.length < CFG.MAX_POWDERS) return { x: NPC.x + NPC.front.x, z: NPC.z + NPC.front.z, kind: 'npc', label: '루미' };
   if (inv.wood >= W) {
     const p = near(pitList.filter((q) => q.state === 'empty'));
     if (p) return { x: p.pos.x, z: p.pos.z, kind: 'pit', label: '빈 화로' };

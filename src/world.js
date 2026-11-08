@@ -17,7 +17,7 @@ export function isPath(x, z) {
   for (const t of TENTS) if (Math.abs(x - t.x) < 1.3 && Math.abs(z) < 23 && Math.sign(z) === Math.sign(t.z)) return true;
   for (const p of PITS) if ((x - p.x) ** 2 + (z - p.z) ** 2 < 3.7 * 3.7) return true;
   if (((x - WOODYARD.x) / 8.5) ** 2 + ((z - WOODYARD.z) / 7.5) ** 2 < 1) return true;
-  if ((x - (NPC.x + 1)) ** 2 + (z - NPC.z) ** 2 < 6.2 * 6.2) return true;
+  if ((x - (NPC.x + NPC.front.x)) ** 2 + (z - (NPC.z + NPC.front.z)) ** 2 < 6.2 * 6.2) return true;
   return false;
 }
 
@@ -67,7 +67,7 @@ function groundTexture() {
   circle(0, 0, 11.5);
   for (const p of PITS) circle(p.x, p.z, 3.7);
   ellipse(WOODYARD.x, WOODYARD.z, 8.5, 7.5);
-  circle(NPC.x + 1, NPC.z, 6.2);
+  circle(NPC.x + NPC.front.x, NPC.z + NPC.front.z, 6.2);
   g.shadowBlur = 0;
   for (let i = 0; i < 26000; i++) {
     const x = rand() * w, y = rand() * h;
@@ -207,11 +207,12 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     pool.position.set(x, 0.03, z);
     scene.add(pool);
   }
-  [[-40, 3.4], [-28, -3.4], [-18, 3.4], [18, -3.4], [28, 3.4], [38, -3.4]].forEach(([x, z], i) => lamp(x, z, i % 2 === 0 || true));
+  [[-40, 3.4], [-28, -3.4], [-18, 3.4], [18, -3.4], [28, 3.4]].forEach(([x, z], i) => lamp(x, z, i % 2 === 0 || true));
   // 텐트 진입로 작은 가로등 (빛 없이 발광만)
-  for (const t of TENTS) lamp(t.x + 1.9, Math.sign(t.z) * 9.5, false);
+  // 광장 한가운데 줄(x=0) 텐트는 가로등 없음: 광장 전구 줄이 밝혀 주고, 있으면 방명록 · 게시판이나 입구 화면을 가린다
+  for (const t of TENTS) if (Math.abs(t.x) > 1) lamp(t.x + 1.9, Math.sign(t.z) * 9.5, false);
 
-  // ---------- 공터 전구 줄 (가운데 기둥에서 방사형)
+  // ---------- 광장 전구 줄 (가운데 기둥에서 방사형)
   {
     const center = new THREE.Vector3(0, 5.2, 0);
     const cpole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 5.4, 8), toon('#6b4a2b'));
@@ -365,7 +366,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     // 통나무 더미
     const pileGeo = new THREE.CylinderGeometry(0.32, 0.32, 5, 12);
     const pile = [];
-    const px = 51.5, pz = 1;
+    const px = WOODYARD.x + 6.5, pz = WOODYARD.z + 1;
     let y = 0.32;
     for (let row = 0; row < 4; row++) {
       const n = 4 - row;
@@ -381,12 +382,50 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     // 쪼갠 장작 더미
     const split = [];
     for (let row = 0; row < 3; row++) for (let i = 0; i < 6 - row; i++) {
-      split.push({ x: 40 + i * 0.32 + row * 0.16, y: 0.12 + row * 0.22, z: 6.5, rx: Math.PI / 2, ry: 0, sx: 1, sy: 1, sz: 1, color: '#b98455' });
+      split.push({ x: WOODYARD.x - 5 + i * 0.32 + row * 0.16, y: 0.12 + row * 0.22, z: WOODYARD.z - 6.5, rx: Math.PI / 2, ry: 0, sx: 1, sy: 1, sz: 1, color: '#b98455' });
     }
     scene.add(instanced(new THREE.BoxGeometry(0.22, 0.9, 0.2), toon('#ffffff'), split));
-    addCol(40.9, 6.5, 1.1);
+    addCol(WOODYARD.x - 4.1, WOODYARD.z - 6.5, 1.1);
     // 꽂혀 있는 도끼 장식
-    lamp(43.5, -6.2, true, '#ffb565', 10);
+    lamp(WOODYARD.x - 4.5, WOODYARD.z + 5.7, true, '#ffb565', 10); // 장작 패는 곳 앞 큰길 가
+  }
+
+  // ---------- 광장 꾸미기: 가장자리 벤치 4개(가운데를 바라봄) + 방명록 · 게시판 옆 꽃 화분
+  {
+    const seatMat = toon('#a8743f'), legMat = toon('#5e4129');
+    const seatGeo = new THREE.BoxGeometry(2.0, 0.09, 0.55), backGeo = new THREE.BoxGeometry(2.0, 0.42, 0.08), legGeo = new THREE.BoxGeometry(0.1, 0.45, 0.5);
+    for (const a of [Math.PI * 0.25, Math.PI * 0.75, Math.PI * 1.25, Math.PI * 1.75]) {
+      const r = 8.6, x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const b = new THREE.Group();
+      b.position.set(x, 0, z);
+      b.rotation.y = Math.atan2(-x, -z); // 광장 가운데를 본다
+      const seat = new THREE.Mesh(seatGeo, seatMat); seat.position.y = 0.47;
+      const back = new THREE.Mesh(backGeo, seatMat); back.position.set(0, 0.78, -0.27); back.rotation.x = -0.12;
+      b.add(seat, back);
+      for (const s of [-0.85, 0.85]) { const l = new THREE.Mesh(legGeo, legMat); l.position.set(s, 0.22, 0); b.add(l); }
+      b.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      scene.add(b);
+      addCol(x, z, 1.0);
+    }
+    const potMat = toon('#9b6a43'), soil = toon('#4a3324');
+    const flowerCols = ['#ff8fb1', '#ffd36b', '#b8a2ff', '#ffffff', '#ff9f6b'];
+    for (const [px, pz] of [[-5.9, 4.2], [5.9, 4.2], [0, 4.4]]) {
+      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.45, 0.5, 10), potMat);
+      pot.position.set(px, 0.25, pz);
+      const dirt = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.04, 10), soil);
+      dirt.position.set(px, 0.5, pz);
+      scene.add(pot, dirt);
+      for (let i = 0; i < 7; i++) {
+        const ang = i * 0.9 + px, rr = i === 0 ? 0 : 0.3;
+        const fl = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), toon(flowerCols[(i + Math.round(px)) % flowerCols.length], { emissive: new THREE.Color(flowerCols[i % flowerCols.length]), emissiveIntensity: 0.15 }));
+        fl.position.set(px + Math.cos(ang) * rr, 0.66 + (i % 3) * 0.05, pz + Math.sin(ang) * rr);
+        const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.22, 5), toon('#4f8f4a'));
+        leaf.position.set(fl.position.x, 0.56, fl.position.z);
+        scene.add(fl, leaf);
+      }
+      pot.castShadow = true;
+      addCol(px, pz, 0.6);
+    }
   }
 
   // ---------- 표지판
@@ -408,14 +447,20 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     scene.add(g);
     addCol(x, z, 0.3);
   }
-  sign(38.5, -5.5, '🪓 장작 패는 곳');
-  sign(-41, -4.8, '✨ 루미의 마법 가루');
-  sign(-8.5, 9.5, '🔥 공터 모닥불', { w: 2.0 });
+  sign(WOODYARD.x - 8, WOODYARD.z + 1, '🪓 장작 패는 곳', { ry: -Math.PI / 2 }); // 광장 쪽(서쪽)을 본다
+  sign(NPC.x - 6, NPC.z - 2.4, '✨ 루미의 마법 가루', { ry: -Math.PI / 2 });
+  sign(-8.5, 9.5, '🏕️ 불멍 캠핑장 광장', { w: 2.4 });
 
-  // ---------- NPC 가루 공방 (서쪽)
+  // ---------- NPC 가루 공방 (동쪽 장작 마당, 큰길 남쪽, 광장 쪽을 본다)
   {
     const g = new THREE.Group();
     g.position.set(NPC.x, 0, NPC.z);
+    g.rotation.y = NPC.face;
+    // 공방 모형 안의 위치(dx, dz)를 실제 위치로 (모형은 +x 쪽이 앞)
+    const at = (dx, dz) => {
+      const c = Math.cos(NPC.face), sn = Math.sin(NPC.face);
+      return [NPC.x + dx * c + dz * sn, NPC.z - dx * sn + dz * c];
+    };
     scene.add(g);
     const wood = toon('#9b6a43');
     const counter = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.0, 3.4), wood);
@@ -471,13 +516,8 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     orb.position.set(1.25, 1.35, 1.5);
     g.add(orb);
     updaters.push((t) => { orb.position.y = 1.35 + Math.sin(t * 2) * 0.05; });
-    lightSpots.push({ pos: new THREE.Vector3(NPC.x + 3.2, 1.8, NPC.z), color: new THREE.Color('#d7b0ff'), intensity: 6, distance: 11 });
-    addCol(NPC.x + 1.25, NPC.z - 1.1, 0.75);
-    addCol(NPC.x + 1.25, NPC.z, 0.75);
-    addCol(NPC.x + 1.25, NPC.z + 1.1, 0.75);
-    addCol(NPC.x - 1.2, NPC.z, 1.4);
-    addCol(NPC.x - 1.2, NPC.z - 1.6, 0.8);
-    addCol(NPC.x - 1.2, NPC.z + 1.6, 0.8);
+    { const [lx, lz] = at(3.2, 0); lightSpots.push({ pos: new THREE.Vector3(lx, 1.8, lz), color: new THREE.Color('#d7b0ff'), intensity: 6, distance: 11 }); }
+    for (const [dx, dz, r] of [[1.25, -1.1, 0.75], [1.25, 0, 0.75], [1.25, 1.1, 0.75], [-1.2, 0, 1.4], [-1.2, -1.6, 0.8], [-1.2, 1.6, 0.8]]) addCol(...at(dx, dz), r);
   }
 
   // ---------- 나무
@@ -489,7 +529,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
       if (isPath(x, z)) return true;
       for (const t of TENTS) if ((x - t.x) ** 2 + (z - t.z) ** 2 < 5.5 ** 2) return true;
       for (const p of PITS) if ((x - p.x) ** 2 + (z - p.z) ** 2 < 5 ** 2) return true;
-      if ((x - 51.5) ** 2 + (z - 1) ** 2 < 5 ** 2) return true;
+      if ((x - (WOODYARD.x + 6.5)) ** 2 + (z - (WOODYARD.z + 1)) ** 2 < 5 ** 2) return true;
       if ((x - NPC.x) ** 2 + (z - NPC.z) ** 2 < 6 ** 2) return true;
       return false;
     };

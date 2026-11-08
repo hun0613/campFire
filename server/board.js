@@ -1,9 +1,7 @@
 // 캠핑장 소식 게시판
 // - 운영자 공지는 노션 「캠핑장 소식」 데이터베이스에 저장한다 (관리실에서 쓰고 고친다). 「게시」에 체크된 것만 게임에 보인다
-// - 게임에는 공지 + 최근 업데이트(릴리즈 노트) + 오늘의 방명록 한 줄을 묶어서 보낸다
+// - 게임에는 게시 중인 공지만 보낸다
 // - 노션 키가 없으면(로컬 테스트 등) 서버 메모리에만 저장한다
-import { releaseNotes } from './releases.js';
-import * as guestbook from './guestbook.js';
 
 const TOKEN = process.env.NOTION_TOKEN || '';
 const DB = (process.env.NOTION_NOTICE_DB || '2bc768d102834a198be2e84afc16866e').replace(/-/g, ''); // 기본값: 「캠핑장 소식」
@@ -95,18 +93,8 @@ export async function remove(id) {
 }
 
 // ---------------------------------------------------------------- 게임에 보낼 게시판 내용
+// 관리실에서 「게시」한 공지만 보낸다 (없으면 게임에서는 불멍 캠핑장 로고를 보여 준다)
 export async function snapshot() {
   await ensure();
-  const items = [];
-  for (const n of notices.filter((x) => x.published).slice(0, 5)) items.push({ kind: 'notice', title: n.title, text: n.text, at: n.at });
-  const rel = releaseNotes()[0];
-  if (rel) {
-    const top = (rel.features[0] || rel.others[0]);
-    items.push({ kind: 'release', title: `${rel.version} 업데이트`, text: top ? `${top.title}${top.desc ? ` — ${top.desc}` : ''}` : '', at: Date.parse(rel.date) || 0 });
-  }
-  // 운영자 답글이 달린 최근 방명록 한 줄 (없으면 가장 최근 방명록)
-  const gb = await guestbook.list().catch(() => []);
-  const pick = gb.find((e) => e.reply) || gb[0];
-  if (pick) items.push({ kind: 'guestbook', title: `📖 ${pick.name}님의 한마디`, text: pick.text.slice(0, 120), reply: pick.reply ? pick.reply.slice(0, 120) : '', at: pick.at });
-  return items;
+  return notices.filter((x) => x.published).slice(0, 5).map((n) => ({ kind: 'notice', title: n.title, text: n.text, at: n.at }));
 }

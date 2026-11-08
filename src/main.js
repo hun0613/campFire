@@ -409,7 +409,7 @@ net.on('inv', (m) => {
     track('wood_chop', { wood: m.wood });
     floatText('+1 🪵', me.char.root.position.clone().setY(2.3));
     sound.wood();
-    if (m.wood === CFG.WOOD_PER_FIRE && m.canPowder) UI.toast('장작 5개 완성! 서쪽 루미에게 가 보세요 ✨');
+    if (m.wood === CFG.WOOD_PER_FIRE && m.canPowder) UI.toast('장작 5개 완성! 길 건너 루미에게 가 보세요 ✨');
   }
   if (prev.powders.length < m.powders.length) sound.gift();
 });
@@ -421,7 +421,7 @@ net.on('npc', (m) => {
     pages = [
       `우와, 장작을 ${m.wood}개나 모아왔구나!\n정말 수고했어 🪵`,
       `자, 이건 내가 직접 만든 <b>마법 가루</b>야.\n${m.powders.map((p) => UI.powderChip(p)).join('')}`,
-      `<b>공터</b>나 <b>글램핑장 앞 화로</b>에 장작을 쌓고 불을 붙여 봐.\n불 앞에 앉아서 가루를 뿌리면… 후후, 깜짝 놀랄걸? ✨`,
+      `<b>글램핑장 앞 화로</b>에 장작을 쌓고 불을 붙여 봐.\n불 앞에 앉아서 가루를 뿌리면… 후후, 깜짝 놀랄걸? ✨`,
     ];
     npc.play('wave');
   } else if (m.kind === 'need') {
@@ -739,16 +739,14 @@ function requestBoard() {
   clearInterval(board$.timer);
   board$.timer = setInterval(() => net.send({ t: 'boardGet' }), 3 * 60_000); // 방명록 한 줄 · 공지가 바뀌면 따라가게
 }
-const BOARD_KIND = { notice: '📌 공지', release: '✨ 업데이트', guestbook: '📖 방명록' };
 function renderBoard() {
   const items = board$.items;
   $('boardList').innerHTML = items.length ? items.map((it) => `
     <div class="board-item ${it.kind}">
-      <span class="board-kind">${BOARD_KIND[it.kind] || '📌 소식'}</span>
       <div class="board-title">${escHtml(it.title || '')}</div>
       ${it.text ? `<div class="board-text">${escHtml(it.reply ? `“${it.text}”` : it.text)}</div>` : ''}
       ${it.reply ? `<div class="gb-reply"><b>🔥 캠핑장 주인장</b> ${escHtml(it.reply)}</div>` : ''}
-    </div>`).join('') : '<div class="gb-empty">아직 붙은 소식이 없어요 🏕️</div>';
+    </div>`).join('') : '<div class="gb-empty">🔥 지금은 붙은 소식이 없어요<br>오늘 밤도 따뜻하게 쉬어 가요</div>';
 }
 function openBoard() {
   renderBoard();
@@ -1360,14 +1358,15 @@ const lookTmp = new THREE.Vector3();
 // ---- 카메라와 보는 곳(앉아 있으면 모닥불, 아니면 내 캐릭터) 사이를 가리는 기둥은 반투명하게
 const fadedMats = new Map();
 const fadeMat = (m) => {
-  if (!fadedMats.has(m)) { const f = m.clone(); f.transparent = true; f.opacity = 0.18; f.depthWrite = false; fadedMats.set(m, f); }
+  if (!fadedMats.has(m)) { const f = m.clone(); f.transparent = true; f.opacity = 0.3; f.depthWrite = false; fadedMats.set(m, f); }
   return fadedMats.get(m);
 };
 for (const o of world.occluders) o.orig = o.mesh.material;
 function updateOccluders() {
-  if (view.fp) { for (const o of world.occluders) if (o.mesh.material !== o.orig) o.mesh.material = o.orig; return; }
+  // 모닥불에 앉아 불을 볼 때만 가리는 기둥을 흐리게 한다 (서서 다닐 때 흐려지면 랜턴 머리만 떠 보여서)
   const pit = state.sitting && pits.get(state.sitting.pit);
-  const tx = pit ? pit.pos.x : focus.x, tz = pit ? pit.pos.z : focus.z;
+  if (view.fp || !pit) { for (const o of world.occluders) if (o.mesh.material !== o.orig) o.mesh.material = o.orig; return; }
+  const tx = pit.pos.x, tz = pit.pos.z;
   const cx = camera.position.x, cz = camera.position.z;
   const dx = tx - cx, dz = tz - cz, len2 = dx * dx + dz * dz || 1;
   for (const o of world.occluders) {
@@ -1376,7 +1375,7 @@ function updateOccluders() {
     let hide = false;
     if (t > 0.02 && t < 0.98) {
       const px = cx + dx * t, pz = cz + dz * t;
-      hide = Math.hypot(o.x - px, o.z - pz) < (pit ? 1.1 : 0.55) + o.r;
+      hide = Math.hypot(o.x - px, o.z - pz) < 1.1 + o.r;
     }
     const want = hide ? fadeMat(o.orig) : o.orig;
     if (o.mesh.material !== want) o.mesh.material = want;
@@ -1453,8 +1452,8 @@ function questText() {
     return '불이 꺼졌어요. 다시 <b>장작</b>을 패러 가볼까요? 🪓';
   }
   if (pitList.some((p) => p.owner === state.myId && p.state === 'stacked')) return '쌓아둔 장작에 <b>불을 붙여요</b> 🔥';
-  if (inv.wood >= W && inv.canPowder && inv.powders.length < CFG.MAX_POWDERS) return '서쪽 <b>루미</b>에게 가서 마법 가루를 받아요 ✨';
-  if (inv.wood >= W) return '<b>공터</b>나 <b>글램핑장 앞 화로</b>에 장작을 쌓아요';
+  if (inv.wood >= W && inv.canPowder && inv.powders.length < CFG.MAX_POWDERS) return '장작 패는 곳 길 건너 <b>루미</b>에게 가서 마법 가루를 받아요 ✨';
+  if (inv.wood >= W) return '<b>글램핑장 앞 화로</b>에 장작을 쌓아요';
   if (inv.powders.length && pitList.some((p) => p.state === 'lit')) return '타오르는 <b>모닥불</b>에 앉아 가루를 뿌려 봐요 🔥';
   return `동쪽 <b>통나무</b>에서 장작을 패요 (${inv.wood}/${W})`;
 }

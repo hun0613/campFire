@@ -1,0 +1,7 @@
+불멍 캠핑장 — 사용한 소리 자료
+
+fire.m4a
+  원본: "fireplace sound loop" — OpenGameArt.org
+  주소: https://opengameart.org/content/fireplace-sound-loop
+  라이선스: CC0 (퍼블릭 도메인, 출처 표시 의무 없음)
+  가공: 끝과 처음을 1.5초 겹쳐 끊김 없는 27.8초 반복 소리로 만들고 AAC 128kbps로 줄임

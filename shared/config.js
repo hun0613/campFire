@@ -15,8 +15,8 @@ export const CFG = {
 
 export const BOUNDS = { minX: -55, maxX: 55, minZ: -35, maxZ: 35 };
 
-// 글램핑 텐트 10동: 북쪽 5동, 남쪽 5동. 각 텐트 앞에는 화로가 있다.
-export const TENT_XS = [-28, -14, 0, 14, 28];
+// 글램핑 텐트 12동: 북쪽 6동, 남쪽 6동. 각 텐트 앞에는 화로가 있다. (모닥불은 글램핑 화로에서만 피운다)
+export const TENT_XS = [-42, -28, -14, 0, 14, 28];
 export const TENTS = [];
 export const PITS = [];
 TENT_XS.forEach((x, i) => {
@@ -25,30 +25,23 @@ TENT_XS.forEach((x, i) => {
   TENTS.push({ id: `s${i}`, x, z: 27, facing: Math.PI });   // 문이 -z를 향함
   PITS.push({ id: `ts${i}`, x, z: 18.5, kind: 'tent', label: `남쪽 ${i + 1}번 글램핑` });
 });
-// 가운데 공터 화로 3개
-PITS.push(
-  { id: 'c0', x: -5.5, z: -3, kind: 'clearing', label: '공터 화로' },
-  { id: 'c1', x: 5.5, z: -3, kind: 'clearing', label: '공터 화로' },
-  { id: 'c2', x: 0, z: 5, kind: 'clearing', label: '공터 화로' },
-);
-
-// 장작 패는 곳 (동쪽)
-export const WOODYARD = { x: 45, z: 0 };
+// 동쪽 끝 「장작 마당」: 큰길 북쪽에 장작 패는 곳, 길 건너 남쪽에 루미의 가루 공방. 둘 다 서쪽(광장 쪽)을 바라본다
+// (광장에서 큰길 따라 오면 두 곳의 정면이 보이고, 장작을 패고 바로 길 건너 루미에게 갈 수 있게)
+export const WOODYARD = { x: 44, z: -8.5 };
 export const STUMPS = [
-  { x: 41, z: -3 },
-  { x: 44.5, z: 3.5 },
-  { x: 47.5, z: -2.5 },
+  { x: 40, z: -11.5 },
+  { x: 43.5, z: -5 },
+  { x: 46.5, z: -11 },
 ];
 
-// 가루 상인 NPC (서쪽)
-export const NPC = { x: -48, z: 0, ry: Math.PI / 2, name: '루미' };
+// 가루 상인 NPC: face 는 공방 모형의 회전(모형은 +x 쪽이 앞), front 는 손님이 서는 방향, ry 는 루미가 바라보는 방향
+export const NPC = { x: 46, z: 9, ry: -Math.PI / 2, face: Math.PI, front: { x: -1, z: 0 }, name: '루미' };
 
 export const SPAWN = { x: 0, z: 10.5 };
 
-// 방명록 (처음 들어오는 곳 바로 앞 왼쪽 — 들어오자마자 보이게)
-export const GUESTBOOK = { x: -3.8, z: 8.4 };
-// 캠핑장 소식 게시판 (방명록 맞은편)
-export const BOARD = { x: 6.2, z: 8.2 };
+// 광장 가운데: 왼쪽 방명록, 오른쪽 캠핑장 소식 게시판. 나란히 서서 둘 다 입구(남쪽)를 본다
+export const GUESTBOOK = { x: -3.4, z: 4.4 };
+export const BOARD = { x: 3.4, z: 4.4 };
 
 export const RANGE = { stump: 2.0, npc: 3.6, pit: 3.2, guestbook: 2.8, board: 2.8 };
 

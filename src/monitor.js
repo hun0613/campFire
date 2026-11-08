@@ -34,7 +34,7 @@ const ON = new THREE.Color('#9fd3ff');
 export class Monitor {
   /** @param {{x:number,z:number,kind:string}} def 모닥불 정의 */
   constructor(def, scene) {
-    // 북쪽 글램핑 앞은 +x, 남쪽 글램핑 앞은 -x (공터 쪽에서 텐트를 볼 때 오른쪽), 공터 화로는 +x
+    // 북쪽 글램핑 앞은 +x, 남쪽 글램핑 앞은 -x (광장 쪽에서 텐트를 볼 때 오른쪽)
     const side = def.id?.startsWith('ts') ? -1 : 1;
     this.pos = new THREE.Vector3(def.x + side * OFFSET, 0, def.z);
     this.root = new THREE.Group();

@@ -1,5 +1,5 @@
 // 캠핑장 소식 게시판: 광장 입구(방명록 맞은편)에 세운 나무 게시판
-// - 앞면은 캔버스로 그린다. 운영자 공지 · 최근 업데이트 · 오늘의 방명록 한 줄을 몇 초마다 번갈아 보여 준다
+// - 앞면은 캔버스로 그린다. 관리실에서 게시한 공지를 몇 초마다 번갈아 보여 주고, 공지가 없으면 불멍 캠핑장 로고를 보여 준다
 // - 위에 작은 랜턴, 멀리서도 보이는 떠 있는 표시
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
@@ -23,7 +23,7 @@ export class NoticeBoard {
 
     const root = new THREE.Group();
     root.position.copy(this.pos);
-    root.rotation.y = Math.atan2(-pos.x * 0.4, 6); // 처음 들어오는 쪽(남쪽)을 바라본다
+    root.rotation.y = 0; // 광장 입구(남쪽)를 정면으로 본다 (방명록과 나란히)
     root.scale.setScalar(1.65);
     this.root = root;
 
@@ -92,6 +92,7 @@ export class NoticeBoard {
   /** @param {{kind:string,title:string,text:string,reply?:string}[]} items */
   setItems(items) {
     this.items = Array.isArray(items) ? items : [];
+    this.tagEl.querySelector('small').textContent = this.items.length ? `새 소식 ${this.items.length}개` : '오늘 밤도 따뜻하게';
     this.idx = Math.min(this.idx, Math.max(0, this.items.length - 1));
     this.cardT = 0;
     this.draw();
@@ -100,6 +101,8 @@ export class NoticeBoard {
   draw() {
     const g = this.canvas.getContext('2d');
     const W = this.canvas.width, H = this.canvas.height;
+    const it = this.items[this.idx];
+    if (!it) { this.drawLogo(g, W, H); this.tex.needsUpdate = true; return; }
     // 코르크판 느낌의 바탕
     g.fillStyle = '#f3e1bd';
     g.fillRect(0, 0, W, H);
@@ -113,8 +116,6 @@ export class NoticeBoard {
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText('📌 캠핑장 소식', W / 2, 42);
-
-    const it = this.items[this.idx];
     // 종이 쪽지
     g.save();
     g.translate(W / 2, 300);
@@ -128,32 +129,16 @@ export class NoticeBoard {
     // 압정
     g.fillStyle = '#e04a3a';
     g.beginPath(); g.arc(W / 2, 132, 11, 0, Math.PI * 2); g.fill();
-
+    // 멀리서도 읽히게 큰 제목, 그 아래 내용 한두 줄 (자세한 내용은 가까이 가서 「소식 보기」)
     g.textAlign = 'left';
-    if (!it) {
-      g.fillStyle = '#8a6f55';
-      g.font = '36px Jua, sans-serif';
-      g.textAlign = 'center';
-      g.fillText('곧 새 소식이 붙을 거예요 🏕️', W / 2, 300);
-    } else {
-      const k = KIND[it.kind] || KIND.notice;
-      // 멀리서도 읽히게 종류 배지 + 큰 제목만 그린다 (자세한 내용은 가까이 가서 「소식 보기」)
-      g.font = '40px Jua, sans-serif';
-      const bw = g.measureText(k.label).width + 40;
-      g.fillStyle = k.color;
-      roundRect(g, 70, 148, bw, 58, 29);
-      g.fill();
-      g.fillStyle = '#fff';
-      g.fillText(k.label, 90, 179);
-      g.fillStyle = '#3e2c1c';
-      g.font = '74px Jua, sans-serif';
-      const title = it.kind === 'guestbook' ? `“${it.text}”` : (it.title || it.text || '');
-      wrap(g, title, 620, 2).forEach((ln, i) => g.fillText(ln, 70, 280 + i * 88));
-      if (it.kind === 'guestbook') {
-        g.fillStyle = '#8a6f55';
-        g.font = '34px Jua, sans-serif';
-        g.fillText(it.title.replace(/^📖\s*/, ''), 70, 452);
-      }
+    g.fillStyle = '#3e2c1c';
+    g.font = '70px Jua, sans-serif';
+    const tl = wrap(g, it.title || it.text || '', 620, 2);
+    tl.forEach((ln, i) => g.fillText(ln, 70, 200 + i * 84));
+    if (it.title && it.text) {
+      g.fillStyle = '#6a5038';
+      g.font = '38px Jua, sans-serif';
+      wrap(g, it.text, 620, tl.length > 1 ? 1 : 2).forEach((ln, i) => g.fillText(ln, 70, 200 + tl.length * 84 + 8 + i * 50));
     }
     // 쪽 번호 점
     const n = this.items.length;
@@ -164,6 +149,56 @@ export class NoticeBoard {
       }
     }
     this.tex.needsUpdate = true;
+  }
+
+  // 공지가 없을 때: 밤하늘 바탕에 모닥불과 「불멍 캠핑장」 로고
+  drawLogo(g, W, H) {
+    const sky = g.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, '#1a1d44');
+    sky.addColorStop(1, '#3a2340');
+    g.fillStyle = sky;
+    g.fillRect(0, 0, W, H);
+    // 별
+    for (let i = 0; i < 70; i++) {
+      const x = (i * 137.5) % W, y = (i * 71.3) % (H * 0.55);
+      g.fillStyle = `rgba(255,244,214,${0.35 + ((i * 7) % 10) / 16})`;
+      g.fillRect(x, y, i % 9 === 0 ? 4 : 2, i % 9 === 0 ? 4 : 2);
+    }
+    // 모닥불 빛
+    const cx = W / 2, cy = H * 0.5;
+    const glowG = g.createRadialGradient(cx, cy + 20, 0, cx, cy + 20, 210);
+    glowG.addColorStop(0, 'rgba(255,170,80,0.55)');
+    glowG.addColorStop(1, 'rgba(255,170,80,0)');
+    g.fillStyle = glowG;
+    g.fillRect(0, 0, W, H);
+    // 장작
+    g.fillStyle = '#6b4226';
+    g.save(); g.translate(cx, cy + 70); g.rotate(0.35); g.fillRect(-90, -13, 180, 26); g.restore();
+    g.save(); g.translate(cx, cy + 70); g.rotate(-0.35); g.fillRect(-90, -13, 180, 26); g.restore();
+    // 불꽃 (바깥 주황 → 안쪽 노랑)
+    const flame = (h, w, color) => {
+      g.fillStyle = color;
+      g.beginPath();
+      g.moveTo(cx, cy + 60 - h);
+      g.bezierCurveTo(cx + w, cy + 10 - h * 0.35, cx + w * 0.9, cy + 60, cx, cy + 62);
+      g.bezierCurveTo(cx - w * 0.9, cy + 60, cx - w, cy + 10 - h * 0.35, cx, cy + 60 - h);
+      g.fill();
+    };
+    flame(150, 70, '#ff7a2a');
+    flame(105, 46, '#ffb547');
+    flame(62, 26, '#fff0b0');
+    // 로고 글자
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = '86px Jua, sans-serif';
+    g.lineWidth = 10;
+    g.strokeStyle = 'rgba(40,20,10,0.55)';
+    g.strokeText('불멍 캠핑장', cx, H - 92);
+    g.fillStyle = '#ffe9c2';
+    g.fillText('불멍 캠핑장', cx, H - 92);
+    g.font = '30px Jua, sans-serif';
+    g.fillStyle = 'rgba(255,233,194,0.75)';
+    g.fillText('오늘 밤도 따뜻하게 쉬어 가요', cx, H - 34);
   }
 
   /** @param {THREE.Vector3|{x:number,z:number}} [mePos] */
