@@ -189,78 +189,151 @@ const CHANNELS = [
 ];
 
 const lines = (s) => s.split('\n').map((x) => x.trim()).filter(Boolean);
+
+// 게임 소개에 공통으로 쓰는 문장
+const PITCH = '밤의 글램핑장에서 장작 패고, 모닥불 피우고, 별 보면서 다 같이 불멍하는 3D 힐링 게임이에요.';
+const FEATURE_LIST = [
+  '🪓 장작을 패서 모닥불을 피우고',
+  '✨ 루미에게 받은 마법 가루로 불 색을 바꾸고',
+  '🎶 같은 모닥불에 앉은 사람과 노래를 듣고',
+  '🌌 고개를 들면 은하수와 별똥별이 보여요',
+  '📖 광장 방명록에 한마디 남기고 가요',
+];
+const HASHTAGS = '#불멍 #불멍캠핑장 #힐링게임 #캠핑 #모닥불 #웹게임 #ASMR';
+
+// 문구 종류(첫 소개 / 업데이트 소식) × 채널
 const TEMPLATES = {
-  kakaoNotice: (f, link) => [
-    `🔥 불멍 캠핑장 ${f.version} 업데이트 🔥`,
-    '',
-    f.headline,
-    '',
-    ...lines(f.features),
-    '',
-    '오늘 밤엔 모닥불 앞에서 쉬어 가요 🏕️',
-    `👉 ${link}`,
-  ].join('\n'),
-  kakaoShare: (f, link) => [
-    '요즘 자기 전에 하는 거 있는데 같이 해 볼래? 🔥',
-    '밤 캠핑장에서 장작 패고 모닥불 피워서 불멍하는 게임이야.',
-    '설치 없이 링크로 바로 들어가져!',
-    '',
-    `👉 ${link}`,
-    '같은 모닥불에 앉으면 노래도 같이 들을 수 있어 🎶',
-  ].join('\n'),
-  igBio: () => [
-    '🔥 밤의 글램핑장에서 함께 불멍하는 3D 힐링 게임',
-    '🪵 장작 패기 · ✨ 마법 가루 · 🌌 별 보기',
-    '👇 설치 없이 바로 입장',
-  ].join('\n'),
-  igStory: (f) => [`${f.headline} 🔥`, '오늘 밤 같이 불멍해요'].join('\n'),
-  igFeed: (f) => [
-    '타닥타닥… 오늘 하루도 고생했어요 🔥',
-    '',
-    `불멍 캠핑장 ${f.version} — ${f.headline}`,
-    ...lines(f.features),
-    '',
-    '장작을 패고, 모닥불을 피우고, 별을 보며 쉬어 가요.',
-    '🔗 프로필 링크에서 바로 입장',
-    '',
-    '#불멍 #불멍캠핑장 #힐링게임 #캠핑 #모닥불 #웹게임 #ASMR',
-  ].join('\n'),
-  threads: (f, link) => [
-    '잠 안 오는 밤에 만든 게임이 있어요 🔥',
-    '',
-    '밤의 글램핑장에서 장작 패고, 모닥불 피우고, 별 보면서 불멍하는 3D 멀티플레이 게임이에요.',
-    '설치 없이 링크로 바로 들어와요. 같은 모닥불에 앉으면 노래도 같이 들어요.',
-    '',
-    `${f.version} — ${f.headline}`,
-    '',
-    `👉 ${link}`,
-  ].join('\n'),
-  post: (f, link) => [
-    '제목: 설치 없이 하는 불멍 게임, 「불멍 캠핑장」을 만들었어요 🔥',
-    '',
-    '밤의 글램핑장에서 다른 사람들과 함께 모닥불을 피우고 쉬어 가는 3D 웹 게임이에요.',
-    '',
-    '- 🪓 동쪽 장작 패는 곳에서 장작을 모아요',
-    '- 🔥 화로에 장작을 쌓고 불을 붙여요',
-    '- ✨ 루미에게 받은 마법 가루로 불 색을 바꿔요',
-    '- 🎶 모닥불 TV로 같이 노래를 들어요',
-    '- 🌌 고개를 들면 은하수와 별똥별이 보여요',
-    '- 📖 광장 방명록에 한마디 남겨요',
-    '',
-    `최근 업데이트(${f.version}): ${f.headline}`,
-    '',
-    'PC · 모바일 모두 브라우저로 바로 들어갈 수 있어요.',
-    `👉 ${link}`,
-  ].join('\n'),
-  qr: (f) => [
-    '🔥 불멍 캠핑장',
-    '휴대폰 카메라로 QR을 찍으면 바로 입장해요',
-    '밤의 캠핑장에서 함께 불멍해요',
-  ].join('\n'),
+  intro: {
+    kakaoNotice: (f, link) => [
+      '🔥 불멍 캠핑장에 놀러 오세요 🔥',
+      '',
+      PITCH,
+      '설치 없이 링크만 누르면 바로 들어와요.',
+      '',
+      ...FEATURE_LIST,
+      '',
+      'PC · 모바일 모두 돼요. 오늘 밤 같이 불멍해요 🏕️',
+      `👉 ${link}`,
+    ].join('\n'),
+    kakaoShare: (f, link) => [
+      '요즘 자기 전에 하는 거 있는데 같이 해 볼래? 🔥',
+      '밤 캠핑장에서 장작 패고 모닥불 피워서 불멍하는 게임이야.',
+      '설치 없이 링크로 바로 들어가져!',
+      '',
+      `👉 ${link}`,
+      '같은 모닥불에 앉으면 노래도 같이 들을 수 있어 🎶',
+    ].join('\n'),
+    igBio: () => [
+      '🔥 밤의 글램핑장에서 함께 불멍하는 3D 힐링 게임',
+      '🪵 장작 패기 · ✨ 마법 가루 · 🌌 별 보기',
+      '👇 설치 없이 바로 입장',
+    ].join('\n'),
+    igStory: () => ['설치 없이 바로 하는 불멍 게임 🔥', '오늘 밤 같이 모닥불 앞에 앉아요'].join('\n'),
+    igFeed: () => [
+      '타닥타닥… 오늘 하루도 고생했어요 🔥',
+      '',
+      PITCH,
+      '',
+      ...FEATURE_LIST,
+      '',
+      '🔗 프로필 링크에서 설치 없이 바로 입장',
+      '',
+      HASHTAGS,
+    ].join('\n'),
+    threads: (f, link) => [
+      '잠 안 오는 밤에 만든 게임이 있어요 🔥',
+      '',
+      PITCH,
+      '설치 없이 링크로 바로 들어와요. 같은 모닥불에 앉으면 노래도 같이 들어요.',
+      '',
+      `👉 ${link}`,
+    ].join('\n'),
+    post: (f, link) => [
+      '제목: 설치 없이 하는 불멍 게임, 「불멍 캠핑장」을 만들었어요 🔥',
+      '',
+      '밤의 글램핑장에서 다른 사람들과 함께 모닥불을 피우고 쉬어 가는 3D 웹 게임이에요.',
+      '',
+      '- 🪓 동쪽 장작 패는 곳에서 장작을 모아요',
+      '- 🔥 화로에 장작을 쌓고 불을 붙여요',
+      '- ✨ 루미에게 받은 마법 가루로 불 색을 바꿔요',
+      '- 🎶 모닥불 TV로 같이 노래를 들어요',
+      '- 🌌 고개를 들면 은하수와 별똥별이 보여요',
+      '- 📖 광장 방명록에 한마디 남겨요',
+      '',
+      'PC · 모바일 모두 브라우저로 바로 들어갈 수 있어요.',
+      `👉 ${link}`,
+    ].join('\n'),
+    qr: () => ['🔥 불멍 캠핑장', '휴대폰 카메라로 QR을 찍으면 바로 입장해요', '밤의 캠핑장에서 함께 불멍해요'].join('\n'),
+  },
+  update: {
+    kakaoNotice: (f, link) => [
+      `🔥 불멍 캠핑장 ${f.version} 업데이트 🔥`,
+      '',
+      f.headline,
+      '',
+      ...lines(f.features),
+      '',
+      '오늘 밤엔 모닥불 앞에서 쉬어 가요 🏕️',
+      `👉 ${link}`,
+    ].join('\n'),
+    kakaoShare: (f, link) => [
+      `내가 하는 불멍 게임에 새로운 게 생겼어 🔥 ${f.headline}`,
+      '',
+      ...lines(f.features),
+      '',
+      '설치 없이 링크로 바로 들어가져! 같이 불멍하자',
+      `👉 ${link}`,
+    ].join('\n'),
+    igBio: () => TEMPLATES.intro.igBio(),
+    igStory: (f) => [`${f.headline} 🔥`, `불멍 캠핑장 ${f.version}`, '오늘 밤 같이 불멍해요'].join('\n'),
+    igFeed: (f) => [
+      '타닥타닥… 오늘 하루도 고생했어요 🔥',
+      '',
+      `불멍 캠핑장 ${f.version} — ${f.headline}`,
+      ...lines(f.features),
+      '',
+      '장작을 패고, 모닥불을 피우고, 별을 보며 쉬어 가요.',
+      '🔗 프로필 링크에서 바로 입장',
+      '',
+      HASHTAGS,
+    ].join('\n'),
+    threads: (f, link) => [
+      `불멍 캠핑장 ${f.version} 업데이트 🔥`,
+      '',
+      f.headline,
+      ...lines(f.features),
+      '',
+      '밤의 글램핑장에서 다 같이 불멍하는 3D 게임이에요. 설치 없이 바로 들어와요.',
+      `👉 ${link}`,
+    ].join('\n'),
+    post: (f, link) => [
+      `제목: 불멍 캠핑장 ${f.version} 업데이트 — ${f.headline} 🔥`,
+      '',
+      '밤의 글램핑장에서 함께 모닥불을 피우고 쉬어 가는 3D 웹 게임 「불멍 캠핑장」이 업데이트됐어요.',
+      '',
+      ...lines(f.features).map((x) => `- ${x}`),
+      '',
+      'PC · 모바일 모두 브라우저로 바로 들어갈 수 있어요.',
+      `👉 ${link}`,
+    ].join('\n'),
+    qr: () => TEMPLATES.intro.qr(),
+  },
+};
+
+const MODE_HINT = {
+  intro: '게임을 처음 알리는 문구예요. 버전과 상관없이 언제든 쓸 수 있어요. 고친 문구는 채널마다 기본으로 저장해 둘 수 있어요.',
+  update: '새 버전을 알리는 문구예요. 릴리즈 노트 맨 위 버전의 새 기능으로 채워져요.',
 };
 
 const slug = (s) => String(s).toLowerCase().trim().replace(/\s+/g, '_').replace(/[^a-z0-9._-]/g, '');
 let channel = CHANNELS[0];
+let mode = 'intro';
+
+// 첫 소개 문구는 운영자가 고쳐서 채널마다 저장해 둘 수 있다 (이 브라우저에만 저장)
+const SAVE_PREFIX = 'campfire-admin-intro:';
+const LINK_TOKEN = '{링크}';
+function savedIntro(key) { try { return localStorage.getItem(SAVE_PREFIX + key); } catch { return null; } }
+function storeIntro(key, text) { try { text == null ? localStorage.removeItem(SAVE_PREFIX + key) : localStorage.setItem(SAVE_PREFIX + key, text); return true; } catch { return false; } }
 
 function initGenerator() {
   if ($('channels').childElementCount) return;
@@ -269,14 +342,33 @@ function initGenerator() {
     const b = e.target.closest('.chip');
     if (b) pickChannel(CHANNELS.find((c) => c.key === b.dataset.key));
   });
+  document.querySelectorAll('#genMode button').forEach((b) => { b.onclick = () => setMode(b.dataset.mode); });
   fillLatest();
-  pickChannel(CHANNELS[0]);
+  setMode('intro');
   ['fVersion', 'fHeadline', 'fFeatures', 'uCampaign', 'uContent'].forEach((id) => $(id).addEventListener('input', () => {
-    if (id === 'fVersion' && channel.campaign === 'version') $('uCampaign').value = slug($('fVersion').value);
+    if (id === 'fVersion' && mode === 'update' && channel.campaign === 'version') $('uCampaign').value = slug($('fVersion').value);
     render();
   }));
   ['uCampaign', 'uContent'].forEach((id) => $(id).addEventListener('blur', () => { $(id).value = slug($(id).value); render(); }));
   $('fillLatest').onclick = () => { fillLatest(); render(); toast('릴리즈 노트 맨 위 버전을 불러왔어요'); };
+  $('saveIntro').onclick = () => {
+    const text = $('outMsg').value.split(buildLink()).join(LINK_TOKEN);
+    if (storeIntro(channel.key, text)) { toast(`「${channel.label}」 첫 소개 문구를 저장했어요`); render(); } else toast('이 브라우저에서는 저장할 수 없어요');
+  };
+  $('resetIntro').onclick = () => {
+    if (!confirm(`「${channel.label}」 첫 소개 문구를 기본 문구로 되돌릴까요?`)) return;
+    storeIntro(channel.key, null);
+    render();
+    toast('기본 문구로 되돌렸어요');
+  };
+}
+
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('#genMode button').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
+  $('modeHint').textContent = MODE_HINT[m];
+  $('updateFields').classList.toggle('hidden', m !== 'update');
+  pickChannel(channel);
 }
 
 function fillLatest() {
@@ -295,12 +387,17 @@ function fillLatest() {
 }
 const stripEmoji = (s) => s.replace(/^[\p{Extended_Pictographic}️\s]+/u, '').trim();
 
+function defaultCampaign(c) {
+  if (c.campaign !== 'version') return c.campaign;
+  return mode === 'intro' ? 'intro' : slug($('fVersion').value);
+}
+
 function pickChannel(c) {
   channel = c;
   document.querySelectorAll('.chip').forEach((b) => b.classList.toggle('on', b.dataset.key === c.key));
   $('uSource').value = c.source;
   $('uMedium').value = c.medium;
-  $('uCampaign').value = c.campaign === 'version' ? slug($('fVersion').value) : c.campaign;
+  $('uCampaign').value = defaultCampaign(c);
   $('uContent').value = c.content;
   render();
 }
@@ -316,7 +413,13 @@ function render() {
   const link = buildLink();
   const f = { version: $('fVersion').value.trim() || '{버전}', headline: $('fHeadline').value.trim() || '{한 줄 요약}', features: $('fFeatures').value };
   $('outLink').textContent = link;
-  $('outMsg').value = TEMPLATES[channel.tpl](f, link);
+  const saved = mode === 'intro' ? savedIntro(channel.key) : null;
+  $('outMsg').value = saved != null ? saved.split(LINK_TOKEN).join(link) : TEMPLATES[mode][channel.tpl](f, link);
+  $('introSave').classList.toggle('hidden', mode !== 'intro');
+  $('resetIntro').classList.toggle('hidden', saved == null);
+  $('msgHint').textContent = mode === 'intro'
+    ? (saved != null ? '💾 저장해 둔 문구를 쓰고 있어요. 링크는 현재 UTM 값으로 자동으로 바뀌어요.' : '미리보기를 고친 뒤 「기본으로 저장」하면 다음부터 이 문구로 시작해요. 저장은 이 브라우저에만 돼요.')
+    : '미리보기를 직접 고쳐도 돼요. 복사하면 고친 내용이 그대로 복사돼요.';
   const notes = {
     ig_bio: '인스타 프로필의 「링크」 칸에 넣어요. 소개 문구는 아래를 프로필 소개에 붙여 넣어요.',
     ig_story: '스토리의 「링크 스티커」에 이 링크를 넣어요.',

@@ -20,7 +20,7 @@
       <h1>캠핑장 관리실</h1>
       <p>운영자 비밀번호를 입력하세요.</p>
       <input id="pw" type="password" autocomplete="current-password" placeholder="비밀번호" required />
-      <button type="submit" id="loginBtn">들어가기</button>
+      <button type="submit" class="btn" id="loginBtn">들어가기</button>
       <div id="loginErr" class="err" role="alert"></div>
     </form>
   </main>
@@ -58,10 +58,17 @@
     <section id="tab-gen" class="panel hidden">
       <div class="gen">
         <form id="genForm" class="card gen-form">
-          <h2>1. 어디에 올릴까요?</h2>
+          <h2>1. 어떤 문구인가요?</h2>
+          <div class="seg mode" id="genMode">
+            <button type="button" data-mode="intro" class="on">🏕️ 첫 소개</button>
+            <button type="button" data-mode="update">📣 업데이트 소식</button>
+          </div>
+          <p class="hint" id="modeHint"></p>
+
+          <h2>2. 어디에 올릴까요?</h2>
           <div class="chips" id="channels"></div>
 
-          <h2>2. UTM 값</h2>
+          <h2>3. UTM 값</h2>
           <div class="grid2">
             <label>utm_source<input id="uSource" readonly /></label>
             <label>utm_medium<input id="uMedium" readonly /></label>
@@ -70,11 +77,13 @@
           </div>
           <p class="hint">campaign과 content는 영어 소문자 · 숫자 · 밑줄(_)로 자동 정리돼요.</p>
 
-          <h2>3. 문구 내용</h2>
+          <div id="updateFields">
+          <h2>4. 업데이트 내용</h2>
           <label>버전<input id="fVersion" placeholder="v1.8.0" /></label>
           <label>한 줄 요약<input id="fHeadline" placeholder="관리자 페이지가 생겼어요" /></label>
           <label>새 기능 <small>(한 줄에 하나씩, 앞에 이모지를 붙이면 좋아요)</small><textarea id="fFeatures" rows="5"></textarea></label>
           <button type="button" class="btn ghost small" id="fillLatest">릴리즈 노트에서 불러오기</button>
+          </div>
         </form>
 
         <div class="gen-out">
@@ -86,7 +95,11 @@
           <div class="card">
             <div class="out-head"><h2>안내 문구</h2><button class="btn small" data-copy="outMsg">복사</button></div>
             <textarea id="outMsg" class="out-msg" rows="16"></textarea>
-            <p class="hint">미리보기를 직접 고쳐도 돼요. 복사하면 고친 내용이 그대로 복사돼요.</p>
+            <p class="hint" id="msgHint">미리보기를 직접 고쳐도 돼요. 복사하면 고친 내용이 그대로 복사돼요.</p>
+            <div class="gb-actions" id="introSave">
+              <button type="button" class="btn ghost small" id="saveIntro">💾 이 문구를 기본으로 저장</button>
+              <button type="button" class="btn ghost small" id="resetIntro">기본 문구로 되돌리기</button>
+            </div>
           </div>
         </div>
       </div>

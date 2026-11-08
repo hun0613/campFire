@@ -175,3 +175,13 @@ label input, label textarea { margin-top: 4px; font-weight: 400; }
   .seg { width: 100%; }
   .seg button { flex: 1; padding: 6px 4px; }
 }
+
+/* 문구 종류 선택 */
+.seg.mode { background: var(--bg); width: 100%; }
+.seg.mode button { flex: 1; padding: 9px 10px; font-size: 14px; }
+#introSave { margin-top: 8px; }
+
+/* 로그인 버튼 */
+.login-card .btn { font-size: 16px; border-radius: 14px; box-shadow: 0 6px 18px rgba(240, 120, 42, .35); }
+.login-card .btn:focus-visible { outline: 3px solid color-mix(in srgb, var(--fire) 45%, transparent); outline-offset: 2px; }
+.login-card input { padding: 12px 14px; font-size: 16px; text-align: center; letter-spacing: .04em; }
