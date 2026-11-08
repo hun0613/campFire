@@ -75,8 +75,8 @@ function renderStats() {
 document.querySelectorAll('.tab').forEach((b) => {
   b.onclick = () => {
     document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('on', x === b));
-    $('tab-gb').classList.toggle('hidden', b.dataset.tab !== 'gb');
-    $('tab-gen').classList.toggle('hidden', b.dataset.tab !== 'gen');
+    for (const t of ['gb', 'stats', 'gen']) $(`tab-${t}`).classList.toggle('hidden', b.dataset.tab !== t);
+    if (b.dataset.tab === 'stats' && !statsState.loaded) loadStats();
   };
 });
 
@@ -173,6 +173,175 @@ document.querySelectorAll('#gbFilter button').forEach((b) => {
 });
 $('gbSearch').addEventListener('input', (e) => { gb.q = e.target.value; renderGuestbook(); });
 $('gbReload').onclick = loadGuestbook;
+
+// ---------------------------------------------------------------- 통계 (GA4)
+const statsState = { range: '7d', loaded: false, timer: null };
+const EVENT_LABEL = {
+  game_join: '🏕️ 입장', wood_chop: '🪓 장작 패기', fire_light: '🔥 불 붙이기', fire_sit: '🪵 모닥불 앉기', fire_stand: '🚶 일어나기',
+  powder_use: '✨ 마법 가루', guestbook_write: '📖 방명록', music_play: '🎶 노래 틀기', view_toggle: '👁️ 시점 전환', stargaze: '🌌 하늘 보기',
+};
+const DEVICE_LABEL = { mobile: '📱 모바일', desktop: '💻 PC', tablet: '📟 태블릿' };
+const NVR_LABEL = { new: '🌱 처음 온 사람', returning: '🔁 다시 온 사람' };
+const RANGE_LABEL = { today: '오늘', '7d': '최근 7일', '28d': '최근 28일' };
+const num = (n) => Number(n || 0).toLocaleString('ko-KR');
+const pct = (r) => `${Math.round((r || 0) * 100)}%`;
+const dur = (sec) => {
+  sec = Math.round(sec || 0);
+  if (sec < 60) return `${sec}초`;
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return m < 60 ? `${m}분${s ? ` ${s}초` : ''}` : `${Math.floor(m / 60)}시간 ${m % 60}분`;
+};
+
+async function loadStats() {
+  statsState.loaded = true;
+  $('statsBody').innerHTML = '<div class="empty">GA4에서 불러오는 중…</div>';
+  try {
+    const d = await api(`analytics?range=${statsState.range}`);
+    renderStats$(d);
+  } catch (e) {
+    if (e.message !== 'unauthorized') $('statsBody').innerHTML = `<div class="card err">불러오지 못했어요: ${esc(e.message)}</div>`;
+  }
+  // 통계 탭을 보고 있는 동안 1분마다 실시간 숫자를 새로 고침
+  clearInterval(statsState.timer);
+  statsState.timer = setInterval(() => { if (!$('tab-stats').classList.contains('hidden')) loadStats(); }, 60_000);
+}
+
+function setupGuide(st) {
+  const step = (ok, text) => `<li class="${ok ? 'ok' : ''}">${ok ? '✅' : '⬜️'} ${text}</li>`;
+  return `<div class="card setup">
+    <h2>📊 GA4 통계를 연결해 주세요</h2>
+    <p class="hint">관리실 서버가 GA4를 읽을 수 있게 구글 서비스 계정을 연결해야 해요.</p>
+    <ol>
+      ${step(st.property, '서버 환경 변수 <code>GA_PROPERTY_ID</code> (GA4 속성 ID, 숫자)')}
+      ${step(st.key, '서버 환경 변수 <code>GA_SA_KEY</code> (서비스 계정 키)')}
+      ${step(false, `GA4 관리 → 속성 액세스 관리에 ${st.email ? `<code>${esc(st.email)}</code>` : '서비스 계정 이메일'}을 「뷰어」로 추가`)}
+    </ol>
+    <p class="hint">로컬은 <code>node scripts/set-ga-key.mjs &lt;키파일&gt; &lt;속성ID&gt;</code>, Render는 Environment에 같은 값을 넣고 다시 배포하면 켜져요.</p>
+  </div>`;
+}
+
+function kpi(label, value, sub = '') {
+  return `<div class="kpi-tile"><span>${label}</span><b>${value}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+}
+
+// 한 가지 색의 가로 막대 목록 (값 순서대로)
+function barList(items, { valueFmt = num, sub } = {}) {
+  const max = Math.max(1, ...items.map((x) => x.value));
+  if (!items.length) return '<p class="hint">아직 데이터가 없어요.</p>';
+  return `<ul class="bars">${items.map((x) => `
+    <li title="${esc(x.label)}: ${valueFmt(x.value)}${sub ? ` · ${sub(x)}` : ''}">
+      <span class="bar-label">${esc(x.label)}</span>
+      <span class="bar-track"><span class="bar-fill" style="width:${(x.value / max) * 100}%"></span></span>
+      <span class="bar-val">${valueFmt(x.value)}${sub ? `<small>${sub(x)}</small>` : ''}</span>
+    </li>`).join('')}</ul>`;
+}
+
+// 최근 14일 방문자 선 그래프 (한 줄, 마우스를 올리면 그날 숫자)
+function trendChart(trend) {
+  const W = 1100, H = 280, P = { l: 40, r: 16, t: 16, b: 30 };
+  const max = Math.max(4, ...trend.map((d) => d.users));
+  const step = Math.pow(10, Math.floor(Math.log10(max)));
+  const top = Math.ceil(max / step) * step;
+  const x = (i) => P.l + (i * (W - P.l - P.r)) / (trend.length - 1);
+  const y = (v) => H - P.b - (v / top) * (H - P.t - P.b);
+  const pts = trend.map((d, i) => `${x(i).toFixed(1)},${y(d.users).toFixed(1)}`).join(' ');
+  const grid = [0, 0.5, 1].map((f) => {
+    const v = Math.round(top * f);
+    return `<line x1="${P.l}" x2="${W - P.r}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${P.l - 6}" y="${y(v) + 4}" class="axis" text-anchor="end">${v}</text>`;
+  }).join('');
+  const lab = (d) => `${Number(d.date.slice(4, 6))}/${Number(d.date.slice(6))}`;
+  const xl = trend.map((d, i) => (i % 2 === (trend.length - 1) % 2 ? `<text x="${x(i)}" y="${H - 8}" class="axis" text-anchor="middle">${lab(d)}</text>` : '')).join('');
+  const hits = trend.map((d, i) => `<g class="pt" data-tip="${lab(d)} · 방문자 ${d.users}명 · 처음 온 사람 ${d.newUsers}명 · 입장 ${d.joins}번">
+      <rect x="${x(i) - (W - P.l - P.r) / (trend.length - 1) / 2}" y="${P.t}" width="${(W - P.l - P.r) / (trend.length - 1)}" height="${H - P.t - P.b}" fill="transparent"/>
+      <circle cx="${x(i)}" cy="${y(d.users)}" r="4" class="dot"/></g>`).join('');
+  return `<div class="chart-wrap"><svg viewBox="0 0 ${W} ${H}" class="trend" role="img" aria-label="최근 14일 일별 방문자">
+    ${grid}${xl}<polyline points="${pts}" class="line"/>${hits}</svg><div class="tip" hidden></div></div>`;
+}
+
+function renderStats$(d) {
+  if (!d.status?.on) { $('statsBody').innerHTML = setupGuide(d.status || {}); $('statsUpdated').textContent = ''; return; }
+  const r = d.report, rt = d.realtime;
+  if (!r) { $('statsBody').innerHTML = `<div class="card err">GA4 조회에 실패했어요: ${esc(d.error || '알 수 없는 오류')}</div>`; return; }
+  $('statsUpdated').textContent = `${RANGE_LABEL[r.range]} · ${new Date(r.updatedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} 기준 (5분마다 갱신)`;
+  const s = r.summary;
+  const joins = r.events.find((e) => e.name === 'game_join');
+  const joinRate = s.users ? Math.min(1, (joins?.users || 0) / s.users) : 0;
+
+  $('statsBody').innerHTML = `
+    <div class="stats-grid">
+      <div class="card live">
+        <h2><span class="pulse"></span>지금 (최근 30분)</h2>
+        <div class="live-num">${rt ? num(rt.users) : '–'}<small>명</small></div>
+        <p class="hint">게임 서버 기준 지금 접속 ${num(stats?.players)}명</p>
+        ${rt?.events?.length ? barList(rt.events.slice(0, 5).map((e) => ({ label: EVENT_LABEL[e.name] || e.name, value: e.count }))) : '<p class="hint">최근 30분 동안 게임 행동이 없어요.</p>'}
+      </div>
+      <div class="kpis">
+        ${kpi('방문자', `${num(s.users)}명`, `처음 온 사람 ${num(s.newUsers)}명`)}
+        ${kpi('입장률', pct(joinRate), `방문자 중 이름을 넣고 입장한 비율`)}
+        ${kpi('1인당 머문 시간', dur(s.avgEngagementSec), '화면을 보고 있던 시간 평균')}
+        ${kpi('모닥불에 앉아 있던 시간', r.sitting ? dur(r.sitting.avgSeconds) : '–', r.sitting ? `한 번 앉을 때 평균 · ${num(r.sitting.count)}번` : '데이터가 쌓이면 보여요')}
+        ${kpi('1인칭으로 보낸 시간', r.viewShare ? pct(r.viewShare.fp) : '–', r.viewShare ? `머문 시간 ${num(r.viewShare.minutes)}분 중` : '데이터가 쌓이면 보여요')}
+        ${kpi('방문', `${num(s.sessions)}번`, `몰입한 방문 ${pct(s.engagedRate)}`)}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>최근 14일 방문자</h2>
+      ${trendChart(r.trend)}
+    </div>
+
+    <div class="stats-2">
+      <div class="card">
+        <h2>게임 행동 <small>${RANGE_LABEL[r.range]}</small></h2>
+        ${barList(r.events.filter((e) => e.count).map((e) => ({ label: EVENT_LABEL[e.name] || e.name, value: e.count, users: e.users })), { sub: (x) => `${num(x.users)}명` })}
+      </div>
+      <div class="card">
+        <h2>유입 경로 <small>source / medium</small></h2>
+        ${barList(r.sources.map((x) => ({ label: x.source === '(direct) / (none)' ? '직접 방문 (링크 없이)' : x.source, value: x.sessions, joins: x.joins })), { valueFmt: (v) => `${num(v)}번`, sub: (x) => `입장 ${num(x.joins)}` })}
+      </div>
+    </div>
+
+    <div class="stats-2">
+      <div class="card">
+        <h2>캠페인 <small>utm_campaign</small></h2>
+        ${barList(r.campaigns.map((c) => ({ label: c.name, value: c.sessions, users: c.users })), { valueFmt: (v) => `${num(v)}번`, sub: (x) => `${num(x.users)}명` })}
+      </div>
+      <div class="card">
+        <h2>기기 · 재방문</h2>
+        ${barList(r.devices.map((x) => ({ label: DEVICE_LABEL[x.name] || x.name, value: x.users })), { valueFmt: (v) => `${num(v)}명` })}
+        ${barList(r.newVsReturning.map((x) => ({ label: NVR_LABEL[x.name] || x.name, value: x.users })), { valueFmt: (v) => `${num(v)}명` })}
+      </div>
+    </div>
+    ${!s.sessions ? '<p class="hint">⏳ GA4는 기간 보고서를 만드는 데 몇 시간에서 최대 하루 이틀 걸려요. 「지금(최근 30분)」 숫자는 바로 반영돼요.</p>' : ''}
+    ${r.customError ? `<p class="hint">일부 맞춤 지표(앉아 있던 시간 · 1인칭 비율)를 아직 불러올 수 없어요. GA4 맞춤 정의를 등록한 지 하루쯤 지나면 보여요.</p>` : ''}
+    ${d.error ? `<p class="hint">실시간 조회 실패: ${esc(d.error)}</p>` : ''}
+  `;
+}
+
+// 선 그래프 툴팁
+$('statsBody').addEventListener('mousemove', (e) => {
+  const g = e.target.closest('.pt');
+  const wrap = e.target.closest('.chart-wrap');
+  if (!wrap) return;
+  const tip = wrap.querySelector('.tip');
+  wrap.querySelectorAll('.pt.on').forEach((x) => { if (x !== g) x.classList.remove('on'); });
+  if (!g) { tip.hidden = true; return; }
+  g.classList.add('on');
+  tip.textContent = g.dataset.tip;
+  tip.hidden = false;
+  const b = wrap.getBoundingClientRect();
+  tip.style.left = `${Math.min(b.width - tip.offsetWidth - 4, Math.max(4, e.clientX - b.left - tip.offsetWidth / 2))}px`;
+  tip.style.top = `${e.clientY - b.top - 44}px`;
+});
+$('statsBody').addEventListener('mouseleave', () => document.querySelectorAll('.chart-wrap .tip').forEach((t) => { t.hidden = true; }), true);
+document.querySelectorAll('#rangeSeg button').forEach((b) => {
+  b.onclick = () => {
+    statsState.range = b.dataset.r;
+    document.querySelectorAll('#rangeSeg button').forEach((x) => x.classList.toggle('on', x === b));
+    loadStats();
+  };
+});
+$('statsReload').onclick = loadStats;
 
 // ---------------------------------------------------------------- 안내 문구 만들기
 // 노션 「UTM 링크 규칙 · 채널별 안내 문구」와 같은 규칙

@@ -36,6 +36,7 @@
 
     <nav class="tabs" role="tablist">
       <button role="tab" class="tab on" data-tab="gb">📖 방명록</button>
+      <button role="tab" class="tab" data-tab="stats">📊 통계</button>
       <button role="tab" class="tab" data-tab="gen">🔗 안내 문구 만들기</button>
     </nav>
 
@@ -52,6 +53,21 @@
       </div>
       <p class="hint" id="gbHint"></p>
       <div id="gbList" class="gb-list"></div>
+    </section>
+
+    <!-- 통계 -->
+    <section id="tab-stats" class="panel hidden">
+      <div class="toolbar">
+        <div class="seg" id="rangeSeg">
+          <button data-r="today">오늘</button>
+          <button data-r="7d" class="on">최근 7일</button>
+          <button data-r="28d">최근 28일</button>
+        </div>
+        <span class="hint" id="statsUpdated" style="margin:0"></span>
+        <span class="spacer" style="flex:1"></span>
+        <button class="btn ghost small" id="statsReload">↻ 새로 고침</button>
+      </div>
+      <div id="statsBody"></div>
     </section>
 
     <!-- 안내 문구 만들기 -->

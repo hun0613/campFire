@@ -5,6 +5,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import * as guestbook from './guestbook.js';
+import * as ga from './analytics.js';
 
 const PASSWORD = process.env.ADMIN_PASSWORD || '';
 const SECRET = crypto.createHash('sha256').update(`admin:${PASSWORD}:${process.env.SAVE_SECRET || ''}`).digest();
@@ -115,6 +116,19 @@ export async function handleAdmin(req, res, getStats) {
 
     if (route === 'stats' && req.method === 'GET') {
       send(res, 200, { version: VERSION, notion: guestbook.notionOn(), latest: latestRelease(), ...getStats() });
+      return true;
+    }
+    if (route === 'analytics' && req.method === 'GET') {
+      const status = ga.analyticsStatus();
+      if (!status.on) { send(res, 200, { status }); return true; }
+      const range = url.searchParams.get('range') || '7d';
+      const [report, realtime] = await Promise.allSettled([ga.report(range), ga.realtime()]);
+      send(res, 200, {
+        status,
+        report: report.status === 'fulfilled' ? report.value : null,
+        realtime: realtime.status === 'fulfilled' ? realtime.value : null,
+        error: [report, realtime].find((x) => x.status === 'rejected')?.reason?.message || null,
+      });
       return true;
     }
     if (route === 'guestbook' && req.method === 'GET') {

@@ -9,3 +9,8 @@ ref/
 
 # 기획서 원본·PDF는 로컬에만 둔다
 docs/
+
+# 구글 서비스 계정 키 파일 (실수로 프로젝트 폴더에 둬도 올라가지 않게)
+*service-account*.json
+ga-key*.json
+campfire-analytics*.json

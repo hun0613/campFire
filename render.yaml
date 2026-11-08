@@ -21,5 +21,9 @@ services:
         value: 5c18c9a4ca29407fa760afe913914120
       - key: ADMIN_PASSWORD  # 관리자 페이지(/admin) 비밀번호 (Render 대시보드에서 직접 입력, 8자 이상)
         sync: false
+      - key: GA_PROPERTY_ID  # 관리실 통계용 GA4 속성 ID (숫자)
+        sync: false
+      - key: GA_SA_KEY  # 관리실 통계용 구글 서비스 계정 키 (base64, Render 대시보드에서 직접 입력)
+        sync: false
       - key: VITE_GTM_ID  # 이용 분석용 Google Tag Manager 컨테이너 ID (빌드할 때 페이지에 들어가요, 공개 값)
         value: GTM-NKJLDBKJ
