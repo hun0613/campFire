@@ -637,3 +637,13 @@ body.touch.seated #musicBtn {
   body.touch.seated #powders { bottom: calc(26px + env(safe-area-inset-bottom)); max-width: 52vw; }
   body.touch.seated #musicBtn { bottom: calc(130px + env(safe-area-inset-bottom)); }
 }
+
+/* ---------- 캠핑장 소식 게시판 */
+.board-list { gap: 10px; }
+.board-item { padding: 12px 14px; border-radius: 14px; background: #fffaf0; border: 1px solid #ecdcbc; box-shadow: 0 2px 0 rgba(120, 80, 40, .08); animation: gbIn .35s ease both; }
+.board-kind { display: inline-block; font-size: 12px; color: #fff; background: var(--orange); border-radius: 999px; padding: 2px 9px; }
+.board-item.release .board-kind { background: #7a5bd6; }
+.board-item.guestbook .board-kind { background: #3f8f5a; }
+.board-title { font-family: Jua, sans-serif; font-size: 18px; color: var(--brown); margin-top: 6px; }
+.board-text { font-size: 14.5px; line-height: 1.6; color: #4a3424; margin-top: 2px; white-space: pre-wrap; word-break: break-word; }
+.board-item .gb-reply { margin-top: 6px; }

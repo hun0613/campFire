@@ -247,3 +247,13 @@ label input, label textarea { margin-top: 4px; font-weight: 400; }
 .tab-badge { font-style: normal; font-size: 11px; background: var(--fire); color: #fff; border-radius: 999px; padding: 1px 7px; margin-left: 4px; vertical-align: 1px; }
 select { width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1.5px solid var(--line); border-radius: 10px; padding: 9px 11px; margin-top: 4px; font-weight: 400; }
 select:focus { outline: none; border-color: var(--fire); }
+
+/* 캠핑장 소식 */
+.notice-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 16px; align-items: start; }
+.notice-form textarea { resize: vertical; }
+label.check { display: flex; align-items: center; gap: 8px; color: var(--ink); font-weight: 700; }
+label.check input { width: auto; margin: 0; accent-color: var(--fire); }
+.gb.off { opacity: .6; }
+.gb .n-title { font-weight: 800; flex: 1; min-width: 0; }
+.gb .n-text { resize: vertical; }
+@media (max-width: 860px) { .notice-wrap { grid-template-columns: 1fr; } }

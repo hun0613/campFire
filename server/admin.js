@@ -6,6 +6,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import * as guestbook from './guestbook.js';
 import * as ga from './analytics.js';
+import * as board from './board.js';
+import { releaseNotes } from './releases.js';
 
 const PASSWORD = process.env.ADMIN_PASSWORD || '';
 const SECRET = crypto.createHash('sha256').update(`admin:${PASSWORD}:${process.env.SAVE_SECRET || ''}`).digest();
@@ -13,33 +15,6 @@ const TOKEN_TTL = 12 * 60 * 60 * 1000;
 const MAX_FAILS = 5;
 const FAIL_WINDOW = 10 * 60 * 1000;
 const VERSION = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
-
-// 릴리즈 노트 전체를 버전별로 나눈다 (안내 문구 만들기에서 골라 쓴다)
-// - 각 버전: 새 기능 항목, 그 밖의 항목(개선 · 고침 등)
-// - 항목은 맨 앞 줄의 「- **제목**: 설명」 또는 「- 문장」만 쓰고, 들여쓴 하위 항목은 건너뛴다
-function releaseNotes() {
-  try {
-    const md = fs.readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
-    const out = [];
-    for (const sec of md.split(/\n(?=## v)/).slice(1)) {
-      const head = sec.match(/^## (v[\d.]+)(?:\s*[—-]\s*([\d-]+))?/);
-      if (!head) continue;
-      const rel = { version: head[1], date: head[2] || '', features: [], others: [] };
-      let bucket = rel.others;
-      for (const line of sec.split('\n').slice(1)) {
-        if (line.startsWith('### ')) { bucket = line.includes('새 기능') ? rel.features : rel.others; continue; }
-        if (line.startsWith('---')) break;
-        if (!line.startsWith('- ')) continue;
-        const m = line.match(/^- \*\*(.+?)\*\*:\s*(.*)$/); // 「**제목**: 설명」 형식만 제목 · 설명으로 나눈다
-        const clean = (t) => t.replace(/\*\*/g, '').replace(/`/g, '').trim();
-        if (m) bucket.push({ title: clean(m[1]), desc: clean(m[2]) });
-        else bucket.push({ title: clean(line.slice(2)), desc: '' });
-      }
-      out.push(rel);
-    }
-    return out;
-  } catch { return []; }
-}
 
 export const adminOn = () => PASSWORD.length >= 8;
 
@@ -91,7 +66,7 @@ function send(res, status, body) {
  * /api/admin/* 요청을 처리한다. 처리했으면 true
  * @param {() => {players:number}} getStats
  */
-export async function handleAdmin(req, res, getStats) {
+export async function handleAdmin(req, res, getStats, hooks = {}) {
   const url = new URL(req.url || '/', 'http://x');
   if (!url.pathname.startsWith('/api/admin/')) return false;
   const route = url.pathname.slice('/api/admin/'.length);
@@ -138,6 +113,27 @@ export async function handleAdmin(req, res, getStats) {
       });
       return true;
     }
+    // 캠핑장 소식 (게임 속 게시판 공지)
+    if (route === 'notices' && req.method === 'GET') { send(res, 200, { items: await board.listAll() }); return true; }
+    if (route === 'notices' && req.method === 'POST') {
+      const item = await board.create(await readJson(req));
+      hooks.onBoardChange?.();
+      send(res, 200, { item });
+      return true;
+    }
+    const nm = route.match(/^notices\/([^/]+)$/);
+    if (nm && req.method === 'PATCH') {
+      const item = await board.update(nm[1], await readJson(req));
+      hooks.onBoardChange?.();
+      send(res, 200, { item });
+      return true;
+    }
+    if (nm && req.method === 'DELETE') {
+      await board.remove(nm[1]);
+      hooks.onBoardChange?.();
+      send(res, 200, { ok: true });
+      return true;
+    }
     if (route === 'guestbook' && req.method === 'GET') {
       const items = await guestbook.refresh();
       send(res, 200, { items, notion: guestbook.notionOn() });
@@ -147,6 +143,7 @@ export async function handleAdmin(req, res, getStats) {
     if (m && m[2] && req.method === 'POST') {
       const { reply } = await readJson(req);
       const entry = await guestbook.setReply(m[1], reply);
+      hooks.onBoardChange?.();
       send(res, 200, { entry });
       return true;
     }

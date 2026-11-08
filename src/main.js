@@ -22,8 +22,9 @@ import { Music } from './music.js';
 import { Monitor } from './monitor.js';
 import { Woodcut } from './woodcut.js';
 import { GuestbookStand } from './guestbook.js';
+import { NoticeBoard } from './board.js';
 import { LightPool } from './lightpool.js';
-import { CFG, PITS, STUMPS, NPC, BOUNDS, RANGE, LOOKS, GUESTBOOK } from '../shared/config.js';
+import { CFG, PITS, STUMPS, NPC, BOUNDS, RANGE, LOOKS, GUESTBOOK, BOARD } from '../shared/config.js';
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -108,11 +109,13 @@ const monitors = new Map(PITS.map((d) => [d.id, new Monitor(d, scene)]));
 const woodcut = new Woodcut(scene, STUMPS);
 for (const s of world.stumpMeshes) s.log.visible = false; // 그루터기 위 통나무는 woodcut 이 그린다
 const gbStand = new GuestbookStand(scene, GUESTBOOK);
-const lightSpots = [...world.lightSpots, gbStand.lightSpot];
+const board = new NoticeBoard(scene, BOARD);
+const lightSpots = [...world.lightSpots, gbStand.lightSpot, board.lightSpot];
 const lampPool = new LightPool(scene, isTouch ? 2 : 3);
 const colliders = [
   ...world.colliders,
   { x: GUESTBOOK.x, z: GUESTBOOK.z, r: 1.35 },
+  { x: BOARD.x - 1.5, z: BOARD.z, r: 0.35 }, { x: BOARD.x + 1.5, z: BOARD.z, r: 0.35 }, { x: BOARD.x - 0.6, z: BOARD.z, r: 0.5 }, { x: BOARD.x + 0.6, z: BOARD.z, r: 0.5 },
   ...PITS.map((p) => ({ x: p.x, z: p.z, r: 0.95 })),
   ...[...monitors.values()].map((m) => ({ x: m.pos.x, z: m.pos.z, r: 0.55 })),
   ...[...monitors.values()].map((m) => ({ x: m.lpPos.x, z: m.lpPos.z, r: 0.38 })),
@@ -345,6 +348,7 @@ net.on('welcome', (m) => {
   preview.dispose();
   $('hud').classList.remove('hidden');
   const firstTime = !store.get('helpSeen', false);
+  requestBoard();
   track('game_join', { device: isTouch ? 'mobile' : 'pc', view: view.fp ? 'fp' : 'tp', returning: !firstTime });
   if (!state.hbStarted) { state.hbStarted = true; startHeartbeat(() => ({ sitting: !!state.sitting, view: view.fp ? 'fp' : 'tp' })); }
   if (firstTime) {
@@ -726,6 +730,37 @@ function gbDone() {
   $('gbSend').disabled = false;
   $('gbSend').textContent = '✍️ 남기기';
 }
+// ---------------------------------------------------------------- 캠핑장 소식 게시판
+const board$ = { items: [], timer: null };
+net.on('board', (m) => { board$.items = m.items || []; board.setItems(board$.items); if (!$('boardModal').classList.contains('hidden')) renderBoard(); });
+net.on('boardUpdate', () => net.send({ t: 'boardGet' }));
+function requestBoard() {
+  net.send({ t: 'boardGet' });
+  clearInterval(board$.timer);
+  board$.timer = setInterval(() => net.send({ t: 'boardGet' }), 3 * 60_000); // 방명록 한 줄 · 공지가 바뀌면 따라가게
+}
+const BOARD_KIND = { notice: '📌 공지', release: '✨ 업데이트', guestbook: '📖 방명록' };
+function renderBoard() {
+  const items = board$.items;
+  $('boardList').innerHTML = items.length ? items.map((it) => `
+    <div class="board-item ${it.kind}">
+      <span class="board-kind">${BOARD_KIND[it.kind] || '📌 소식'}</span>
+      <div class="board-title">${escHtml(it.title || '')}</div>
+      ${it.text ? `<div class="board-text">${escHtml(it.reply ? `“${it.text}”` : it.text)}</div>` : ''}
+      ${it.reply ? `<div class="gb-reply"><b>🔥 캠핑장 주인장</b> ${escHtml(it.reply)}</div>` : ''}
+    </div>`).join('') : '<div class="gb-empty">아직 붙은 소식이 없어요 🏕️</div>';
+}
+function openBoard() {
+  renderBoard();
+  $('boardModal').classList.remove('hidden');
+  board$.openedAt = performance.now();
+  net.send({ t: 'boardGet' });
+  track('board_open', { items: board$.items.length });
+}
+function closeBoard() { $('boardModal').classList.add('hidden'); }
+$('boardClose').onclick = closeBoard;
+$('boardModal').addEventListener('click', (e) => { if (e.target.id === 'boardModal' && performance.now() - (board$.openedAt || 0) > 600) closeBoard(); });
+
 net.on('gbList', (m) => {
   gb$.items = m.items || [];
   gb$.loaded = true;
@@ -845,6 +880,8 @@ function findInteraction() {
   if (dn < RANGE.npc && dn < bestD) { best = { type: 'npc' }; bestD = dn; }
   const dg = Math.hypot(me.x - GUESTBOOK.x, me.z - GUESTBOOK.z);
   if (dg < RANGE.guestbook && dg < bestD) { best = { type: 'guestbook' }; bestD = dg; }
+  const db = Math.hypot(me.x - BOARD.x, me.z - BOARD.z);
+  if (db < RANGE.board && db < bestD) { best = { type: 'board' }; bestD = db; }
   for (const pit of pitList) {
     const d = Math.hypot(me.x - pit.pos.x, me.z - pit.pos.z);
     if (d < RANGE.pit && d < bestD) { best = { type: 'pit', pit }; bestD = d; }
@@ -861,6 +898,7 @@ function promptFor(it) {
   }
   if (it.type === 'npc') return ['<kbd>E</kbd> 루미와 이야기하기'];
   if (it.type === 'guestbook') return ['<kbd>E</kbd> 방명록 펼쳐 보기 📖'];
+  if (it.type === 'board') return ['<kbd>E</kbd> 캠핑장 소식 보기 📌'];
   if (it.type === 'pit') {
     const p = it.pit;
     if (p.state === 'empty') {
@@ -885,6 +923,9 @@ function interact(it) {
   else if (it.type === 'npc') {
     net.send({ t: 'npc' });
     // NPC가 나를 바라보도록
+  } else if (it.type === 'board') {
+    faceTo(BOARD.x, BOARD.z);
+    openBoard();
   } else if (it.type === 'guestbook') {
     faceTo(GUESTBOOK.x, GUESTBOOK.z);
     openGuestbook();
@@ -977,6 +1018,7 @@ function actionFor(it) {
   if (it.type === 'chop') return woodcut.stateOf(it.idx) === 'empty' ? { icon: '🪵', label: '통나무 올리기' } : { icon: '🪓', label: '꾹 패기' };
   if (it.type === 'npc') return { icon: '💬', label: '대화' };
   if (it.type === 'guestbook') return { icon: '📖', label: '방명록' };
+  if (it.type === 'board') return { icon: '📌', label: '소식' };
   if (it.type === 'seated') return { icon: '🚶', label: '일어나기' };
   if (it.type === 'pit') {
     const p = it.pit;
@@ -1084,6 +1126,10 @@ addEventListener('keydown', (e) => {
   }
   if (gbOpen()) {
     if (e.code === 'Escape') closeGuestbook();
+    return;
+  }
+  if (!$('boardModal').classList.contains('hidden')) {
+    if (['Escape', 'KeyE', 'Enter', 'Space'].includes(e.code) && !e.repeat) closeBoard();
     return;
   }
   if (!$('help').classList.contains('hidden')) {
@@ -1516,6 +1562,7 @@ function frame(now = performance.now()) {
   updateMusicFx(dt);
   updateStumps(dt);
   gbStand.update(dt, me);
+  board.update(dt, me);
   lampPool.update(dt, focus, lightSpots);
   effects.update(dt);
   glowFx.update(dt);

@@ -76,7 +76,8 @@ function renderStats() {
 document.querySelectorAll('.tab').forEach((b) => {
   b.onclick = () => {
     document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('on', x === b));
-    for (const t of ['gb', 'stats', 'gen']) $(`tab-${t}`).classList.toggle('hidden', b.dataset.tab !== t);
+    for (const t of ['gb', 'stats', 'notice', 'gen']) $(`tab-${t}`).classList.toggle('hidden', b.dataset.tab !== t);
+    if (b.dataset.tab === 'notice' && !notice$.loaded) loadNotices();
     if (b.dataset.tab === 'stats' && !statsState.loaded) loadStats();
   };
 });
@@ -176,6 +177,75 @@ document.querySelectorAll('#gbFilter button').forEach((b) => {
 });
 $('gbSearch').addEventListener('input', (e) => { gb.q = e.target.value; renderGuestbook(); });
 $('gbReload').onclick = loadGuestbook;
+
+// ---------------------------------------------------------------- 캠핑장 소식 (게임 속 게시판 공지)
+const notice$ = { items: [], loaded: false };
+async function loadNotices() {
+  notice$.loaded = true;
+  $('noticeList').innerHTML = '<div class="empty">불러오는 중…</div>';
+  try {
+    notice$.items = (await api('notices')).items;
+    renderNotices();
+  } catch (e) { if (e.message !== 'unauthorized') $('noticeList').innerHTML = `<div class="card err">불러오지 못했어요: ${esc(e.message)}</div>`; }
+}
+function renderNotices() {
+  if (!notice$.items.length) { $('noticeList').innerHTML = '<div class="empty">아직 붙인 공지가 없어요. 왼쪽에서 첫 공지를 붙여 보세요 📌</div>'; return; }
+  $('noticeList').innerHTML = notice$.items.map((n) => `
+    <article class="gb ${n.published ? '' : 'off'}" data-id="${esc(n.id)}">
+      <div class="gb-head">
+        <input class="n-title" maxlength="40" value="${esc(n.title)}" aria-label="제목" />
+        <span class="badge ${n.published ? 'done' : 'todo'}">${n.published ? '게시 중' : '내림'}</span>
+      </div>
+      <textarea class="n-text" maxlength="200" rows="3" aria-label="내용">${esc(n.text)}</textarea>
+      <div class="gb-actions">
+        <button class="btn small" data-act="save">고치기</button>
+        <button class="btn ghost small" data-act="toggle">${n.published ? '게시 내리기' : '다시 게시'}</button>
+        <span class="spacer"></span>
+        <span class="gb-count">${esc(fmtDate(n.at))}</span>
+        <button class="btn danger small" data-act="delete">삭제</button>
+      </div>
+    </article>`).join('');
+}
+$('noticeForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const title = $('nTitle').value.trim(), text = $('nText').value.trim();
+  if (!title && !text) { toast('제목이나 내용을 적어 주세요'); return; }
+  $('nSave').disabled = true;
+  try {
+    const { item } = await api('notices', { method: 'POST', body: { title, text, published: $('nPub').checked } });
+    notice$.items.unshift(item);
+    $('nTitle').value = ''; $('nText').value = '';
+    renderNotices();
+    toast(item.published ? '게시판에 붙였어요 📌' : '저장했어요 (게시 안 함)');
+  } catch (err) { if (err.message !== 'unauthorized') toast(err.message); } finally { $('nSave').disabled = false; }
+});
+$('noticeList').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('button[data-act]');
+  if (!btn) return;
+  const card = btn.closest('.gb');
+  const id = card.dataset.id;
+  const n = notice$.items.find((x) => x.id === id);
+  const act = btn.dataset.act;
+  if (act === 'delete' && !confirm(`「${n.title || n.text.slice(0, 20)}」 공지를 지울까요?`)) return;
+  card.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+  try {
+    if (act === 'delete') {
+      await api(`notices/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      notice$.items = notice$.items.filter((x) => x.id !== id);
+      toast('공지를 지웠어요');
+    } else {
+      const body = act === 'toggle' ? { published: !n.published } : { title: card.querySelector('.n-title').value, text: card.querySelector('.n-text').value };
+      const { item } = await api(`notices/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+      Object.assign(n, item);
+      toast(act === 'toggle' ? (n.published ? '다시 게시했어요' : '게시를 내렸어요') : '고쳤어요');
+    }
+    renderNotices();
+  } catch (e) {
+    if (e.message !== 'unauthorized') toast(e.message);
+    card.querySelectorAll('button').forEach((b) => { b.disabled = false; });
+  }
+});
+$('nReload').onclick = loadNotices;
 
 // ---------------------------------------------------------------- 통계 (GA4)
 const statsState = { range: '7d', loaded: false, timer: null };

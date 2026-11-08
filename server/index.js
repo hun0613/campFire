@@ -10,6 +10,7 @@ import {
 } from '../shared/config.js';
 import * as guestbook from './guestbook.js';
 import { handleAdmin, adminOn } from './admin.js';
+import * as board from './board.js';
 import { search, searchesLeft, nextReset, videoInfo, known, addRecent, recentList, hasKey, quotaState, restoreQuota } from './youtube.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -47,7 +48,7 @@ server.on('request', (req, res) => {
 // 관리자 페이지: /admin → admin.html, /api/admin/* → 관리자 API
 server.on('request', (req, res) => {
   if (req.url === '/admin' || req.url === '/admin/') req.url = '/admin.html';
-  if (req.url?.startsWith('/api/admin/')) handleAdmin(req, res, () => ({ players: players.size }));
+  if (req.url?.startsWith('/api/admin/')) handleAdmin(req, res, () => ({ players: players.size }), { onBoardChange: () => broadcast({ t: 'boardUpdate' }) });
 });
 const passThrough = (handler) => (req, res) => {
   if (req.url !== '/api/info' && !req.url?.startsWith('/api/admin/')) handler(req, res);
@@ -501,6 +502,12 @@ function handle(ws, ctx, m) {
         clearMusic(pit, 'ended');
         broadcast({ t: 'pit', pit });
       }
+      break;
+    }
+    case 'boardGet': { // 캠핑장 소식 게시판
+      board.snapshot()
+        .then((items) => send(ws, { t: 'board', items, players: players.size }))
+        .catch((e) => console.error('[board]', e.message));
       break;
     }
     case 'gbOpen': { // 방명록 펼치기

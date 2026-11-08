@@ -37,6 +37,7 @@
     <nav class="tabs" role="tablist">
       <button role="tab" class="tab on" data-tab="stats">📊 통계</button>
       <button role="tab" class="tab" data-tab="gb">📖 방명록 <i class="tab-badge hidden" id="gbBadge"></i></button>
+      <button role="tab" class="tab" data-tab="notice">📌 소식</button>
       <button role="tab" class="tab" data-tab="gen">🔗 안내 문구 만들기</button>
     </nav>
 
@@ -68,6 +69,25 @@
         <button class="btn ghost small" id="statsReload">↻ 새로 고침</button>
       </div>
       <div id="statsBody"></div>
+    </section>
+
+    <!-- 캠핑장 소식 (게임 속 게시판) -->
+    <section id="tab-notice" class="panel hidden">
+      <div class="notice-wrap">
+        <form id="noticeForm" class="card notice-form">
+          <h2>새 공지 붙이기</h2>
+          <p class="hint">게임 광장 입구의 「📌 캠핑장 소식」 게시판에 바로 붙어요. 최근 업데이트와 오늘의 방명록 한 줄은 자동으로 같이 보여요.</p>
+          <label>제목 <small>(최대 40자)</small><input id="nTitle" maxlength="40" placeholder="오늘 밤 11시, 별똥별이 많이 떨어져요" /></label>
+          <label>내용 <small>(최대 200자)</small><textarea id="nText" rows="4" maxlength="200" placeholder="모닥불에 앉아서 하늘을 올려다보세요 🌠"></textarea></label>
+          <label class="check"><input type="checkbox" id="nPub" checked /> 바로 게시하기</label>
+          <button class="btn" type="submit" id="nSave">📌 붙이기</button>
+        </form>
+        <div>
+          <div class="toolbar"><h2 style="margin:0">붙어 있는 공지</h2><span class="spacer" style="flex:1"></span><button class="btn ghost small" id="nReload">↻ 새로 고침</button></div>
+          <p class="hint">게임에는 「게시」 중인 최신 공지 5개까지 보여요. 노션 「캠핑장 소식」에서도 고칠 수 있어요.</p>
+          <div id="noticeList" class="gb-list"></div>
+        </div>
+      </div>
     </section>
 
     <!-- 안내 문구 만들기 -->

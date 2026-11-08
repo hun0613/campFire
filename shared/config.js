@@ -47,8 +47,10 @@ export const SPAWN = { x: 0, z: 10.5 };
 
 // 방명록 (처음 들어오는 곳 바로 앞 왼쪽 — 들어오자마자 보이게)
 export const GUESTBOOK = { x: -3.8, z: 8.4 };
+// 캠핑장 소식 게시판 (방명록 맞은편)
+export const BOARD = { x: 6.2, z: 8.2 };
 
-export const RANGE = { stump: 2.0, npc: 3.6, pit: 3.2, guestbook: 2.8 };
+export const RANGE = { stump: 2.0, npc: 3.6, pit: 3.2, guestbook: 2.8, board: 2.8 };
 
 export function seatPos(pit, i) {
   const a = Math.PI / 4 + i * (Math.PI * 2 / CFG.SEATS_PER_PIT);
