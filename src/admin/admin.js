@@ -61,7 +61,8 @@ async function start() {
   $('app').classList.remove('hidden');
   renderStats();
   initGenerator();
-  loadGuestbook();
+  loadStats(); // 첫 화면은 통계
+  loadGuestbook(); // 방명록은 미리 불러 두고 답글 대기 수를 탭에 표시
 }
 function renderStats() {
   $('stats').innerHTML = [
@@ -102,6 +103,8 @@ function renderGuestbook() {
   const todo = gb.items.filter((e) => !e.reply).length;
   $('cAll').textContent = gb.items.length;
   $('cTodo').textContent = todo;
+  $('gbBadge').textContent = todo;
+  $('gbBadge').classList.toggle('hidden', !todo);
   $('cDone').textContent = gb.items.length - todo;
   const q = gb.q.trim().toLowerCase();
   const list = gb.items.filter((e) =>
@@ -525,7 +528,7 @@ const TEMPLATES = {
 
 const MODE_HINT = {
   intro: '게임을 처음 알리는 문구예요. 버전과 상관없이 언제든 쓸 수 있어요. 고친 문구는 채널마다 기본으로 저장해 둘 수 있어요.',
-  update: '새 버전을 알리는 문구예요. 릴리즈 노트 맨 위 버전의 새 기능으로 채워져요.',
+  update: '새 버전을 알리는 문구예요. 아래에서 고른 릴리즈 노트 버전의 내용으로 채워져요. 새 기능이 없는 버전은 개선 · 고침 항목을 써요.',
 };
 
 const slug = (s) => String(s).toLowerCase().trim().replace(/\s+/g, '_').replace(/[^a-z0-9._-]/g, '');
@@ -546,14 +549,16 @@ function initGenerator() {
     if (b) pickChannel(CHANNELS.find((c) => c.key === b.dataset.key));
   });
   document.querySelectorAll('#genMode button').forEach((b) => { b.onclick = () => setMode(b.dataset.mode); });
-  fillLatest();
+  const rels = stats?.releases || [];
+  $('relSelect').innerHTML = rels.map((r, i) => `<option value="${i}">${esc(r.version)}${r.date ? ` · ${esc(r.date.slice(5).replace('-', '/'))}` : ''} — ${esc((r.features[0] || r.others[0])?.title || '')}</option>`).join('');
+  $('relSelect').onchange = () => { fillRelease(rels[$('relSelect').value]); if (mode === 'update' && channel.campaign === 'version') $('uCampaign').value = slug($('fVersion').value); render(); };
+  fillRelease(rels[0]);
   setMode('intro');
   ['fVersion', 'fHeadline', 'fFeatures', 'uCampaign', 'uContent'].forEach((id) => $(id).addEventListener('input', () => {
     if (id === 'fVersion' && mode === 'update' && channel.campaign === 'version') $('uCampaign').value = slug($('fVersion').value);
     render();
   }));
   ['uCampaign', 'uContent'].forEach((id) => $(id).addEventListener('blur', () => { $(id).value = slug($(id).value); render(); }));
-  $('fillLatest').onclick = () => { fillLatest(); render(); toast('릴리즈 노트 맨 위 버전을 불러왔어요'); };
   $('saveIntro').onclick = () => {
     const text = $('outMsg').value.split(buildLink()).join(LINK_TOKEN);
     if (storeIntro(channel.key, text)) { toast(`「${channel.label}」 첫 소개 문구를 저장했어요`); render(); } else toast('이 브라우저에서는 저장할 수 없어요');
@@ -574,17 +579,19 @@ function setMode(m) {
   pickChannel(channel);
 }
 
-function fillLatest() {
-  const l = stats?.latest;
-  $('fVersion').value = l?.version || `v${stats?.version || ''}`;
-  const feats = l?.features || [];
-  // 새 기능이 하나면 그 설명 첫 문장, 여러 개면 「첫 기능 외 N가지」
+// 고른 버전의 릴리즈 노트로 업데이트 내용을 채운다 (새 기능이 없으면 개선 · 고침 항목)
+function fillRelease(rel) {
+  $('fVersion').value = rel?.version || `v${stats?.version || ''}`;
+  const isNew = !!rel?.features?.length;
+  const feats = (isNew ? rel.features : rel?.others || []).slice(0, 6);
+  // 항목이 하나면 그 설명 첫 문장, 여러 개면 「첫 항목 외 N가지」
   const firstSentence = (t) => (t.match(/^.*?[.!?요](?=\s|$)/) || [t])[0];
   $('fHeadline').value = !feats.length ? ''
-    : feats.length === 1 ? (feats[0].desc ? firstSentence(feats[0].desc) : stripEmoji(feats[0].title))
-      : `${stripEmoji(feats[0].title)} 외 ${feats.length - 1}가지`;
+    : !isNew && feats.length > 1 ? `${feats.length}가지를 고치고 다듬었어요`
+    : feats.length === 1 ? (feats[0].desc ? firstSentence(feats[0].desc) : firstSentence(stripEmoji(feats[0].title)))
+      : `${stripEmoji(feats[0].title).split(/[:：]/)[0].trim()} 외 ${feats.length - 1}가지`;
   $('fFeatures').value = feats.map((x) => {
-    const t = x.title;
+    const t = x.title.length > 60 ? firstSentence(x.title) : x.title;
     return /^\p{Extended_Pictographic}/u.test(t) ? t : `✨ ${t}`;
   }).join('\n');
 }

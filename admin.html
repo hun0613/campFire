@@ -35,13 +35,13 @@
     </header>
 
     <nav class="tabs" role="tablist">
-      <button role="tab" class="tab on" data-tab="gb">📖 방명록</button>
-      <button role="tab" class="tab" data-tab="stats">📊 통계</button>
+      <button role="tab" class="tab on" data-tab="stats">📊 통계</button>
+      <button role="tab" class="tab" data-tab="gb">📖 방명록 <i class="tab-badge hidden" id="gbBadge"></i></button>
       <button role="tab" class="tab" data-tab="gen">🔗 안내 문구 만들기</button>
     </nav>
 
     <!-- 방명록 -->
-    <section id="tab-gb" class="panel">
+    <section id="tab-gb" class="panel hidden">
       <div class="toolbar">
         <div class="seg" id="gbFilter">
           <button data-f="all" class="on">전체 <i id="cAll">0</i></button>
@@ -56,7 +56,7 @@
     </section>
 
     <!-- 통계 -->
-    <section id="tab-stats" class="panel hidden">
+    <section id="tab-stats" class="panel">
       <div class="toolbar">
         <div class="seg" id="rangeSeg">
           <button data-r="today">오늘</button>
@@ -95,10 +95,10 @@
 
           <div id="updateFields">
           <h2>4. 업데이트 내용</h2>
+          <label>릴리즈 노트에서 불러오기<select id="relSelect"></select></label>
           <label>버전<input id="fVersion" placeholder="v1.8.0" /></label>
           <label>한 줄 요약<input id="fHeadline" placeholder="관리자 페이지가 생겼어요" /></label>
           <label>새 기능 <small>(한 줄에 하나씩, 앞에 이모지를 붙이면 좋아요)</small><textarea id="fFeatures" rows="5"></textarea></label>
-          <button type="button" class="btn ghost small" id="fillLatest">릴리즈 노트에서 불러오기</button>
           </div>
         </form>
 

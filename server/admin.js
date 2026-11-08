@@ -14,24 +14,31 @@ const MAX_FAILS = 5;
 const FAIL_WINDOW = 10 * 60 * 1000;
 const VERSION = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
-// 릴리즈 노트 맨 위 버전의 새 기능 목록 (안내 문구 만들기에서 기본값으로 쓴다)
-function latestRelease() {
+// 릴리즈 노트 전체를 버전별로 나눈다 (안내 문구 만들기에서 골라 쓴다)
+// - 각 버전: 새 기능 항목, 그 밖의 항목(개선 · 고침 등)
+// - 항목은 맨 앞 줄의 「- **제목**: 설명」 또는 「- 문장」만 쓰고, 들여쓴 하위 항목은 건너뛴다
+function releaseNotes() {
   try {
     const md = fs.readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
-    const start = md.indexOf('\n## v');
-    if (start < 0) return null;
-    const end = md.indexOf('\n## v', start + 5);
-    const sec = md.slice(start + 1, end < 0 ? undefined : end);
-    const version = (sec.match(/^## (v[\d.]+)/) || [])[1] || '';
-    const feats = [];
-    let inNew = false;
-    for (const line of sec.split('\n')) {
-      if (line.startsWith('### ')) inNew = line.includes('새 기능');
-      const m = inNew && line.match(/^- \*\*(.+?)\*\*:?\s*(.*)$/);
-      if (m) feats.push({ title: m[1].trim(), desc: m[2].trim() });
+    const out = [];
+    for (const sec of md.split(/\n(?=## v)/).slice(1)) {
+      const head = sec.match(/^## (v[\d.]+)(?:\s*[—-]\s*([\d-]+))?/);
+      if (!head) continue;
+      const rel = { version: head[1], date: head[2] || '', features: [], others: [] };
+      let bucket = rel.others;
+      for (const line of sec.split('\n').slice(1)) {
+        if (line.startsWith('### ')) { bucket = line.includes('새 기능') ? rel.features : rel.others; continue; }
+        if (line.startsWith('---')) break;
+        if (!line.startsWith('- ')) continue;
+        const m = line.match(/^- \*\*(.+?)\*\*:\s*(.*)$/); // 「**제목**: 설명」 형식만 제목 · 설명으로 나눈다
+        const clean = (t) => t.replace(/\*\*/g, '').replace(/`/g, '').trim();
+        if (m) bucket.push({ title: clean(m[1]), desc: clean(m[2]) });
+        else bucket.push({ title: clean(line.slice(2)), desc: '' });
+      }
+      out.push(rel);
     }
-    return { version, features: feats };
-  } catch { return null; }
+    return out;
+  } catch { return []; }
 }
 
 export const adminOn = () => PASSWORD.length >= 8;
@@ -115,7 +122,7 @@ export async function handleAdmin(req, res, getStats) {
     if (!validToken(auth.replace(/^Bearer\s+/i, ''))) { send(res, 401, { error: '다시 로그인해 주세요.' }); return true; }
 
     if (route === 'stats' && req.method === 'GET') {
-      send(res, 200, { version: VERSION, notion: guestbook.notionOn(), latest: latestRelease(), ...getStats() });
+      send(res, 200, { version: VERSION, notion: guestbook.notionOn(), releases: releaseNotes(), ...getStats() });
       return true;
     }
     if (route === 'analytics' && req.method === 'GET') {
