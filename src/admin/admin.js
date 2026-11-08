@@ -196,7 +196,8 @@ async function loadStats() {
   statsState.loaded = true;
   $('statsBody').innerHTML = '<div class="empty">GA4에서 불러오는 중…</div>';
   try {
-    const d = await api(`analytics?range=${statsState.range}`);
+    const [d, st] = await Promise.all([api(`analytics?range=${statsState.range}`), api('stats').catch(() => null)]);
+    if (st) { stats = st; renderStats(); }
     renderStats$(d);
   } catch (e) {
     if (e.message !== 'unauthorized') $('statsBody').innerHTML = `<div class="card err">불러오지 못했어요: ${esc(e.message)}</div>`;
@@ -220,8 +221,11 @@ function setupGuide(st) {
   </div>`;
 }
 
-function kpi(label, value, sub = '') {
-  return `<div class="kpi-tile"><span>${label}</span><b>${value}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+// 지표 이름 옆 ? 아이콘 (마우스를 올리거나 누르면 설명)
+const help = (text) => `<button type="button" class="help" aria-label="설명 보기" data-help="${esc(text)}">?</button>`;
+
+function kpi(label, value, sub = '', tip = '') {
+  return `<div class="kpi-tile"><span>${label}${tip ? help(tip) : ''}</span><b>${value}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
 }
 
 // 한 가지 색의 가로 막대 목록 (값 순서대로)
@@ -270,53 +274,83 @@ function renderStats$(d) {
   $('statsBody').innerHTML = `
     <div class="stats-grid">
       <div class="card live">
-        <h2><span class="pulse"></span>지금 (최근 30분)</h2>
-        <div class="live-num">${rt ? num(rt.users) : '–'}<small>명</small></div>
-        <p class="hint">게임 서버 기준 지금 접속 ${num(stats?.players)}명</p>
+        <h2><span class="pulse"></span>지금</h2>
+        <div class="live-two">
+          <div><div class="live-num">${num(stats?.players)}<small>명</small></div><p class="hint">접속 중${help('지금 이 순간 게임에 접속해 있는 사람 수예요. 게임 서버가 직접 세서 광고 차단 앱을 쓰는 사람도 빠지지 않아요. 1분마다 새로 고쳐요.')}</p></div>
+          <div><div class="live-num sub">${rt ? num(rt.users) : '–'}<small>명</small></div><p class="hint">최근 30분${help('최근 30분 동안 한 번이라도 다녀간 사람 수예요 (GA4 기준). 나간 사람도 30분 동안은 숫자에 남아 있어요. 광고 차단 앱을 쓰는 사람은 빠질 수 있어요.')}</p></div>
+        </div>
+        <p class="hint" style="margin-top:12px">최근 30분 게임 행동${help('사람 수가 아니라 횟수예요. 한 사람이 장작을 10번 패면 10으로 세요. 입장도 새로 고침이나 재접속을 하면 다시 세요.')}</p>
         ${rt?.events?.length ? barList(rt.events.slice(0, 5).map((e) => ({ label: EVENT_LABEL[e.name] || e.name, value: e.count }))) : '<p class="hint">최근 30분 동안 게임 행동이 없어요.</p>'}
       </div>
       <div class="kpis">
-        ${kpi('방문자', `${num(s.users)}명`, `처음 온 사람 ${num(s.newUsers)}명`)}
-        ${kpi('입장률', pct(joinRate), `방문자 중 이름을 넣고 입장한 비율`)}
-        ${kpi('1인당 머문 시간', dur(s.avgEngagementSec), '화면을 보고 있던 시간 평균')}
-        ${kpi('모닥불에 앉아 있던 시간', r.sitting ? dur(r.sitting.avgSeconds) : '–', r.sitting ? `한 번 앉을 때 평균 · ${num(r.sitting.count)}번` : '데이터가 쌓이면 보여요')}
-        ${kpi('1인칭으로 보낸 시간', r.viewShare ? pct(r.viewShare.fp) : '–', r.viewShare ? `머문 시간 ${num(r.viewShare.minutes)}분 중` : '데이터가 쌓이면 보여요')}
-        ${kpi('방문', `${num(s.sessions)}번`, `몰입한 방문 ${pct(s.engagedRate)}`)}
+        ${kpi('방문자', `${num(s.users)}명`, `처음 온 사람 ${num(s.newUsers)}명`, '고른 기간 동안 게임 페이지를 연 사람 수예요. 같은 기기에서 여러 번 와도 1명으로 세요.')}
+        ${kpi('입장률', pct(joinRate), '', '방문자 중 이름을 넣고 실제로 캠핑장에 들어온 사람의 비율이에요. 낮으면 첫 화면에서 많이 떠난다는 뜻이에요.')}
+        ${kpi('1인당 머문 시간', dur(s.avgEngagementSec), '', '방문자 한 명이 게임 화면을 실제로 보고 있던 시간의 평균이에요. 다른 탭이나 앱으로 가 있던 시간은 빼요. 광고 수익과 가장 가까운 지표예요.')}
+        ${kpi('앉아 있던 시간', r.sitting ? dur(r.sitting.avgSeconds) : '–', r.sitting ? `${num(r.sitting.count)}번 앉음` : '', '모닥불에 한 번 앉았다 일어날 때까지의 평균 시간이에요. 불멍에 얼마나 빠져드는지 보여 줘요. 데이터가 쌓이면 보여요.')}
+        ${kpi('1인칭 비율', r.viewShare ? pct(r.viewShare.fp) : '–', r.viewShare ? `머문 시간 ${num(r.viewShare.minutes)}분 중` : '', '게임 안에서 보낸 시간 중 1인칭 시점으로 본 시간의 비율이에요. 1분마다 남기는 기록으로 계산해요. 데이터가 쌓이면 보여요.')}
+        ${kpi('방문', `${num(s.sessions)}번`, `몰입 ${pct(s.engagedRate)}`, '들어왔다 나가기까지를 한 번의 방문으로 세요. 몰입은 10초 넘게 머물렀거나 화면을 2번 이상 본 방문의 비율이에요 (GA4 기준).')}
       </div>
     </div>
 
     <div class="card">
-      <h2>최근 14일 방문자</h2>
+      <h2>최근 14일 방문자${help('날짜별 방문자 수예요. 점에 마우스를 올리면 그날 처음 온 사람과 입장 횟수도 보여요. 오늘 숫자는 GA4가 처리하는 동안 늦게 채워져요.')}</h2>
       ${trendChart(r.trend)}
     </div>
 
     <div class="stats-2">
       <div class="card">
-        <h2>게임 행동 <small>${RANGE_LABEL[r.range]}</small></h2>
+        <h2>게임 행동 <small>${RANGE_LABEL[r.range]}</small>${help('고른 기간 동안 각 행동을 한 횟수(굵은 숫자)와 그 행동을 한 사람 수(옆 작은 숫자)예요.')}</h2>
         ${barList(r.events.filter((e) => e.count).map((e) => ({ label: EVENT_LABEL[e.name] || e.name, value: e.count, users: e.users })), { sub: (x) => `${num(x.users)}명` })}
       </div>
       <div class="card">
-        <h2>유입 경로 <small>source / medium</small></h2>
-        ${barList(r.sources.map((x) => ({ label: x.source === '(direct) / (none)' ? '직접 방문 (링크 없이)' : x.source, value: x.sessions, joins: x.joins })), { valueFmt: (v) => `${num(v)}번`, sub: (x) => `입장 ${num(x.joins)}` })}
+        <h2>유입 경로${help('어디서 들어왔는지예요 (utm_source / utm_medium). 굵은 숫자는 방문 수, 옆 숫자는 그 경로로 와서 입장한 횟수예요. 「직접 방문」은 UTM 없이 주소를 바로 열었거나 북마크로 온 경우예요.')}</h2>
+        ${barList(r.sources.map((x) => ({ label: x.source === '(direct) / (none)' ? '직접 방문' : x.source, value: x.sessions, joins: x.joins })), { valueFmt: (v) => `${num(v)}번`, sub: (x) => `입장 ${num(x.joins)}` })}
       </div>
     </div>
 
     <div class="stats-2">
       <div class="card">
-        <h2>캠페인 <small>utm_campaign</small></h2>
+        <h2>캠페인${help('공지나 게시물별 효과예요 (utm_campaign). 예: v1.7.0은 그 버전 업데이트 공지, intro는 첫 소개 문구로 들어온 방문이에요. 굵은 숫자는 방문 수, 옆 숫자는 사람 수예요.')}</h2>
         ${barList(r.campaigns.map((c) => ({ label: c.name, value: c.sessions, users: c.users })), { valueFmt: (v) => `${num(v)}번`, sub: (x) => `${num(x.users)}명` })}
       </div>
       <div class="card">
-        <h2>기기 · 재방문</h2>
+        <h2>기기 · 재방문${help('어떤 기기로 왔는지와, 처음 온 사람인지 전에 와 본 사람인지예요. 다시 온 사람이 많을수록 단골이 늘고 있다는 뜻이에요.')}</h2>
         ${barList(r.devices.map((x) => ({ label: DEVICE_LABEL[x.name] || x.name, value: x.users })), { valueFmt: (v) => `${num(v)}명` })}
         ${barList(r.newVsReturning.map((x) => ({ label: NVR_LABEL[x.name] || x.name, value: x.users })), { valueFmt: (v) => `${num(v)}명` })}
       </div>
     </div>
-    ${!s.sessions ? '<p class="hint">⏳ GA4는 기간 보고서를 만드는 데 몇 시간에서 최대 하루 이틀 걸려요. 「지금(최근 30분)」 숫자는 바로 반영돼요.</p>' : ''}
-    ${r.customError ? `<p class="hint">일부 맞춤 지표(앉아 있던 시간 · 1인칭 비율)를 아직 불러올 수 없어요. GA4 맞춤 정의를 등록한 지 하루쯤 지나면 보여요.</p>` : ''}
+    ${!s.sessions ? '<p class="hint">⏳ GA4는 기간 보고서를 만드는 데 몇 시간에서 하루쯤 걸려요. 「지금」 숫자는 바로 반영돼요.</p>' : ''}
     ${d.error ? `<p class="hint">실시간 조회 실패: ${esc(d.error)}</p>` : ''}
   `;
 }
+
+// ? 도움말 툴팁 (마우스 올리기 · 키보드 포커스 · 터치로 누르기)
+const helpTip = document.createElement('div');
+helpTip.className = 'help-tip';
+helpTip.hidden = true;
+document.body.appendChild(helpTip);
+let helpFor = null;
+function showHelp(btn) {
+  helpFor = btn;
+  helpTip.textContent = btn.dataset.help;
+  helpTip.hidden = false;
+  const b = btn.getBoundingClientRect();
+  const w = helpTip.offsetWidth, h = helpTip.offsetHeight;
+  const left = Math.min(innerWidth - w - 12, Math.max(12, b.left + b.width / 2 - w / 2));
+  const above = b.top - h - 8;
+  helpTip.style.left = `${left}px`;
+  helpTip.style.top = `${above > 8 ? above : b.bottom + 8}px`;
+}
+function hideHelp() { helpFor = null; helpTip.hidden = true; }
+document.addEventListener('mouseover', (e) => { const b = e.target.closest('.help'); if (b) showHelp(b); });
+document.addEventListener('mouseout', (e) => { if (e.target.closest('.help') && !e.relatedTarget?.closest?.('.help')) hideHelp(); });
+document.addEventListener('focusin', (e) => { const b = e.target.closest('.help'); if (b) showHelp(b); });
+document.addEventListener('focusout', (e) => { if (e.target.closest('.help')) hideHelp(); });
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('.help');
+  if (b) { e.preventDefault(); helpFor === b && !helpTip.hidden ? hideHelp() : showHelp(b); } else hideHelp();
+});
+addEventListener('scroll', hideHelp, { passive: true });
 
 // 선 그래프 툴팁
 $('statsBody').addEventListener('mousemove', (e) => {

@@ -223,3 +223,22 @@ label input, label textarea { margin-top: 4px; font-weight: 400; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 420px) { .kpi-tile b { font-size: 21px; } }
+.live-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.live-two .hint { margin: 0; line-height: 1.45; }
+.live-num.sub { color: var(--sub); }
+
+/* ? 도움말 */
+.help {
+  appearance: none; border: 0; cursor: help;
+  display: inline-grid; place-items: center; vertical-align: 1px;
+  width: 16px; height: 16px; margin-left: 5px; padding: 0;
+  border-radius: 50%; background: var(--line); color: var(--sub);
+  font: 800 11px/1 -apple-system, sans-serif;
+}
+.help:hover, .help:focus-visible { background: var(--fire); color: #fff; outline: none; }
+.help-tip {
+  position: fixed; z-index: 30; max-width: min(280px, calc(100vw - 24px));
+  background: var(--night); color: #fff3dc; font-size: 13px; line-height: 1.5;
+  padding: 9px 12px; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.35); pointer-events: none;
+}
+.kpi-tile span { display: flex; align-items: center; }
