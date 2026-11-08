@@ -17,6 +17,7 @@ import { Guide, pickTarget } from './guide.js';
 import { Preview } from './preview.js';
 import { isTouch, TouchControls } from './touch.js';
 import { initPWA, initFullscreen } from './pwa.js';
+import { initAnalytics, track, startHeartbeat } from './analytics.js';
 import { Music } from './music.js';
 import { Monitor } from './monitor.js';
 import { Woodcut } from './woodcut.js';
@@ -232,10 +233,12 @@ function setView(fp) {
   $('viewBtn').textContent = fp ? '🎥' : '👁️';
   $('viewBtn').title = fp ? '3인칭으로 보기 (V)' : '1인칭으로 보기 (V)';
   document.body.classList.toggle('fp', fp);
+  if (me) track('view_toggle', { view: fp ? 'fp' : 'tp' });
   if (me) UI.toast(fp ? '👁️ 1인칭 시점 · 다시 누르면 3인칭으로 돌아가요' : '🎥 3인칭 시점', 2200);
 }
 $('viewBtn').onclick = (e) => { e.currentTarget.blur(); setView(!view.fp); };
 initPWA();
+initAnalytics();
 $('viewBtn').textContent = view.fp ? '🎥' : '👁️';
 document.body.classList.toggle('fp', view.fp);
 initFullscreen();
@@ -342,6 +345,8 @@ net.on('welcome', (m) => {
   preview.dispose();
   $('hud').classList.remove('hidden');
   const firstTime = !store.get('helpSeen', false);
+  track('game_join', { device: isTouch ? 'mobile' : 'pc', view: view.fp ? 'fp' : 'tp', returning: !firstTime });
+  if (!state.hbStarted) { state.hbStarted = true; startHeartbeat(() => ({ sitting: !!state.sitting, view: view.fp ? 'fp' : 'tp' })); }
   if (firstTime) {
     $('help').classList.remove('hidden');
     store.set('helpSeen', true);
@@ -397,6 +402,7 @@ net.on('inv', (m) => {
   me?.char.setCarry(m.wood);
   refreshInventory();
   if (m.gained && me) {
+    track('wood_chop', { wood: m.wood });
     floatText('+1 🪵', me.char.root.position.clone().setY(2.3));
     sound.wood();
     if (m.wood === CFG.WOOD_PER_FIRE && m.canPowder) UI.toast('장작 5개 완성! 서쪽 루미에게 가 보세요 ✨');
@@ -445,7 +451,8 @@ net.on('pit', (m) => {
 
 net.on('sat', (m) => {
   if (!me) return;
-  state.sitting = { pit: m.pit, idx: m.idx };
+  state.sitting = { pit: m.pit, idx: m.idx, at: performance.now() };
+  track('fire_sit', { pit: m.pit });
   me.x = m.x; me.z = m.z; me.ry = m.ry;
   // 앉으면 모닥불과 옆 TV·LP가 함께 보이도록 카메라를 TV 반대편에서 비스듬히 바라보게
   const mon = monitors.get(m.pit);
@@ -639,7 +646,7 @@ net.on('searchFail', (m) => {
   if (!m.exhausted) { $('musicSearch').disabled = false; $('musicQ').disabled = false; }
   showMusicErr(m.text);
 });
-net.on('musicOk', () => { closeMusicModal(); $('musicQ').value = ''; music$.busy = false; });
+net.on('musicOk', () => { track('music_play'); closeMusicModal(); $('musicQ').value = ''; music$.busy = false; });
 net.on('musicFail', (m) => {
   music$.busy = false;
   document.querySelectorAll('#musicList .song.loading').forEach((b) => b.classList.remove('loading'));
@@ -736,6 +743,7 @@ net.on('gbWrote', (m) => {
   gbStand.ping();
   sound.pop?.();
   UI.toast('📖 방명록을 남겼어요! 다녀가 줘서 고마워요');
+  track('guestbook_write', { length: (m.entry.text || '').length });
   net.send({ t: 'chat', text: '📖 방명록에 한마디 남겼어요' });
 });
 net.on('gbFail', (m) => {
@@ -887,6 +895,7 @@ function interact(it) {
     else if (p.state === 'stacked') {
       me.char.play('light', { onImpact: () => {} });
       net.send({ t: 'light', pit: p.id });
+      track('fire_light', { pit: p.id });
     } else if (p.state === 'lit') net.send({ t: 'sit', pit: p.id });
   } else if (it.type === 'seated') standUp();
 }
@@ -927,6 +936,7 @@ function standUp() {
   if (!state.sitting || !me) return;
   const pit = pits.get(state.sitting.pit);
   net.send({ t: 'stand' });
+  track('fire_stand', { pit: state.sitting.pit, seconds: Math.round((performance.now() - (state.sitting.at || performance.now())) / 1000) });
   state.sitting = null;
   me.char.setAnim('idle');
   if (pit) {
@@ -945,6 +955,7 @@ function throwPowder(i) {
   if (!state.inv.powders[i]) return;
   if (me.char.busy()) return;
   net.send({ t: 'throw', idx: i });
+  track('powder_use', { powder: state.inv.powders[i].effect });
 }
 
 // ---------------------------------------------------------------- 입력
@@ -1331,7 +1342,7 @@ let gazing = false, lastWish = -1e9, stargazeHinted = false;
 function updateStargaze(t, dt) {
   const shot = world.sky.update(t, dt, camera, cam.gaze || 0);
   const on = (cam.gaze || 0) > 0.45;
-  if (on !== gazing) { gazing = on; document.body.classList.toggle('stargaze', on); }
+  if (on !== gazing) { gazing = on; document.body.classList.toggle('stargaze', on); if (on) track('stargaze', { view: view.fp ? 'fp' : 'tp' }); }
   if (shot && t - lastWish > 40) {
     lastWish = t;
     UI.toast(WISHES[Math.floor(Math.random() * WISHES.length)], 3500);
