@@ -738,23 +738,18 @@ body:not(.touch) .join-card { scrollbar-width: thin; }
 /* ---------- 모바일: 오른쪽 메뉴(독) 접기 · 펼치기 ---------- */
 .dock-toggle { position: relative; }
 body.touch #topright .dock-toggle { font-size: 17px; font-weight: 800; }
-/* 접힌 상태: ☰ 버튼 하나 (오른쪽 위에 접속자 수 배지) */
-body.touch:not(.dock-open) #topright { padding: 5px; gap: 0; }
-body.touch:not(.dock-open) #topright > :not(.dock-toggle) { display: none; }
-body.touch .dock-toggle::after {
-  content: attr(data-n); position: absolute; top: -5px; right: -6px; min-width: 17px; height: 17px; padding: 0 4px; box-sizing: border-box;
-  border-radius: 999px; background: #5fd36b; color: #fff; font-size: 10.5px; font-weight: 800; line-height: 17px; text-align: center;
-  box-shadow: 0 0 0 2px rgba(255, 248, 232, .95);
-}
-body.touch.dock-open .dock-toggle::after { display: none; }
+/* 접힌 상태: ☰ 버튼과 그 아래 「● N명」(접속자 수)만. 알림 배지처럼 보이지 않게 펼친 상태와 같은 모양으로 */
+body.touch:not(.dock-open) #topright { padding: 5px 4px 6px; gap: 3px; }
+body.touch:not(.dock-open) #topright > :not(.dock-toggle):not(.online-dot):not(#online) { display: none; }
+body.touch #topright #online::after { content: '명'; font-size: 10px; margin-left: 1px; color: var(--brown-2); }
 body.touch.dock-open #topright .dock-toggle { background: #ffd9a6; }
 /* 지도는 접힌 메뉴 바로 아래(세로 화면) · 왼쪽(가로 화면)에 */
 @media (orientation: portrait) {
-  body.touch:not(.dock-open) #mapPanel { top: calc(max(10px, env(safe-area-inset-top)) + 56px); }
+  body.touch:not(.dock-open) #mapPanel { top: calc(max(10px, env(safe-area-inset-top)) + 96px); }
 }
 body.touch:not(.dock-open) #mapPanel { right: max(8px, env(safe-area-inset-right)); }
 @media (orientation: landscape) {
-  body.touch:not(.dock-open) #mapPanel { top: calc(max(10px, env(safe-area-inset-top)) + 56px); }
+  body.touch:not(.dock-open) #mapPanel { top: calc(max(10px, env(safe-area-inset-top)) + 96px); }
 }
 
 /* ---------- 세로 화면: 남은 장작 · 알림을 상태창 바로 아래에 (상태창 높이가 바뀌어도 겹치지 않게) ---------- */
