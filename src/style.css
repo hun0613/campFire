@@ -908,3 +908,15 @@ body:not(.touch).seated #fireTimer {
 /* 불멍 몰입: 장소 팻말(방명록 · 게시판 · LP) · 이름표 · NPC 표시도 함께 흐리게. 말풍선(대화)은 그대로 */
 .gb-tag, .lp-tag, .nametag, .npc-mark { transition: opacity .25s ease; }
 body.calm .gb-tag:not(.near), body.calm .lp-tag, body.calm .nametag, body.calm .npc-mark { opacity: .06 !important; transition: opacity 1.8s ease; }
+
+/* 시점 버튼: 눈에 튀지 않게 작은 반투명 아이콘 (채팅 버튼과 같은 결) */
+body .seat-view-btn {
+  width: 40px; height: 40px; padding: 0; border-radius: 50%; justify-content: center; font-size: 17px; line-height: 1;
+  background: rgba(255, 248, 232, .26); border: 2px solid rgba(255, 248, 232, .45); box-shadow: 0 4px 14px rgba(0, 0, 0, .22);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); color: #fff;
+}
+body .seat-view-btn:hover { background: rgba(255, 248, 232, .45); }
+/* 모바일: 일어나기 버튼 바로 왼쪽 */
+body.touch.seated #seatViewBtn { right: calc(116px + env(safe-area-inset-right)); bottom: calc(48px + env(safe-area-inset-bottom)); }
+@media (orientation: portrait) { body.touch.seated #seatViewBtn { bottom: calc(48px + env(safe-area-inset-bottom)); } }
+@media (max-height: 500px) { body.touch.seated #seatViewBtn { bottom: calc(48px + env(safe-area-inset-bottom)); } }

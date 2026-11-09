@@ -263,8 +263,10 @@ function setView(fp, { silent = false } = {}) {
   cam.look = state.sitting ? -0.14 : 0;
   fpPos.set(0, 0, 0);
   // 앉아 있을 때 보이는 시점 버튼: 지금과 반대 시점을 알려 준다
-  $('seatViewBtn').innerHTML = fp ? '🎥 3인칭으로 보기' : '👁️ 1인칭으로 보기';
-  if (!isTouch) $('seatViewBtn').innerHTML += ' <kbd>V</kbd>';
+  // 작은 아이콘 버튼: 누르면 바뀔 시점을 보여 준다 (설명은 툴팁)
+  $('seatViewBtn').textContent = fp ? '🎥' : '👁️';
+  $('seatViewBtn').title = `${fp ? '3인칭' : '1인칭'}으로 보기${isTouch ? '' : ' (V)'}`;
+  $('seatViewBtn').setAttribute('aria-label', $('seatViewBtn').title);
   document.body.classList.toggle('fp', fp);
   if (changed && !silent && me) {
     track('view_toggle', { view: fp ? 'fp' : 'tp' });
@@ -290,7 +292,7 @@ $('shareBtn').onclick = async (e) => {
 };
 initPWA();
 initAnalytics();
-$('seatViewBtn').innerHTML = `👁️ 1인칭으로 보기${isTouch ? '' : ' <kbd>V</kbd>'}`; // 처음엔 3인칭 (setView는 카메라 준비 뒤에 쓴다)
+$('seatViewBtn').textContent = '👁️'; $('seatViewBtn').title = `1인칭으로 보기${isTouch ? '' : ' (V)'}`; // 처음엔 3인칭 (setView는 카메라 준비 뒤에 쓴다)
 initFullscreen();
 $('mapToggle').onclick = () => document.body.classList.toggle('map-open');
 $('status').addEventListener('click', () => { if (isTouch) document.body.classList.toggle('quest-open'); });
@@ -1770,7 +1772,7 @@ function updateCalm(now) {
   if (calm !== document.body.classList.contains('calm')) document.body.classList.toggle('calm', calm);
 }
 addEventListener('pointerdown', (e) => {
-  if (!document.body.classList.contains('calm')) return;
+  if (!document.body.classList.contains('calm')) { swallowClick = false; return; } // 깨운 뒤 다음 누름은 그대로 동작
   document.body.classList.remove('calm');
   if (e.target.closest?.('button, .powder, #status, #topright, #mapPanel')) {
     e.stopPropagation(); e.preventDefault();
