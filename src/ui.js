@@ -1,8 +1,15 @@
-import { CFG } from '../shared/config.js';
+import { CFG, LEGEND_POWDERS } from '../shared/config.js';
 
 const $ = (id) => document.getElementById(id);
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// 가루 병 색: ✦ 특별한 가루는 저마다 정해진 무늬
+function powderBg(p) {
+  if (p.legend && LEGEND_POWDERS[p.effect]) return LEGEND_POWDERS[p.effect].bg;
+  if (p.effect === 'rainbow') return 'conic-gradient(#ff5f6d, #ffc371, #5dff8f, #55c8ff, #b26bff, #ff5f6d)';
+  return `radial-gradient(circle at 35% 30%, #fff 0%, ${p.color} 45%, ${p.color} 100%)`;
+}
 
 export const UI = {
   toast(text, ms = 3300) {
@@ -30,11 +37,9 @@ export const UI = {
     const prevIds = new Set([...box.children].map((c) => c.dataset.id));
     box.replaceChildren(...inv.powders.map((p, i) => {
       const el = document.createElement('div');
-      el.className = `powder${canThrow ? '' : ' disabled'}${prevIds.has(p.id) ? '' : ' new'}`;
+      el.className = `powder${canThrow ? '' : ' disabled'}${prevIds.has(p.id) ? '' : ' new'}${p.legend ? ' legend' : ''}`;
       el.dataset.id = p.id;
-      const bg = p.effect === 'rainbow'
-        ? 'conic-gradient(#ff5f6d, #ffc371, #5dff8f, #55c8ff, #b26bff, #ff5f6d)'
-        : `radial-gradient(circle at 35% 30%, #fff 0%, ${p.color} 45%, ${p.color} 100%)`;
+      const bg = powderBg(p);
       el.innerHTML = `<span class="key">${i + 1}</span><span class="bag" style="background:${bg};box-shadow:0 0 12px ${p.color}"></span><span class="tip">${esc(p.name)}</span>`;
       el.addEventListener('click', () => onThrow(i));
       return el;
@@ -127,7 +132,6 @@ export const UI = {
   },
 
   powderChip(p) {
-    const bg = p.effect === 'rainbow' ? 'conic-gradient(#ff5f6d,#ffc371,#5dff8f,#55c8ff,#b26bff)' : p.color;
-    return `<span class="pw"><i style="background:${bg}"></i>${esc(p.name)}</span>`;
+    return `<span class="pw${p.legend ? ' legend' : ''}"><i style="background:${powderBg(p)}"></i>${esc(p.name)}</span>`;
   },
 };

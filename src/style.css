@@ -662,3 +662,16 @@ body.touch.seated #musicBtn {
 .store-row > span { font-size: 15px; color: var(--brown); }
 .store-row .btn { margin-top: 0; padding: 10px 0; font-size: 17px; }
 .store-card .btn.ghost { margin-top: 18px; }
+
+/* ---------- 루미의 부탁 · ✦ 특별한 가루 ---------- */
+.q-lumi { position: relative; margin-top: 6px; padding: 6px 0 8px; border-top: 2px dashed #ead5ad; font-size: 13.5px; }
+.q-lumi b { color: #8a5cd6; font-weight: normal; }
+.q-lumi span { float: right; margin-left: 8px; color: var(--brown-2); font-variant-numeric: tabular-nums; }
+.q-lumi i { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; border-radius: 4px; background: linear-gradient(90deg, #b38cff var(--p), #eadcf8 var(--p)); }
+.q-lumi.done span { color: #8a5cd6; }
+.q-lumi.done { animation: lumiDone 1.6s ease-in-out infinite; }
+@keyframes lumiDone { 50% { color: #8a5cd6; } }
+body.touch .q-lumi { font-size: 12px; }
+.powder.legend { border-color: #ffd36b; box-shadow: 0 0 0 2px rgba(255, 211, 107, .35), 0 0 14px rgba(255, 200, 90, .55); }
+.powder.legend::after { content: '✦'; position: absolute; top: -7px; right: -5px; font-size: 13px; color: #ffcf4a; text-shadow: 0 0 6px #fff3b0; }
+.dtext .pw.legend { background: linear-gradient(90deg, #fff6d8, #fde9ff); box-shadow: 0 0 0 2px #ffd36b; }

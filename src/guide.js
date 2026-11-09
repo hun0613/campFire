@@ -46,7 +46,7 @@ export class Guide {
   constructor(scene) {
     this.beacons = {
       wood: makeBeacon(scene, { x: WOODYARD.x, z: WOODYARD.z, color: '#ffa040', icon: '🪓', title: '장작 패는 곳', sub: '동쪽 장작 마당 · 통나무 앞에서 E' }),
-      npc: makeBeacon(scene, { x: NPC.x + NPC.front.x, z: NPC.z + NPC.front.z, color: '#b38cff', icon: '✨', title: '루미의 가루 공방', sub: '장작 패는 곳 길 건너 · 장작 5개 → 마법 가루' }),
+      npc: makeBeacon(scene, { x: NPC.x + NPC.front.x, z: NPC.z + NPC.front.z, color: '#b38cff', icon: '✨', title: '루미의 가루 공방', sub: '장작 패는 곳 길 건너 · 마법 가루 · 루미의 부탁' }),
       keeper: makeBeacon(scene, { x: KEEPER.x, z: KEEPER.z + 1.6, color: '#8fc46a', icon: '📦', title: '보리의 장작 창고', sub: '장작 패는 곳 북서쪽 · 장작 맡기기 · 찾기' }),
     };
 
@@ -174,13 +174,15 @@ export function pickTarget({ me, inv, sitting, pitList, myId, CFG }) {
   }, null)?.p;
   const mine = pitList.find((p) => p.owner === myId && p.state === 'stacked');
   if (mine) return { x: mine.pos.x, z: mine.pos.z, kind: 'pit', label: '쌓아둔 장작' };
-  if (inv.wood >= W && inv.canPowder && inv.powders.length < CFG.MAX_POWDERS) return { x: NPC.x + NPC.front.x, z: NPC.z + NPC.front.z, kind: 'npc', label: '루미' };
+  const lumi = { x: NPC.x + NPC.front.x, z: NPC.z + NPC.front.z, kind: 'npc', label: '루미' };
+  if (inv.quest?.done) return lumi; // 루미의 부탁을 마쳤으면 선물 받으러
   // 손이 가득 차면 창고로 (창고도 가득이면 화로로)
   if (inv.wood >= CFG.MAX_WOOD && (inv.stored || 0) < CFG.MAX_STORED) return { x: KEEPER.x, z: KEEPER.z + 1.6, kind: 'keeper', label: '보리의 장작 창고' };
   if (inv.wood >= W) {
     const p = near(pitList.filter((q) => q.state === 'empty'));
     if (p) return { x: p.pos.x, z: p.pos.z, kind: 'pit', label: '빈 화로' };
   }
+  if (!inv.powders.length) return lumi; // 가루가 없으면 루미에게 (장작 없이 3개까지 채워 준다)
   if (inv.powders.length) {
     const p = near(pitList.filter((q) => q.state === 'lit' && q.freeSeats() > 0));
     if (p) return { x: p.pos.x, z: p.pos.z, kind: 'pit', label: '타오르는 모닥불' };

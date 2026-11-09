@@ -1,12 +1,12 @@
 // 서버와 클라이언트가 함께 쓰는 게임 설정 / 맵 레이아웃
 
 export const CFG = {
-  WOOD_PER_FIRE: 5,        // 모닥불 하나에 필요한 장작 수 (= 루미에게 가루를 받기 위한 장작 수)
+  WOOD_PER_FIRE: 5,        // 모닥불 하나에 필요한 장작 수
   CHOPS_PER_WOOD: 3,       // 도끼질 몇 번에 장작 1개
   MAX_WOOD: 30,            // 손에 들 수 있는 장작 수 (패는 횟수에는 제한이 없고, 가득 차면 창고에 맡긴다)
   MAX_STORED: 300,         // 장작 창고에 맡길 수 있는 수 (기기마다 하나)
   FIRE_DURATION: 600_000,  // 모닥불 지속 시간 (ms)
-  POWDERS_PER_VISIT: 3,    // 한 번에 받는 가루 수
+  BASE_POWDERS: 3,         // 루미가 장작 없이 늘 채워 주는 기본 가루 수 (가방에 이보다 적으면 여기까지 채운다)
   MAX_POWDERS: 9,
   SEATS_PER_PIT: 4,
   SEAT_RADIUS: 2.4,
@@ -100,6 +100,35 @@ export function randomPowder() {
     id: Math.random().toString(36).slice(2, 10),
     color: c.hex,
     effect: e.id,
-    name: e.id === 'rainbow' ? '오색 무지개 가루' : `${c.name} ${e.name} 가루`,
+    name: e.id === 'rainbow' ? '오색 무지개 가루' : e.name.endsWith('가루') ? `${c.name} ${e.name}` : `${c.name} ${e.name} 가루`, // 별가루 → 「황금빛 별가루」
   };
+}
+
+// ---------------------------------------------------------------- 루미의 부탁 (퀘스트)
+// 하나씩 차례로. 마치고 루미에게 가면 ✦ 특별한 가루를 받고 다음 부탁을 듣는다. 끝까지 하면 처음부터 다시
+// type: 서버가 세는 행동 / goal: 목표 수 / reward: 받는 특별한 가루
+export const QUESTS = [
+  { id: 'light', type: 'light', goal: 1, title: '첫 모닥불', desc: '글램핑장 앞 화로에 장작을 쌓고 불을 붙여 줘', reward: 'aurora' },
+  { id: 'sit3', type: 'sitSec', goal: 180, title: '3분 불멍', desc: '타오르는 모닥불에 앉아 3분 동안 불멍해 봐', reward: 'petals' },
+  { id: 'chop20', type: 'wood', goal: 20, title: '장작 20개', desc: '장작 패는 곳에서 장작을 20개 패 와 줘', reward: 'fireworks' },
+  { id: 'sky', type: 'stargaze', goal: 1, title: '밤하늘 올려다보기', desc: '화면을 위로 끌어 올려 별이 가득한 밤하늘을 올려다봐', reward: 'galaxy' },
+  { id: 'store', type: 'store', goal: 10, title: '장작 맡기기', desc: '창고지기 보리에게 장작을 10개 맡겨 봐', reward: 'butterflies' },
+  { id: 'music', type: 'music', goal: 1, title: '모닥불 음악', desc: '모닥불에 앉아 좋아하는 노래를 한 곡 틀어 봐', reward: 'aurora' },
+  { id: 'guestbook', type: 'guestbook', goal: 1, title: '오늘의 한마디', desc: '광장 방명록에 오늘 밤 이야기를 남겨 줘', reward: 'petals' },
+  { id: 'share', type: 'share', goal: 1, title: '친구 초대', desc: '화면 위 💌 버튼으로 친구에게 캠핑장 링크를 보내 봐', reward: 'galaxy' },
+  { id: 'together', type: 'together', goal: 1, title: '함께 불멍', desc: '다른 캠퍼와 같은 모닥불에 나란히 앉아 봐', reward: 'fireworks' },
+  { id: 'sit10', type: 'sitSec', goal: 600, title: '10분 불멍', desc: '모닥불 앞에서 10분 동안 푹 쉬어 봐', reward: 'butterflies' },
+];
+
+// ✦ 특별한 가루: 루미의 부탁을 들어주면 받는다. 기본 가루에 없는 새 효과
+export const LEGEND_POWDERS = {
+  aurora: { name: '✦ 오로라 가루', color: '#5dffc0', bg: 'linear-gradient(160deg, #5dffc0, #55c8ff 50%, #b26bff)' },
+  fireworks: { name: '✦ 불꽃놀이 가루', color: '#ffd447', bg: 'conic-gradient(#ff4058, #ffd447, #5dff8f, #55c8ff, #ff6fb8, #ff4058)' },
+  petals: { name: '✦ 꽃잎 회오리 가루', color: '#ff8fc8', bg: 'radial-gradient(circle at 35% 30%, #fff, #ffc2dd 40%, #ff6fb8)' },
+  galaxy: { name: '✦ 은하수 가루', color: '#8f9bff', bg: 'radial-gradient(circle at 40% 40%, #fff 0%, #b9c4ff 18%, #5b4bd6 55%, #1b1650)' },
+  butterflies: { name: '✦ 나비 떼 가루', color: '#ffb35c', bg: 'linear-gradient(135deg, #ffd447, #ff8f3a 50%, #ff6fb8)' },
+};
+export function legendPowder(effect) {
+  const L = LEGEND_POWDERS[effect];
+  return { id: Math.random().toString(36).slice(2, 10), color: L.color, effect, name: L.name, legend: true };
 }

@@ -24,7 +24,7 @@ import { Woodcut } from './woodcut.js';
 import { GuestbookStand } from './guestbook.js';
 import { NoticeBoard } from './board.js';
 import { LightPool } from './lightpool.js';
-import { CFG, PITS, STUMPS, NPC, KEEPER, BOUNDS, RANGE, LOOKS, GUESTBOOK, BOARD } from '../shared/config.js';
+import { CFG, PITS, STUMPS, NPC, KEEPER, BOUNDS, RANGE, LOOKS, GUESTBOOK, BOARD, QUESTS } from '../shared/config.js';
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -144,7 +144,7 @@ scene.add(keeper.root);
 // ---------------------------------------------------------------- 상태
 const state = {
   myId: null,
-  inv: { wood: 0, stored: 0, chops: 0, powders: [], canPowder: true },
+  inv: { wood: 0, stored: 0, chops: 0, powders: [], quest: null },
   sitting: null,
   clockOffset: 0,
   lastSent: { x: 0, z: 0, ry: 0, anim: '' },
@@ -246,6 +246,22 @@ function setView(fp) {
   if (me) UI.toast(fp ? '👁️ 1인칭 시점 · 다시 누르면 3인칭으로 돌아가요' : '🎥 3인칭 시점', 2200);
 }
 $('viewBtn').onclick = (e) => { e.currentTarget.blur(); setView(!view.fp); };
+// 💌 친구 초대: 휴대폰은 공유 창, PC는 링크 복사. 공유하면 루미의 「친구 초대」 부탁이 채워진다
+$('shareBtn').onclick = async (e) => {
+  e.currentTarget.blur();
+  const url = `${location.origin}/?utm_source=friend&utm_medium=share&utm_campaign=invite`;
+  const text = '🔥 같이 불멍하자! 장작 패고 모닥불 피우고, 별 보면서 쉬는 3D 캠핑장이야';
+  let ok = false;
+  try {
+    if (navigator.share) { await navigator.share({ title: '불멍 캠핑장', text, url }); ok = true; }
+    else { await navigator.clipboard.writeText(`${text}\n${url}`); ok = true; UI.toast('초대 링크를 복사했어요! 친구에게 붙여 넣어 보내 주세요 💌'); }
+  } catch (err) {
+    if (err?.name !== 'AbortError') {
+      try { await navigator.clipboard.writeText(url); ok = true; UI.toast('초대 링크를 복사했어요! 💌'); } catch { UI.toast(`이 주소를 친구에게 보내 주세요: ${location.origin}`, 6000); }
+    }
+  }
+  if (ok) { net.send({ t: 'quest', ev: 'share' }); track('share', { method: navigator.share ? 'share' : 'copy' }); }
+};
 initPWA();
 initAnalytics();
 $('viewBtn').textContent = view.fp ? '🎥' : '👁️';
@@ -407,7 +423,7 @@ net.on('snap', (m) => {
 net.on('inv', (m) => {
   if (m.save) store.set('save', m.save); // 서버가 서명한 백업 (서버가 재시작돼도 장작 복원)
   const prev = state.inv;
-  state.inv = { wood: m.wood, stored: m.stored || 0, chops: m.chops, powders: m.powders, canPowder: m.canPowder };
+  state.inv = { wood: m.wood, stored: m.stored || 0, chops: m.chops, powders: m.powders, quest: m.quest || null };
   if (storeIsOpen()) renderStore(prev);
   if (m.gained && me && state.lastStumpIdx != null) splitLog(state.lastStumpIdx, me.char);
   me?.char.setCarry(m.wood);
@@ -416,7 +432,7 @@ net.on('inv', (m) => {
     track('wood_chop', { wood: m.wood });
     floatText('+1 🪵', me.char.root.position.clone().setY(2.3));
     sound.wood();
-    if (m.wood === CFG.WOOD_PER_FIRE && m.canPowder) UI.toast('장작 5개 완성! 길 건너 루미에게 가 보세요 ✨');
+    if (m.wood === CFG.WOOD_PER_FIRE) UI.toast('장작 5개 완성! 글램핑장 앞 화로에 쌓아 불을 피워 봐요 🔥');
     if (m.wood === CFG.MAX_WOOD) UI.toast(`장작이 ${CFG.MAX_WOOD}개 가득! 북서쪽 창고지기 보리에게 맡기면 더 팰 수 있어요 📦`);
   }
   if (prev.powders.length < m.powders.length) sound.gift();
@@ -474,26 +490,50 @@ net.on('stored', (m) => {
   } else if (STORE_SAY[m.reason]) $('storeSay').textContent = STORE_SAY[m.reason];
 });
 
+// 루미의 부탁 한 줄 설명 (진행 수 포함)
+function questProgress(q) {
+  const def = QUESTS[q.i];
+  if (def.type === 'sitSec') return `${Math.floor(q.p / 60)}분 ${q.p % 60}초 / ${def.goal / 60}분`;
+  return `${q.p} / ${def.goal}`;
+}
+net.on('questDone', (m) => {
+  UI.toast(`✨ 루미의 부탁 「${m.title}」 완료! 길 건너 루미에게 선물을 받으러 가요`, 4500);
+  sound.gift();
+  track('quest_done', { quest: m.title });
+});
+
 net.on('npc', (m) => {
-  let pages;
-  const W = CFG.WOOD_PER_FIRE;
-  if (m.kind === 'give') {
-    pages = [
-      `우와, 장작을 ${m.wood}개나 모아왔구나!\n정말 수고했어 🪵`,
-      `자, 이건 내가 직접 만든 <b>마법 가루</b>야.\n${m.powders.map((p) => UI.powderChip(p)).join('')}`,
-      `<b>글램핑장 앞 화로</b>에 장작을 쌓고 불을 붙여 봐.\n불 앞에 앉아서 가루를 뿌리면… 후후, 깜짝 놀랄걸? ✨`,
-    ];
+  const q = m.quest;
+  const pages = [];
+  const chips = (list) => list.map((p) => UI.powderChip(p)).join('');
+  if (m.first) {
+    pages.push('안녕! 나는 가루 공방의 루미야 ✨\n모닥불 색을 바꾸는 <b>마법 가루</b>를 만들어.');
+    pages.push(`가루는 내가 늘 <b>${CFG.BASE_POWDERS}개까지</b> 채워 줄게.\n장작은 필요 없어! 다 쓰면 또 놀러 오렴.`);
+  }
+  if (m.finished) {
+    pages.push(`와, 「${m.finished.title}」을(를) 해냈구나!\n정말 고마워 💜`);
+    pages.push(`약속한 선물이야. 아주 특별한 가루지!\n${chips([m.reward])}`);
     npc.play('wave');
-  } else if (m.kind === 'need') {
-    pages = [
-      '안녕! 나는 가루 공방의 루미야 ✨',
-      `동쪽 <b>장작 패는 곳</b>에서 장작을 ${W}개 모아 오면\n모닥불 색을 바꾸는 신기한 마법 가루를 줄게!`,
-      `지금 장작은 ${m.wood}개구나. 조금만 더 힘내! 💪`,
-    ];
-  } else if (m.kind === 'used') {
-    pages = ['가루는 벌써 줬잖아~ 😊', '얼른 화로에 장작을 쌓고 불을 붙여 봐.\n그리고 장작을 다시 모아 오면 또 줄게!'];
-  } else {
-    pages = ['어머, 가방이 가루로 꽉 찼네!', '먼저 모닥불에 좀 뿌리고 오렴 🔥'];
+  } else if (m.rewardBlocked) {
+    pages.push('부탁을 들어줬구나! 고마워 💜\n그런데 가방이 꽉 찼네… 모닥불에 가루를 하나 뿌리고 오면 선물을 줄게!');
+  }
+  if (m.basic.length) {
+    pages.push(`자, 마법 가루 ${m.basic.length}개 채워 줬어.\n${chips(m.basic)}`);
+    if (!m.finished) npc.play('wave');
+  }
+  if (!m.rewardBlocked) {
+    const lap = q.lap ? ` <small>(${q.lap + 1}바퀴째)</small>` : '';
+    if (m.first || m.finished) {
+      pages.push(`그리고… 부탁이 하나 있어${lap}\n<b>「${q.title}」</b> — ${q.desc}`);
+      pages.push(`해 주면 <b>${q.rewardName}</b>를 줄게!\n<small>왼쪽 위에서 진행 상황을 볼 수 있어</small>`);
+    } else if (q.done) {
+      pages.push(`「${q.title}」은(는) 벌써 해냈네!`);
+    } else {
+      pages.push(`부탁한 <b>「${q.title}」</b>은(는) 어떻게 돼 가? (${questProgress(q)})\n${q.desc}`);
+    }
+  }
+  if (!m.basic.length && !m.finished && !m.first) {
+    pages.unshift(m.full ? '어머, 가방이 가루로 꽉 찼네! 모닥불에 좀 뿌리고 오렴 🔥' : `가루는 아직 넉넉하네! ${CFG.BASE_POWDERS}개보다 적어지면 또 채워 줄게 ✨`);
   }
   UI.dialog(pages);
 });
@@ -1465,7 +1505,7 @@ let gazing = false, lastWish = -1e9, stargazeHinted = false;
 function updateStargaze(t, dt) {
   const shot = world.sky.update(t, dt, camera, cam.gaze || 0);
   const on = (cam.gaze || 0) > 0.45;
-  if (on !== gazing) { gazing = on; document.body.classList.toggle('stargaze', on); if (on) track('stargaze', { view: view.fp ? 'fp' : 'tp' }); }
+  if (on !== gazing) { gazing = on; document.body.classList.toggle('stargaze', on); if (on) { track('stargaze', { view: view.fp ? 'fp' : 'tp' }); net.send({ t: 'quest', ev: 'stargaze' }); } }
   if (shot && t - lastWish > 40) {
     lastWish = t;
     UI.toast(WISHES[Math.floor(Math.random() * WISHES.length)], 3500);
@@ -1515,7 +1555,7 @@ function updateNpc(dt) {
     if (d < 6 && !npc._greeted) { npc._greeted = true; npc.play('wave'); }
     if (d > 10) npc._greeted = false;
     if (d > RANGE.npc + 2.5 && UI.dialogOpen()) UI.dialogClose();
-    const can = state.inv.wood >= CFG.WOOD_PER_FIRE && state.inv.canPowder && state.inv.powders.length < CFG.MAX_POWDERS;
+    const can = state.inv.powders.length < CFG.BASE_POWDERS || !!state.inv.quest?.done || (state.inv.quest && !state.inv.quest.met);
     npc.markEl.style.display = can ? '' : 'none';
     // 보리도 가까이 오면 나를 본다. 멀어지면 창고 창을 닫는다
     const dk = Math.hypot(me.x - KEEPER.x, me.z - KEEPER.z);
@@ -1540,11 +1580,21 @@ function questText() {
     return '불이 꺼졌어요. 다시 <b>장작</b>을 패러 가볼까요? 🪓';
   }
   if (pitList.some((p) => p.owner === state.myId && p.state === 'stacked')) return '쌓아둔 장작에 <b>불을 붙여요</b> 🔥';
-  if (inv.wood >= W && inv.canPowder && inv.powders.length < CFG.MAX_POWDERS) return '장작 패는 곳 길 건너 <b>루미</b>에게 가서 마법 가루를 받아요 ✨';
+  if (inv.quest?.done) return '루미의 부탁 완료! 길 건너 <b>루미</b>에게 선물을 받으러 가요 ✨';
   if (inv.wood >= CFG.MAX_WOOD) return `장작이 가득! <b>화로</b>에 쌓거나 북서쪽 <b>창고지기 보리</b>에게 맡겨요 📦`;
   if (inv.wood >= W) return '<b>글램핑장 앞 화로</b>에 장작을 쌓아요';
+  if (!inv.powders.length) return '장작 패는 곳 길 건너 <b>루미</b>에게 가면 마법 가루를 그냥 줘요 ✨';
   if (inv.powders.length && pitList.some((p) => p.state === 'lit')) return '타오르는 <b>모닥불</b>에 앉아 가루를 뿌려 봐요 🔥';
   return `동쪽 <b>통나무</b>에서 장작을 패요 (${inv.wood}/${W})`;
+}
+
+// 왼쪽 위 안내판 아래: 지금 루미의 부탁과 진행 상황
+function lumiQuestLine() {
+  const q = state.inv.quest;
+  if (!q || !q.met || state.sitting && !['sitSec', 'together', 'music'].includes(QUESTS[q.i].type)) return '';
+  const def = QUESTS[q.i];
+  const pct = Math.round((q.p / def.goal) * 100);
+  return `<div class="q-lumi${q.done ? ' done' : ''}">💜 루미의 부탁 <b>${def.title}</b> <span>${q.done ? '완료!' : questProgress(q)}</span><i style="--p:${pct}%"></i></div>`;
 }
 
 function directionText(t) {
@@ -1576,7 +1626,7 @@ function updateHud() {
   touch?.setAction(action);
   const target = pickTarget({ me, inv: state.inv, sitting: state.sitting, pitList, myId: state.myId, CFG });
   state.target = target;
-  UI.setQuest(questText() + directionText(target));
+  UI.setQuest(questText() + lumiQuestLine() + directionText(target));
   const pit = it?.pit;
   if (pit && pit.state === 'lit') {
     const rem = Math.ceil(pit.remaining(serverNow()) / 1000);

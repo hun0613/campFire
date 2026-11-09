@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import {
-  CFG, PITS, STUMPS, NPC, KEEPER, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
+  CFG, PITS, STUMPS, NPC, KEEPER, QUESTS, LEGEND_POWDERS, legendPowder, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
 } from '../shared/config.js';
 import * as guestbook from './guestbook.js';
 import { handleAdmin, adminOn } from './admin.js';
@@ -100,16 +100,16 @@ const SAVE_SECRET = process.env.SAVE_SECRET || crypto.randomBytes(32).toString('
 if (!process.env.SAVE_SECRET && isProd) console.warn('⚠️  SAVE_SECRET 이 없어 서버 재시작 후에는 기기 백업을 복원할 수 없어요.');
 const SAVE_TTL = 14 * 24 * 3600 * 1000;
 const PID = /^[A-Za-z0-9_-]{16,64}$/;
-const saves = new Map(); // pid -> { wood, stored, chops, powders, canPowder, x, z, at }
+const saves = new Map(); // pid -> { wood, stored, chops, powders, quest, x, z, at }
 const pitOwnerKey = new Map(); // pitId -> pid (공개되지 않음)
 const sign = (pid, data) => crypto.createHmac('sha256', SAVE_SECRET).update(`${pid}|${data}`).digest('base64url');
 
 function snapshotOf(p) {
-  return { wood: p.wood, stored: p.stored, chops: p.chops, powders: p.powders, canPowder: p.canPowder };
+  return { wood: p.wood, stored: p.stored, chops: p.chops, powders: p.powders, quest: p.quest };
 }
 function remember(p) {
   if (!p.pid) return;
-  saves.set(p.pid, { ...snapshotOf(p), powders: [...p.powders], x: p.x, z: p.z, at: Date.now() });
+  saves.set(p.pid, { ...snapshotOf(p), powders: [...p.powders], quest: { ...p.quest }, x: p.x, z: p.z, at: Date.now() });
 }
 function validSnapshot(s) {
   if (!s || typeof s !== 'object') return null;
@@ -119,7 +119,15 @@ function validSnapshot(s) {
   if (!Array.isArray(s.powders) || s.powders.length > CFG.MAX_POWDERS) return null;
   const powders = s.powders.filter((q) => q && HEX.test(q.color) && typeof q.effect === 'string' && typeof q.name === 'string')
     .map((q) => ({ ...q }));
-  return { wood, stored, chops, powders, canPowder: s.canPowder !== false };
+  return { wood, stored, chops, powders, quest: validQuest(s.quest) };
+}
+// 루미의 부탁 진행 상태: i 몇 번째 부탁, p 진행 수, done 마쳤는지(루미에게 받으러 가기 전), lap 몇 바퀴째, met 루미를 만난 적 있는지
+function validQuest(q) {
+  const fresh = { i: 0, p: 0, done: false, lap: 0, met: false };
+  if (!q || typeof q !== 'object') return fresh;
+  const i = q.i | 0;
+  if (i < 0 || i >= QUESTS.length) return fresh;
+  return { i, p: Math.max(0, Math.min(QUESTS[i].goal, q.p | 0)), done: !!q.done, lap: Math.max(0, q.lap | 0), met: !!q.met };
 }
 /** 서버 기억 → 없으면 서명된 기기 백업 순서로 복원 */
 function restore(pid, backup) {
@@ -234,6 +242,29 @@ function leaveSeat(p) {
   if (pit) broadcast({ t: 'pit', pit });
 }
 
+// ---------------------------------------------------------------- 루미의 부탁 진행
+/** 지금 부탁이 type 행동이면 n 만큼 진행. 다 채우면 「루미에게 가 보세요」 */
+function bump(p, type, n = 1) {
+  const q = p.quest;
+  if (!q || q.done || !q.met) return; // 루미에게 부탁을 듣기 전에는 세지 않는다
+  const def = QUESTS[q.i];
+  if (def.type !== type) return;
+  q.p = Math.min(def.goal, q.p + n);
+  if (q.p >= def.goal) {
+    q.done = true;
+    if (p.ws) send(p.ws, { t: 'questDone', title: def.title });
+  }
+  if (p.ws) send(p.ws, inv(p));
+}
+// 앉아 있는 시간: 불 붙은 모닥불에 앉아 있으면 5초마다 5초씩
+setInterval(() => {
+  for (const p of players.values()) {
+    if (!p.seat) continue;
+    const pit = pits.get(p.seat.pit);
+    if (pit?.state === 'lit') bump(p, 'sitSec', 5);
+  }
+}, 5000);
+
 function handle(ws, ctx, m) {
   if (!m || typeof m.t !== 'string') return;
   const now = Date.now();
@@ -268,7 +299,7 @@ function handle(ws, ctx, m) {
       id: nextId++, pid, name, look,
       x: SPAWN.x + (Math.random() - 0.5) * 6, z: SPAWN.z + (Math.random() - 0.5) * 2, ry: Math.PI,
       anim: 'idle', seat: null,
-      wood: saved?.wood ?? 0, stored: saved?.stored ?? 0, chops: saved?.chops ?? 0, powders: saved?.powders ?? [], canPowder: saved?.canPowder ?? true,
+      wood: saved?.wood ?? 0, stored: saved?.stored ?? 0, chops: saved?.chops ?? 0, powders: saved?.powders ?? [], quest: saved?.quest ?? validQuest(null),
       lastChop: 0, lastChat: 0,
     };
     // 방금 전까지 있던 자리로 (새로고침)
@@ -277,6 +308,7 @@ function handle(ws, ctx, m) {
       p.z = Math.min(BOUNDS.maxZ, Math.max(BOUNDS.minZ, saved.z));
     }
     ctx.me = p;
+    p.ws = ws; // 퀘스트 진행을 이 사람에게 바로 알려 주려고 (저장 · 공개되지 않음)
     players.set(p.id, p);
     // 내가 쌓아둔 장작더미는 다시 내 것으로
     if (pid) {
@@ -323,6 +355,7 @@ function handle(ws, ctx, m) {
         me.chops = 0;
         me.wood += 1;
         gained = 1;
+        bump(me, 'wood');
       }
       // split: 이번 도끼질로 통나무가 갈라졌는지 (다른 사람 화면에서도 쪼개지는 연출)
       broadcast({ t: 'act', id: me.id, a: 'chop', stump: m.stump | 0, split: !!gained }, ws);
@@ -337,20 +370,39 @@ function handle(ws, ctx, m) {
     }
     case 'npc': {
       if (dist(me, NPC.x, NPC.z) > RANGE.npc + 1.5) return;
-      let kind;
-      let given = [];
-      if (me.powders.length >= CFG.MAX_POWDERS) kind = 'full';
-      else if (!me.canPowder) kind = 'used';
-      else if (me.wood < CFG.WOOD_PER_FIRE) kind = 'need';
-      else {
-        kind = 'give';
-        const n = Math.min(CFG.POWDERS_PER_VISIT, CFG.MAX_POWDERS - me.powders.length);
-        for (let i = 0; i < n; i++) given.push(randomPowder());
-        me.powders.push(...given);
-        me.canPowder = false;
+      const q = me.quest;
+      const first = !q.met;
+      q.met = true;
+      // 1) 마친 부탁이 있으면 ✦ 특별한 가루 (가방에 자리가 있어야)
+      let reward = null, rewardBlocked = false, finished = null;
+      if (q.done) {
+        if (me.powders.length < CFG.MAX_POWDERS) {
+          finished = QUESTS[q.i];
+          reward = legendPowder(finished.reward);
+          me.powders.push(reward);
+          q.i = (q.i + 1) % QUESTS.length;
+          if (q.i === 0) q.lap += 1;
+          q.p = 0;
+          q.done = false;
+        } else rewardBlocked = true;
       }
-      send(ws, { t: 'npc', kind, powders: given, wood: me.wood });
+      // 2) 기본 가루: 가방에 3개보다 적으면 3개까지 (장작은 필요 없다)
+      const basic = [];
+      while (me.powders.length < CFG.BASE_POWDERS) { const pw = randomPowder(); basic.push(pw); me.powders.push(pw); }
+      const cur = QUESTS[q.i];
+      send(ws, {
+        t: 'npc', first, basic, reward, rewardBlocked, finished: finished && { title: finished.title },
+        quest: { ...q, title: cur.title, desc: cur.desc, goal: cur.goal, type: cur.type, rewardName: LEGEND_POWDERS[cur.reward].name },
+        full: me.powders.length >= CFG.MAX_POWDERS,
+      });
       send(ws, inv(me));
+      if (finished) broadcast({ t: 'sys', text: `✨ ${me.name}님이 루미의 부탁 「${finished.title}」을(를) 들어주고 ${reward.name}를 받았어요` });
+      break;
+    }
+    case 'quest': { // 서버가 직접 볼 수 없는 행동 (하늘 보기, 링크 공유)은 기기가 알려 준다
+      if (!['stargaze', 'share'].includes(m.ev) || now - (me.lastQuestEv || 0) < 2000) return;
+      me.lastQuestEv = now;
+      bump(me, m.ev);
       break;
     }
     case 'store': { // 장작 창고: op 'put' 맡기기 / 'take' 찾기
@@ -359,7 +411,7 @@ function handle(ws, ctx, m) {
       let n = 0, reason = '';
       if (m.op === 'put') {
         n = Math.min(want, me.wood, CFG.MAX_STORED - me.stored);
-        if (n > 0) { me.wood -= n; me.stored += n; } else reason = me.wood ? 'storeFull' : 'noWood';
+        if (n > 0) { me.wood -= n; me.stored += n; bump(me, 'store', n); } else reason = me.wood ? 'storeFull' : 'noWood';
       } else if (m.op === 'take') {
         n = Math.min(want, me.stored, CFG.MAX_WOOD - me.wood);
         if (n > 0) { me.stored -= n; me.wood += n; } else reason = me.stored ? 'handsFull' : 'empty';
@@ -378,7 +430,6 @@ function handle(ws, ctx, m) {
         return;
       }
       me.wood -= CFG.WOOD_PER_FIRE;
-      me.canPowder = true; // 장작을 쌓았으니 다음 번에 다시 가루를 받을 수 있다
       pit.state = 'stacked';
       pit.owner = me.id;
       if (me.pid) pitOwnerKey.set(pit.id, me.pid);
@@ -396,6 +447,7 @@ function handle(ws, ctx, m) {
       pit.endsAt = now + CFG.FIRE_DURATION;
       broadcast({ t: 'pit', pit });
       broadcast({ t: 'act', id: me.id, a: 'light', pit: pit.id }, ws);
+      bump(me, 'light');
       break;
     }
     case 'sit': {
@@ -422,6 +474,9 @@ function handle(ws, ctx, m) {
       me.x = s.x; me.z = s.z; me.ry = s.ry; me.anim = 'sit';
       send(ws, { t: 'sat', pit: pit.id, idx: best, x: s.x, z: s.z, ry: s.ry });
       broadcast({ t: 'pit', pit });
+      // 함께 불멍: 같은 모닥불에 두 사람 이상이면 앉아 있는 모두에게
+      const sitters = pit.seats.filter((id) => id !== null).map((id) => players.get(id)).filter(Boolean);
+      if (sitters.length >= 2) for (const sp of sitters) bump(sp, 'together');
       break;
     }
     case 'stand': {
@@ -492,6 +547,7 @@ function handle(ws, ctx, m) {
         if (info.title) addRecent({ vid, title: info.title, channel: info.channel || '', thumb: info.thumb || '', duration: info.duration || 0 });
         broadcast({ t: 'pit', pit });
         broadcast({ t: 'sys', text: `🎸 ${me.name}님이 ${info.title ? `「${info.title}」` : '음악'} 연주를 시작했어요` });
+        bump(me, 'music');
         send(ws, { t: 'musicOk' });
       }).catch((e) => { ctx.musicPending = false; console.error(e); });
       break;
@@ -539,6 +595,7 @@ function handle(ws, ctx, m) {
       guestbook.write(me.name, text)
         .then((entry) => {
           send(ws, { t: 'gbWrote', entry });
+          bump(me, 'guestbook');
           broadcast({ t: 'gbNew', entry, by: me.id }, ws);
         })
         .catch((e) => {
