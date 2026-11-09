@@ -460,7 +460,7 @@ function renderStats$(d) {
         ${kpi('입장률', pct(joinRate), '', '방문자 중 이름을 넣고 실제로 캠핑장에 들어온 사람의 비율이에요. 낮으면 첫 화면에서 많이 떠난다는 뜻이에요.')}
         ${kpi('1인당 머문 시간', dur(s.avgEngagementSec), '', '방문자 한 명이 게임 화면을 실제로 보고 있던 시간의 평균이에요. 다른 탭이나 앱으로 가 있던 시간은 빼요. 광고 수익과 가장 가까운 지표예요.')}
         ${kpi('앉아 있던 시간', r.sitting ? dur(r.sitting.avgSeconds) : '–', r.sitting ? `${num(r.sitting.count)}번 앉음` : '', '모닥불에 한 번 앉았다 일어날 때까지의 평균 시간이에요. 불멍에 얼마나 빠져드는지 보여 줘요. 데이터가 쌓이면 보여요.')}
-        ${kpi('1인칭 비율', r.viewShare ? pct(r.viewShare.fp) : '–', r.viewShare ? `머문 시간 ${num(r.viewShare.minutes)}분 중` : '', '게임 안에서 보낸 시간 중 1인칭 시점으로 본 시간의 비율이에요. 1분마다 남기는 기록으로 계산해요. 데이터가 쌓이면 보여요.')}
+        ${kpi('1인칭 비율', r.viewShare ? pct(r.viewShare.fp) : '–', r.viewShare ? `머문 시간 ${num(r.viewShare.minutes)}분 중` : '', '게임 안에서 보낸 시간 중 1인칭 시점으로 본 시간의 비율이에요. v1.14부터는 걸을 때 늘 3인칭이고 모닥불에 앉으면 1인칭으로 바뀌어서, 앉아서 보낸 시간과 거의 같아요. 1분마다 남기는 기록으로 계산해요.')}
         ${kpi('방문', `${num(s.sessions)}번`, `몰입 ${pct(s.engagedRate)}`, '들어왔다 나가기까지를 한 번의 방문으로 세요. 몰입은 10초 넘게 머물렀거나 화면을 2번 이상 본 방문의 비율이에요 (GA4 기준).')}
       </div>
     </div>

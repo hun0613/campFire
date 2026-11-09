@@ -159,7 +159,8 @@ const serverNow = () => Date.now() + state.clockOffset;
 const ORBIT_MIN = 0.14; // 이보다 더 내리면 카메라가 고개를 들어 하늘을 본다
 const PITCH_MIN = ORBIT_MIN - 1.0;
 // 시점: 'tp' 3인칭 / 'fp' 1인칭 (기기에 기억)
-const view = { fp: store.get('view', 'tp') === 'fp' };
+// 서 있을 때는 늘 3인칭, 모닥불에 앉으면 1인칭으로 바뀐다 (앉은 동안 🎥 버튼 · V로 3인칭 ↔ 1인칭)
+const view = { fp: false };
 const cam = { look: 0, yaw: 0, pitch: 0.78, dist: 15, curDist: 34, target: new THREE.Vector3(0, 0, 0), dragging: false };
 
 // ---------------------------------------------------------------- 입장 화면
@@ -255,18 +256,22 @@ if (typeof ResizeObserver !== 'undefined') {
   new ResizeObserver(placeUnderStatus).observe($('status'));
   addEventListener('resize', placeUnderStatus);
 }
-function setView(fp) {
+function setView(fp, { silent = false } = {}) {
+  if (fp && !state.sitting) fp = false; // 서 있을 때는 3인칭만
+  const changed = view.fp !== fp;
   view.fp = fp;
-  store.set('view', fp ? 'fp' : 'tp');
   cam.look = state.sitting ? -0.14 : 0;
   fpPos.set(0, 0, 0);
-  $('viewBtn').textContent = fp ? '🎥' : '👁️';
-  $('viewBtn').title = fp ? '3인칭으로 보기 (V)' : '1인칭으로 보기 (V)';
+  // 앉아 있을 때 보이는 시점 버튼: 지금과 반대 시점을 알려 준다
+  $('seatViewBtn').innerHTML = fp ? '🎥 3인칭으로 보기' : '👁️ 1인칭으로 보기';
+  if (!isTouch) $('seatViewBtn').innerHTML += ' <kbd>V</kbd>';
   document.body.classList.toggle('fp', fp);
-  if (me) track('view_toggle', { view: fp ? 'fp' : 'tp' });
-  if (me) UI.toast(fp ? '👁️ 1인칭 시점 · 다시 누르면 3인칭으로 돌아가요' : '🎥 3인칭 시점', 2200);
+  if (changed && !silent && me) {
+    track('view_toggle', { view: fp ? 'fp' : 'tp' });
+    UI.toast(fp ? '👁️ 1인칭 시점' : '🎥 3인칭 시점', 1600);
+  }
 }
-$('viewBtn').onclick = (e) => { e.currentTarget.blur(); setView(!view.fp); };
+$('seatViewBtn').onclick = (e) => { e.currentTarget.blur(); setView(!view.fp); };
 // 💌 친구 초대: 휴대폰은 공유 창, PC는 링크 복사. 공유하면 루미의 「친구 초대」 부탁이 채워진다
 $('shareBtn').onclick = async (e) => {
   e.currentTarget.blur();
@@ -285,8 +290,7 @@ $('shareBtn').onclick = async (e) => {
 };
 initPWA();
 initAnalytics();
-$('viewBtn').textContent = view.fp ? '🎥' : '👁️';
-document.body.classList.toggle('fp', view.fp);
+$('seatViewBtn').innerHTML = `👁️ 1인칭으로 보기${isTouch ? '' : ' <kbd>V</kbd>'}`; // 처음엔 3인칭 (setView는 카메라 준비 뒤에 쓴다)
 initFullscreen();
 $('mapToggle').onclick = () => document.body.classList.toggle('map-open');
 $('status').addEventListener('click', () => { if (isTouch) document.body.classList.toggle('quest-open'); });
@@ -578,6 +582,7 @@ net.on('sat', (m) => {
   if (!me) return;
   state.sitting = { pit: m.pit, idx: m.idx, at: performance.now() };
   track('fire_sit', { pit: m.pit });
+  setView(true, { silent: true }); // 앉으면 1인칭으로 (🎥 버튼으로 3인칭)
   me.x = m.x; me.z = m.z; me.ry = m.ry;
   // 앉으면 모닥불과 옆 TV·LP가 함께 보이도록 카메라를 TV 반대편에서 비스듬히 바라보게
   const mon = monitors.get(m.pit);
@@ -1155,6 +1160,7 @@ function standUp() {
   net.send({ t: 'stand' });
   track('fire_stand', { pit: state.sitting.pit, seconds: Math.round((performance.now() - (state.sitting.at || performance.now())) / 1000) });
   state.sitting = null;
+  setView(false, { silent: true }); // 일어나면 3인칭
   me.char.setAnim('idle');
   if (pit) {
     const dx = me.x - pit.pos.x, dz = me.z - pit.pos.z;
@@ -1320,7 +1326,7 @@ addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); chatInput.focus(); return; }
   keys.add(e.code);
   if (e.code === 'KeyM' && !e.repeat && state.sitting) { e.preventDefault(); openMusicModal(); return; }
-  if (e.code === 'KeyV' && !e.repeat) { setView(!view.fp); return; }
+  if (e.code === 'KeyV' && !e.repeat) { if (state.sitting) setView(!view.fp); else UI.toast('모닥불에 앉으면 1인칭 · 3인칭을 바꿀 수 있어요', 2000); return; }
   if (e.code === 'KeyE' && !e.repeat) {
     const it = findInteraction();
     if (it?.type !== 'chop') interact(it);
@@ -1407,6 +1413,7 @@ function updateLocal(dt) {
   if (document.body.classList.contains('seated') !== !!state.sitting) {
     document.body.classList.toggle('seated', !!state.sitting);
     if (state.sitting) setBag(false); // 앉으면 가루 칸이 다시 나오니 가방은 닫는다
+    else if (view.fp) setView(false, { silent: true }); // 어떤 이유로든 일어나면 3인칭
   }
 
   if (state.sitting) {

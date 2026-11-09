@@ -855,3 +855,14 @@ body.seated #powders.more, body.seated #powders.less {
 /* PC: 왼쪽 채팅창(약 380px)과 겹치지 않게 가운데 폭을 제한 */
 body:not(.touch).seated #powders { max-width: max(280px, calc(100vw - 800px)); }
 @media (max-width: 640px) { body:not(.touch).seated #powders { max-width: calc(50vw - 24px); } }
+
+/* ---------- 시점: 서 있을 때는 3인칭만. 앉으면 1인칭 + 「🎥 3인칭으로 보기」 버튼 ---------- */
+#viewBtn { display: none !important; }
+.seat-view-btn { display: none; pointer-events: auto; cursor: pointer; font: inherit; font-size: 15px; color: var(--brown); }
+.seat-view-btn kbd { font-size: 12px; margin-left: 4px; }
+body.seated .seat-view-btn { display: inline-flex; align-items: center; gap: 4px; }
+body.touch .seat-view-btn { font-size: 13.5px; padding: 6px 14px; }
+/* 모바일: 곡 고르기 버튼 위, 오른쪽 */
+body.touch.seated #seatViewBtn { position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(172px + env(safe-area-inset-bottom)); }
+@media (orientation: portrait) { body.touch.seated #seatViewBtn { bottom: calc(178px + env(safe-area-inset-bottom)); } }
+@media (max-height: 500px) { body.touch.seated #seatViewBtn { bottom: calc(160px + env(safe-area-inset-bottom)); } }
