@@ -454,7 +454,7 @@ function handle(ws, ctx, m) {
       const pit = pits.get(m.pit);
       const def = pitDef.get(m.pit);
       if (!pit || dist(me, def.x, def.z) > RANGE.pit + 2) return;
-      if (pit.state !== 'lit') return;
+      // 불이 없어도(빈 화로 · 쌓아 둔 장작) 의자에 앉아 쉴 수 있다. 가루 · 음악은 불이 붙어 있어야 한다
       leaveSeat(me);
       let best = -1;
       let bestD = Infinity;
@@ -487,7 +487,7 @@ function handle(ws, ctx, m) {
       if (!me.seat) return;
       const pit = pits.get(me.seat.pit);
       if (!pit || pit.state !== 'lit') {
-        send(ws, { t: 'toast', text: '불이 꺼져 있어요' });
+        send(ws, { t: 'toast', text: '불이 붙어 있어야 가루를 뿌릴 수 있어요 🔥' });
         return;
       }
       const idx = m.idx | 0;

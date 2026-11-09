@@ -1024,14 +1024,15 @@ function promptFor(it) {
   if (it.type === 'pit') {
     const p = it.pit;
     if (p.state === 'empty') {
-      return inv.wood >= W ? [`<kbd>E</kbd> 장작 쌓기 <small>(🪵 ${W}개 사용)</small>`] : [`장작 ${W}개가 있으면 불을 피울 수 있어요 (🪵 ${inv.wood}/${W})`, true];
+      if (inv.wood >= W) return [`<kbd>E</kbd> 장작 쌓기 <small>(🪵 ${W}개 사용)</small>`];
+      return p.freeSeats() > 0 ? [`<kbd>E</kbd> 의자에 앉아 쉬기 <small>(장작 ${W}개면 불을 피울 수 있어요 · 🪵 ${inv.wood}/${W})</small>`] : ['자리가 꽉 찼어요', true];
     }
     if (p.state === 'stacked') return ['<kbd>E</kbd> 불 붙이기 🔥'];
     if (p.state === 'lit') return p.freeSeats() > 0 ? ['<kbd>E</kbd> 앉아서 불멍하기 🔥'] : ['자리가 꽉 찼어요', true];
   }
   if (it.type === 'seated') {
     const p = it.pit;
-    if (p.state !== 'lit') return ['불이 꺼졌어요 · <kbd>E</kbd> 일어나기'];
+    if (p.state !== 'lit') return ['<kbd>E</kbd> 일어나기 · 불이 붙으면 가루를 뿌리고 노래를 틀 수 있어요'];
     const n = inv.powders.length;
     if (n) return [`<kbd>1</kbd>${n > 1 ? `~<kbd>${n}</kbd>` : ''} 가루 뿌리기 · <kbd>E</kbd> 일어나기`];
     return ['<kbd>E</kbd> 일어나기 · 루미에게 받은 가루가 있으면 뿌릴 수 있어요'];
@@ -1057,6 +1058,7 @@ function interact(it) {
     const p = it.pit;
     faceTo(p.pos.x, p.pos.z);
     if (p.state === 'empty' && state.inv.wood >= CFG.WOOD_PER_FIRE) net.send({ t: 'build', pit: p.id });
+    else if (p.state === 'empty' && p.freeSeats() > 0) net.send({ t: 'sit', pit: p.id }); // 장작이 없으면 그냥 앉아서 쉬기
     else if (p.state === 'stacked') {
       me.char.play('light', { onImpact: () => {} });
       net.send({ t: 'light', pit: p.id });
@@ -1124,7 +1126,7 @@ function standUp() {
 function throwPowder(i) {
   if (!state.sitting) { UI.toast('모닥불 앞에 앉아서 뿌릴 수 있어요'); return; }
   const pit = pits.get(state.sitting.pit);
-  if (!pit || pit.state !== 'lit') { UI.toast('불이 꺼져 있어요'); return; }
+  if (!pit || pit.state !== 'lit') { UI.toast('불이 붙어 있어야 가루를 뿌릴 수 있어요 🔥'); return; }
   if (!state.inv.powders[i]) return;
   if (me.char.busy()) return;
   net.send({ t: 'throw', idx: i });
@@ -1157,7 +1159,7 @@ function actionFor(it) {
     const p = it.pit;
     if (p.state === 'empty' && state.inv.wood >= CFG.WOOD_PER_FIRE) return { icon: '🪵', label: '장작 쌓기' };
     if (p.state === 'stacked') return { icon: '🔥', label: '불 붙이기' };
-    if (p.state === 'lit' && p.freeSeats() > 0) return { icon: '🪑', label: '앉기' };
+    if (p.freeSeats() > 0 && (p.state === 'lit' || p.state === 'empty')) return { icon: '🪑', label: '앉기' };
   }
   return null;
 }
@@ -1600,7 +1602,7 @@ function questText() {
   if (state.sitting) {
     const pit = pits.get(state.sitting.pit);
     if (pit.state === 'lit') return inv.powders.length ? '<b>불멍 중…</b> 숫자키로 마법 가루를 뿌려 보세요 ✨' : '<b>불멍 중…</b> 타닥타닥 🔥';
-    return '불이 꺼졌어요. 다시 <b>장작</b>을 패러 가볼까요? 🪓';
+    return pit.state === 'stacked' ? '쌓인 장작에 <b>불을 붙이면</b> 따뜻해져요 🔥 (일어나서 E)' : `<b>쉬는 중…</b> 장작 ${W}개를 모아 오면 불을 피울 수 있어요 🪵`;
   }
   if (pitList.some((p) => p.owner === state.myId && p.state === 'stacked')) return '쌓아둔 장작에 <b>불을 붙여요</b> 🔥';
   if (inv.quest?.done) return '루미의 부탁 완료! 길 건너 <b>루미</b>에게 선물을 받으러 가요 ✨';
