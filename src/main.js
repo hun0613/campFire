@@ -1748,6 +1748,29 @@ function updateStumps(dt) {
 let lastInputAt = 0;
 const markInput = () => { lastInputAt = performance.now(); };
 for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchmove']) addEventListener(ev, markInput, { passive: true, capture: true });
+
+// ---------------------------------------------------------------- 불멍 몰입: 앉아서 가만히 있으면 UI를 흐리게
+// 5초 동안 조작이 없으면 화면 UI가 천천히 사라지고, 화면을 만지거나 키를 누르면 바로 돌아온다.
+// 흐린 상태에서 처음 누른 버튼은 UI만 깨운다 (실수로 일어나거나 가루를 뿌리지 않게)
+const CALM_AFTER = 5000;
+let swallowClick = false;
+function updateCalm(now) {
+  const busy = UI.dialogOpen() || document.querySelector('.overlay:not(.hidden)') || !$('bagPanel').classList.contains('hidden')
+    || document.body.classList.contains('chat-open') || document.activeElement === chatInput || touch?.active || cam.dragging;
+  const calm = !!state.sitting && !busy && now - lastInputAt > CALM_AFTER;
+  if (calm !== document.body.classList.contains('calm')) document.body.classList.toggle('calm', calm);
+}
+addEventListener('pointerdown', (e) => {
+  if (!document.body.classList.contains('calm')) return;
+  document.body.classList.remove('calm');
+  if (e.target.closest?.('button, .powder, #status, #topright, #mapPanel')) {
+    e.stopPropagation(); e.preventDefault();
+    swallowClick = true; setTimeout(() => { swallowClick = false; }, 700);
+  }
+}, { capture: true });
+addEventListener('click', (e) => { if (swallowClick) { swallowClick = false; e.stopPropagation(); e.preventDefault(); } }, { capture: true });
+addEventListener('keydown', () => document.body.classList.remove('calm'), { capture: true });
+
 let lastDraw = 0;
 function targetFps(now) {
   if (!document.hasFocus() && !isTouch) return 30;
@@ -1783,6 +1806,7 @@ function frame(now = performance.now()) {
   glowFx.update(dt);
   softFx.update(dt);
   updateHud();
+  updateCalm(now);
   updateLabels();
   guide.update(dt, {
     me, target: state.target, pits: pitList, camYaw: cam.yaw,

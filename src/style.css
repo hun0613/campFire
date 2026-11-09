@@ -866,3 +866,8 @@ body.touch .seat-view-btn { font-size: 13.5px; padding: 6px 14px; }
 body.touch.seated #seatViewBtn { position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(172px + env(safe-area-inset-bottom)); }
 @media (orientation: portrait) { body.touch.seated #seatViewBtn { bottom: calc(178px + env(safe-area-inset-bottom)); } }
 @media (max-height: 500px) { body.touch.seated #seatViewBtn { bottom: calc(160px + env(safe-area-inset-bottom)); } }
+
+/* ---------- 불멍 몰입: 앉아서 가만히 있으면 UI가 천천히 사라지고, 만지면 바로 돌아온다 ---------- */
+#status, #topright, #mapPanel, #bottom, #chat, .chat-toggle, #touchControls, .beacon, #fireTimer { transition: opacity .25s ease; }
+body.calm #status, body.calm #topright, body.calm #mapPanel, body.calm #bottom, body.calm #chat,
+body.calm .chat-toggle, body.calm #touchControls, body.calm .beacon, body.calm #fireTimer { opacity: .07; transition: opacity 1.8s ease; }
