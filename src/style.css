@@ -692,3 +692,45 @@ body.touch.seated #joyBase { opacity: 0; }
   body:not(.touch) #status { max-width: calc(100vw - 268px); }
   body:not(.touch) .quest { max-width: none; }
 }
+
+/* ---------- PC 창이 낮거나 좁을 때 (휴대폰은 body.touch 규칙이 따로 있다) ---------- */
+/* 팝업(안내서 · 곡 고르기 · 게시판 · 창고 …): 창보다 길면 카드 안에서 스크롤. 위아래가 잘리지 않게 */
+body:not(.touch) .overlay > .card.help-card { max-height: calc(100vh - 32px); overflow-y: auto; scrollbar-width: thin; }
+/* 안내서 「알겠어요!」 · 입장 버튼은 스크롤해도 늘 카드 아래에 보이게 */
+body:not(.touch) #helpClose,
+body:not(.touch) #joinBtn { position: sticky; bottom: 0; z-index: 2; box-shadow: 0 5px 0 #c95c1c, 0 -16px 16px 2px var(--cream); }
+body:not(.touch) #joinBtn:active { box-shadow: 0 1px 0 #c95c1c, 0 -16px 16px 2px var(--cream); }
+body:not(.touch) .join-card { scrollbar-width: thin; }
+
+/* 창 높이가 낮으면 입장 화면 · 안내서를 촘촘하게 */
+@media (max-height: 860px) {
+  body:not(.touch) .join-card { padding-top: 16px; padding-bottom: 16px; }
+  body:not(.touch) .join-card .logo { font-size: 34px; }
+  body:not(.touch) .join-card .title { font-size: 28px; }
+  body:not(.touch) .join-card .subtitle { margin: 4px 0 8px; font-size: 14px; }
+  body:not(.touch) .join-card .field { margin-top: 8px; }
+  body:not(.touch) .join-card .field label { margin-bottom: 4px; }
+  body:not(.touch) .join-card .swatch { width: 28px; height: 28px; }
+  body:not(.touch) .join-card .btn { margin-top: 12px; }
+  body:not(.touch) .help-card { padding-top: 18px; padding-bottom: 18px; }
+  body:not(.touch) .help-card ol { line-height: 1.7; font-size: 15px; }
+  body:not(.touch) .help-card .keys { margin-top: 10px; }
+}
+@media (max-height: 600px) {
+  body:not(.touch) .join-card .logo,
+  body:not(.touch) .join-card .subtitle { display: none; }
+  body:not(.touch) .join-card .title { font-size: 24px; margin-bottom: 2px; }
+  body:not(.touch) .help-card .title.small { font-size: 20px; margin-bottom: 6px; }
+  body:not(.touch) .help-card ol { line-height: 1.55; font-size: 14px; }
+  /* 모닥불 앞: 남은 장작 · 안내 · 곡 고르기 알약을 작게 해서 불을 덜 가리게 */
+  body:not(.touch) #bottom { bottom: 12px; gap: 6px; }
+  body:not(.touch) #bottom .pill { font-size: 14px; padding: 6px 14px; border-width: 2px; }
+}
+/* 창 폭이 좁으면 미리보기가 위로 올라간다: 미리보기를 작게, 스크롤은 한 겹(바깥)만 */
+@media (max-width: 760px) {
+  body:not(.touch) .join-wrap { max-height: calc(100vh - 32px); }
+  body:not(.touch) .join-card { overflow: visible; max-height: none; flex: none; }
+  body:not(.touch) .preview-card { flex: none; }
+  body:not(.touch) #previewCanvas { min-height: 150px; height: 150px; }
+  body:not(.touch) #joinBtn { bottom: 8px; }
+}
