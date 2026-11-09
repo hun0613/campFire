@@ -989,7 +989,11 @@ function refreshInventory() {
 
 // 앉았을 때 가루 줄: 넘치면 끝을 흐리게, PC는 마우스 휠로 옆으로 넘긴다
 const powderRow = $('powders');
-const markPowderOverflow = () => powderRow.classList.toggle('more', powderRow.scrollWidth > powderRow.clientWidth + 2 && powderRow.scrollLeft + powderRow.clientWidth < powderRow.scrollWidth - 4);
+const markPowderOverflow = () => {
+  const over = powderRow.scrollWidth > powderRow.clientWidth + 2;
+  powderRow.classList.toggle('more', over && powderRow.scrollLeft + powderRow.clientWidth < powderRow.scrollWidth - 4); // 오른쪽에 더 있음
+  powderRow.classList.toggle('less', over && powderRow.scrollLeft > 4);                                              // 왼쪽에 지나간 것 있음
+};
 powderRow.addEventListener('scroll', markPowderOverflow, { passive: true });
 powderRow.addEventListener('wheel', (e) => {
   if (powderRow.scrollWidth <= powderRow.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;

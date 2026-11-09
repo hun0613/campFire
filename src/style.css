@@ -842,9 +842,16 @@ body.touch.chat-open .bag-btn, body.touch.chat-open .bag-panel { display: none; 
 body.seated #powders { flex-wrap: nowrap; overflow-x: auto; overflow-y: visible; padding-top: 10px; scrollbar-width: none; max-width: calc(100vw - 32px); }
 body.seated #powders::-webkit-scrollbar { display: none; }
 body.seated #powders .powder { flex: none; }
-body.touch.seated #powders { max-width: min(62vw, 360px); padding-top: 10px; }
+body.touch.seated #powders { max-width: min(62vw, 360px); }
 /* 넘치면 오른쪽 끝을 흐리게 해서 옆에 더 있다는 걸 알린다 */
-body.seated #powders.more { -webkit-mask-image: linear-gradient(to right, #000 82%, transparent); mask-image: linear-gradient(to right, #000 82%, transparent); }
+/* 넘치면 더 있는 쪽 끝을 부드럽게 흐린다 (왼쪽은 밀어서 지나간 뒤에만) */
+body.seated #powders { --fl: 0px; --fr: 0px; padding: 10px 10px 12px; margin: 0 -10px -12px; scroll-behavior: smooth; }
+body.seated #powders.more { --fr: 44px; }
+body.seated #powders.less { --fl: 44px; }
+body.seated #powders.more, body.seated #powders.less {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%);
+}
 /* PC: 왼쪽 채팅창(약 380px)과 겹치지 않게 가운데 폭을 제한 */
 body:not(.touch).seated #powders { max-width: max(280px, calc(100vw - 800px)); }
 @media (max-width: 640px) { body:not(.touch).seated #powders { max-width: calc(50vw - 24px); } }
