@@ -1081,7 +1081,7 @@ function promptFor(it) {
   }
   if (it.type === 'seated') {
     const p = it.pit;
-    if (p.state !== 'lit') return ['<kbd>E</kbd> 일어나기 · 불이 붙으면 가루를 뿌리고 노래를 틀 수 있어요'];
+    if (p.state !== 'lit') return ['<kbd>E</kbd> 일어나기 · 불을 피우면 가루 · 노래를 쓸 수 있어요'];
     const n = inv.powders.length;
     if (n) return [`<kbd>1</kbd>${n > 1 ? `~<kbd>${n}</kbd>` : ''} 가루 뿌리기 · <kbd>E</kbd> 일어나기`];
     return ['<kbd>E</kbd> 일어나기 · 루미에게 받은 가루가 있으면 뿌릴 수 있어요'];

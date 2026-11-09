@@ -920,3 +920,10 @@ body .seat-view-btn:hover { background: rgba(255, 248, 232, .45); }
 body.touch.seated #seatViewBtn { right: calc(116px + env(safe-area-inset-right)); bottom: calc(48px + env(safe-area-inset-bottom)); }
 @media (orientation: portrait) { body.touch.seated #seatViewBtn { bottom: calc(48px + env(safe-area-inset-bottom)); } }
 @media (max-height: 500px) { body.touch.seated #seatViewBtn { bottom: calc(48px + env(safe-area-inset-bottom)); } }
+
+/* 안내 알약: 한국어는 낱말 단위로만 줄바꿈 (「있어/요」처럼 끊기지 않게) */
+.pill { word-break: keep-all; }
+/* PC 앉았을 때: 오른쪽 아래 알약은 한 줄로 (채팅창과 겹치지 않는 폭 안에서) */
+body:not(.touch).seated #bottom { max-width: calc(100vw - 420px); }
+body:not(.touch).seated #bottom .pill { white-space: nowrap; }
+@media (max-width: 900px) { body:not(.touch).seated #bottom .pill { white-space: normal; } }
