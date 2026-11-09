@@ -170,7 +170,20 @@ setInterval(() => {
 function publicPlayer(p) {
   return { id: p.id, name: p.name, look: p.look, x: p.x, z: p.z, ry: p.ry, anim: p.anim, carry: p.wood };
 }
+// 「장작 N개」 부탁: 손에 든 장작 수를 그대로 진행으로 쓴다 (부탁을 받기 전에 모아 둔 장작도 인정)
+function syncWoodQuest(p) {
+  const q = p.quest;
+  if (!q || q.done || !q.met) return;
+  const def = QUESTS[q.i];
+  if (def.type !== 'wood') return;
+  q.p = Math.min(def.goal, p.wood);
+  if (q.p >= def.goal) {
+    q.done = true;
+    if (p.ws) send(p.ws, { t: 'questDone', title: def.title });
+  }
+}
 function inv(p) {
+  syncWoodQuest(p);
   remember(p);
   // 품에 안은 장작 더미가 다른 사람에게도 보이도록
   if (p._carry !== p.wood) { p._carry = p.wood; broadcast({ t: 'carry', id: p.id, n: p.wood }); }
@@ -355,7 +368,6 @@ function handle(ws, ctx, m) {
         me.chops = 0;
         me.wood += 1;
         gained = 1;
-        bump(me, 'wood');
       }
       // split: 이번 도끼질로 통나무가 갈라졌는지 (다른 사람 화면에서도 쪼개지는 연출)
       broadcast({ t: 'act', id: me.id, a: 'chop', stump: m.stump | 0, split: !!gained }, ws);
@@ -389,6 +401,7 @@ function handle(ws, ctx, m) {
       // 2) 기본 가루: 가방에 3개보다 적으면 3개까지 (장작은 필요 없다)
       const basic = [];
       while (me.powders.length < CFG.BASE_POWDERS) { const pw = randomPowder(); basic.push(pw); me.powders.push(pw); }
+      syncWoodQuest(me); // 새로 받은 부탁이 「장작 N개」면 지금 든 장작부터 바로 반영
       const cur = QUESTS[q.i];
       send(ws, {
         t: 'npc', first, basic, reward, rewardBlocked, finished: finished && { title: finished.title },

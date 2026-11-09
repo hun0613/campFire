@@ -110,7 +110,7 @@ export function randomPowder() {
 export const QUESTS = [
   { id: 'light', type: 'light', goal: 1, title: '첫 모닥불', desc: '글램핑장 앞 화로에 장작을 쌓고 불을 붙여 줘', reward: 'aurora' },
   { id: 'sit3', type: 'sitSec', goal: 180, title: '3분 불멍', desc: '타오르는 모닥불에 앉아 3분 동안 불멍해 봐', reward: 'petals' },
-  { id: 'chop20', type: 'wood', goal: 20, title: '장작 20개', desc: '장작 패는 곳에서 장작을 20개 패 와 줘', reward: 'fireworks' },
+  { id: 'chop20', type: 'wood', goal: 20, title: '장작 20개', desc: '장작을 손에 20개 모아 와 줘 (지금 든 장작도 세어 줄게)', reward: 'fireworks' },
   { id: 'sky', type: 'stargaze', goal: 1, title: '밤하늘 올려다보기', desc: '화면을 위로 끌어 올려 별이 가득한 밤하늘을 올려다봐', reward: 'galaxy' },
   { id: 'store', type: 'store', goal: 10, title: '장작 맡기기', desc: '창고지기 보리에게 장작을 10개 맡겨 봐', reward: 'butterflies' },
   { id: 'music', type: 'music', goal: 1, title: '모닥불 음악', desc: '모닥불에 앉아 좋아하는 노래를 한 곡 틀어 봐', reward: 'aurora' },
