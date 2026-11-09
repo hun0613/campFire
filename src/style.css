@@ -759,3 +759,23 @@ body.touch:not(.dock-open) #mapPanel { right: max(8px, env(safe-area-inset-right
   body.touch #toasts { top: calc(var(--status-b, 74px) + 8px); }
   body.touch.seated #toasts { top: calc(var(--status-b, 74px) + 46px); }
 }
+
+/* ---------- 모바일: 조이스틱은 왼쪽 아래 영역만 (위쪽은 시점 돌리기), 채팅 버튼은 조이스틱 오른쪽 아래에 붙여 반투명하게 ---------- */
+body.touch #joyZone,
+body.touch.touch #joyZone { top: auto; bottom: 0; left: 0; width: 50vw; height: 42vh; max-width: none; }
+@media (max-height: 500px) {
+  body.touch #joyZone, body.touch.touch #joyZone { top: auto; height: 62vh; }
+}
+/* 첫 안내: 왼쪽 「이동」 칸도 같은 영역(왼쪽 아래)만 칠한다 */
+#touchHint .th-left { align-self: flex-end; height: 42vh; border-top: 2px dashed rgba(255,243,220,.45); border-top-right-radius: 18px; }
+@media (max-height: 500px) { #touchHint .th-left { height: 62vh; } }
+body.touch .chat-toggle {
+  left: calc(148px + env(safe-area-inset-left)); right: auto; bottom: calc(26px + env(safe-area-inset-bottom));
+  width: 42px; height: 42px; font-size: 18px; opacity: 1;
+  background: rgba(255, 248, 232, .26); border: 2px solid rgba(255, 248, 232, .45);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
+}
+body.touch .chat-toggle:active { background: rgba(255, 248, 232, .5); }
+/* 앉아 있을 때는 조이스틱 자리에 가루가 오므로, 채팅 버튼은 가루 바로 위 왼쪽에 */
+body.touch.seated .chat-toggle { left: calc(16px + env(safe-area-inset-left)); bottom: calc(26px + env(safe-area-inset-bottom)); }
+body.touch.seated:has(#powders > .powder) .chat-toggle { bottom: calc(80px + env(safe-area-inset-bottom)); } /* 가루가 있으면 가루 바로 위 */

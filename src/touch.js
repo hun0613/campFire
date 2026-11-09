@@ -21,8 +21,8 @@ export class TouchControls {
     root.innerHTML = `
       <div id="joyZone"><div id="joyBase"><div id="joyKnob"></div></div></div>
       <div id="touchHint" class="hidden">
-        <div class="th-half th-left"><div class="th-ico">🕹️</div><b>이동</b><span>왼쪽 아무 데나<br>엄지를 대고 밀기</span></div>
-        <div class="th-half th-right"><div class="th-ico">👆</div><b>시점 돌리기</b><span>오른쪽을 드래그<br>두 손가락으로 줌</span></div>
+        <div class="th-half th-left"><div class="th-ico">🕹️</div><b>이동</b><span>왼쪽 아래를<br>엄지로 대고 밀기</span></div>
+        <div class="th-half th-right"><div class="th-ico">👆</div><b>시점 돌리기</b><span>나머지 화면을 드래그<br>두 손가락으로 줌</span></div>
       </div>
       <button id="actionBtn" class="hidden"><span class="a-icon">✋</span><span class="a-label"></span></button>`;
     document.getElementById('hud').appendChild(root);
