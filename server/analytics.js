@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 const PROPERTY = String(process.env.GA_PROPERTY_ID || '').trim();
 const KEY = parseKey(process.env.GA_SA_KEY || '');
 const API = `https://analyticsdata.googleapis.com/v1beta/properties/${PROPERTY}`;
-const GAME_EVENTS = ['game_join', 'wood_chop', 'wood_store', 'fire_light', 'fire_sit', 'fire_stand', 'powder_use', 'guestbook_write', 'music_play', 'view_toggle', 'stargaze', 'quest_done', 'share'];
+const GAME_EVENTS = ['game_join', 'wood_chop', 'wood_store', 'fire_light', 'fire_sit', 'fire_stand', 'powder_use', 'guestbook_write', 'music_play', 'view_toggle', 'stargaze', 'board_open', 'quest_done', 'share'];
 
 function parseKey(raw) {
   const s = String(raw).trim();
@@ -101,7 +101,7 @@ export function report(range = '7d') {
   return cached(`r:${range}`, 5 * 60_000, async () => {
     const dateRanges = [{ startDate: start, endDate: 'today' }];
     const trendRange = [{ startDate: '13daysAgo', endDate: 'today' }];
-    const [a, b, c, h] = await Promise.all([
+    const [a, b, c, h, d] = await Promise.all([
       call('batchRunReports', {
         requests: [
           // 0 요약
@@ -143,7 +143,23 @@ export function report(range = '7d') {
           { dateRanges, dimensions: [{ name: 'dayOfWeek' }], metrics: [{ name: 'activeUsers' }] },
         ],
       }).catch((e) => ({ error: e.message })),
+      // 루미의 부탁 · 장작 창고 · 친구 초대 세부 (v1.13 맞춤 측정기준. 등록 직후 데이터가 없으면 실패할 수 있어 따로 조회)
+      call('batchRunReports', {
+        requests: [
+          { dateRanges, dimensions: [{ name: 'customEvent:quest' }], metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }], dimensionFilter: inList('eventName', ['quest_done']) },
+          { dateRanges, dimensions: [{ name: 'customEvent:op' }], metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }], dimensionFilter: inList('eventName', ['wood_store']) },
+          { dateRanges, dimensions: [{ name: 'customEvent:method' }], metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }], dimensionFilter: inList('eventName', ['share']) },
+        ],
+      }).catch((e) => ({ error: e.message })),
     ]);
+
+    // 부탁별 완료 · 창고 동작 · 공유 방식 ('(not set)'은 맞춤 측정기준 등록 전 데이터)
+    const pick = (rep, dim) => rows(rep).filter((r) => r[dim] && r[dim] !== '(not set)').map((r) => ({ name: r[dim], count: r.eventCount, users: r.totalUsers }));
+    const extras = d.error ? { error: d.error } : {
+      quests: pick(d.reports[0], 'customEvent:quest'),
+      store: pick(d.reports[1], 'customEvent:op'),
+      share: pick(d.reports[2], 'customEvent:method'),
+    };
 
     // 0~23시를 빈 시간까지 채운다. 요일은 0=일요일
     let hours = null, weekdays = null, timeZone = null;
@@ -206,6 +222,7 @@ export function report(range = '7d') {
       viewShare,
       hours,
       weekdays,
+      extras,
       timeZone,
       hourError: h.error || null,
       customError: c.error || null,

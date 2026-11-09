@@ -272,3 +272,9 @@ label.check input { width: auto; margin: 0; accent-color: var(--fire); }
 .gb .n-title { font-weight: 800; flex: 1; min-width: 0; }
 .gb .n-text { resize: vertical; }
 @media (max-width: 860px) { .notice-wrap { grid-template-columns: 1fr; } }
+
+/* 루미의 부탁 */
+.quest-funnel { list-style: none; margin: 8px 0 4px; padding: 0; display: grid; gap: 8px; }
+.quest-funnel li { display: grid; grid-template-columns: 22px minmax(90px, 34%) 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
+.qf-no { width: 20px; height: 20px; border-radius: 50%; background: var(--bg); color: var(--sub); font-size: 11px; font-weight: 800; display: grid; place-items: center; }
+.quest-funnel .bar-fill { background: #9b72e0; }

@@ -1,4 +1,5 @@
 // 캠핑장 관리실: 방명록 답글 · 삭제, UTM 링크와 채널별 안내 문구 만들기
+import { QUESTS } from '../../shared/config.js';
 const $ = (id) => document.getElementById(id);
 const BASE = 'https://campfire-game.onrender.com/';
 const TOKEN_KEY = 'campfire-admin-token';
@@ -251,7 +252,7 @@ $('nReload').onclick = loadNotices;
 const statsState = { range: '7d', loaded: false, timer: null };
 const EVENT_LABEL = {
   game_join: '🏕️ 입장', wood_chop: '🪓 장작 패기', wood_store: '📦 장작 창고', fire_light: '🔥 불 붙이기', fire_sit: '🪵 모닥불 앉기', fire_stand: '🚶 일어나기',
-  powder_use: '✨ 마법 가루', guestbook_write: '📖 방명록', music_play: '🎶 노래 틀기', view_toggle: '👁️ 시점 전환', stargaze: '🌌 하늘 보기', quest_done: '💜 루미의 부탁', share: '💌 친구 초대',
+  powder_use: '✨ 마법 가루', guestbook_write: '📖 방명록', music_play: '🎶 노래 틀기', view_toggle: '👁️ 시점 전환', stargaze: '🌌 하늘 보기', board_open: '📌 게시판 열기', quest_done: '💜 루미의 부탁', share: '💌 친구 초대',
 };
 const DEVICE_LABEL = { mobile: '📱 모바일', desktop: '💻 PC', tablet: '📟 태블릿' };
 const NVR_LABEL = { new: '🌱 처음 온 사람', returning: '🔁 다시 온 사람' };
@@ -397,6 +398,43 @@ function hourSection(r) {
     </div>`;
 }
 
+// 💜 루미의 부탁: 부탁 10개를 순서대로, 각각 몇 명이 해냈는지 (어디서 멈추는지 보이게)
+function questSection(r) {
+  const ev = (n) => r.events.find((e) => e.name === n) || { count: 0, users: 0 };
+  const done = ev('quest_done'), store = ev('wood_store'), share = ev('share');
+  const x = r.extras || {};
+  const waiting = '<p class="hint">⏳ 세부 정보는 GA4에 맞춤 측정기준을 등록한 뒤 들어온 데이터부터 보여요. 하루쯤 지나면 채워져요.</p>';
+  let body;
+  if (x.error) body = `<p class="hint">세부 조회에 실패했어요: ${esc(x.error)}</p>`;
+  else if (!x.quests?.length) body = done.count ? waiting : '<p class="hint">아직 루미의 부탁을 해낸 사람이 없어요.</p>';
+  else {
+    const by = new Map(x.quests.map((q) => [q.name, q]));
+    const max = Math.max(1, ...x.quests.map((q) => q.users));
+    body = `<ol class="quest-funnel">${QUESTS.map((q, i) => {
+      const v = by.get(q.title) || { users: 0, count: 0 };
+      return `<li title="${esc(q.title)}: ${num(v.users)}명 · ${num(v.count)}번">
+        <span class="qf-no">${i + 1}</span><span class="bar-label">${esc(q.title)}</span>
+        <span class="bar-track"><span class="bar-fill${v.users ? '' : ' zero'}" style="width:${(v.users / max) * 100}%"></span></span>
+        <span class="bar-val">${num(v.users)}명</span></li>`;
+    }).join('')}</ol>`;
+  }
+  const STORE = { put: '📥 맡기기', take: '📤 찾기' }, SHARE = { share: '📱 공유 창', copy: '📋 링크 복사' };
+  const mini = (list, labels, unit) => (list?.length ? barList(list.map((v) => ({ label: labels[v.name] || v.name, value: v.count, users: v.users })), { valueFmt: (n) => `${num(n)}번`, sub: (v) => `${num(v.users)}명` }) : `<p class="hint">${unit}</p>`);
+  return `<div class="card">
+      <h2>💜 루미의 부탁 <small>${RANGE_LABEL[r.range]}</small>${help('부탁 10개를 순서대로 놓고, 각 부탁을 해낸 사람 수를 보여 줘요. 막대가 갑자기 짧아지는 곳이 사람들이 멈추는 부탁이에요. 「함께 불멍」은 다른 사람이 있어야 해서 낮게 나올 수 있어요.')}</h2>
+      <p class="peak">부탁 완료 <b>${num(done.count)}번</b> · ${num(done.users)}명 &nbsp;·&nbsp; 💌 친구 초대 <b>${num(share.count)}번</b> · 📦 창고 이용 <b>${num(store.count)}번</b></p>
+      <div class="hours-2">
+        <div>${body}</div>
+        <div>
+          <p class="hint" style="margin:0">📦 창고 맡기기 · 찾기${help('창고지기 보리에게 장작을 맡긴 횟수와 찾아간 횟수예요. 맡기기만 많으면 장작을 쌓아 두고 잘 쓰지 않는다는 뜻이에요.')}</p>
+          ${mini(x.error ? [] : x.store, STORE, x.error ? '–' : store.count ? '⏳ 데이터가 쌓이는 중이에요' : '아직 창고를 쓴 사람이 없어요')}
+          <p class="hint" style="margin:14px 0 0">💌 친구 초대 방식${help('💌 버튼을 눌러 휴대폰 공유 창으로 보냈는지, PC에서 링크를 복사했는지예요. 실제로 들어온 친구 수는 「유입 경로」의 friend / share 에서 봐요.')}</p>
+          ${mini(x.error ? [] : x.share, SHARE, x.error ? '–' : share.count ? '⏳ 데이터가 쌓이는 중이에요' : '아직 초대 링크를 보낸 사람이 없어요')}
+        </div>
+      </div>
+    </div>`;
+}
+
 function renderStats$(d) {
   if (!d.status?.on) { $('statsBody').innerHTML = setupGuide(d.status || {}); $('statsUpdated').textContent = ''; return; }
   const r = d.report, rt = d.realtime;
@@ -433,6 +471,8 @@ function renderStats$(d) {
     </div>
 
     ${hourSection(r)}
+
+    ${questSection(r)}
 
     <div class="stats-2">
       <div class="card">
