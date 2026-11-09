@@ -6,6 +6,8 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 
 export const UI = {
   toast(text, ms = 3300) {
+    // 같은 문구가 이미 떠 있으면 또 띄우지 않는다 (연타 · 꾹 누르기 · 서버 안내가 겹칠 때)
+    if ([...$('toasts').children].some((t) => t.textContent === text)) return;
     const el = document.createElement('div');
     el.className = 'toast';
     el.textContent = text;

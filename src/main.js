@@ -1024,7 +1024,15 @@ function tryChop(it) {
     me.char.play('place', { onImpact: () => { woodcut.place(it.idx); sound.pop?.(); } });
     return;
   }
-  if (state.inv.wood >= CFG.MAX_WOOD) { UI.toast('장작을 더 들 수 없어요! 북서쪽 창고지기 보리에게 맡겨 보세요 📦'); return; }
+  if (state.inv.wood >= CFG.MAX_WOOD) {
+    // E를 꾹 누르고 있으면 매 프레임 여기로 오므로, 안내는 3초에 한 번만
+    const now = performance.now();
+    if (now - (state.fullToastAt || 0) > 3000) {
+      state.fullToastAt = now;
+      UI.toast('장작을 더 들 수 없어요! 북서쪽 창고지기 보리에게 맡겨 보세요 📦');
+    }
+    return;
+  }
   me.char.play('chop', {
     onImpact: () => {
       effects.chips(new THREE.Vector3(s.x, 0.66, s.z));
