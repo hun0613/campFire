@@ -905,3 +905,6 @@ body:not(.touch).seated #powders { justify-content: flex-start; max-width: min(4
 body:not(.touch).seated #fireTimer {
   position: fixed; top: 16px; left: 50%; transform: translateX(-50%); font-size: 14px; padding: 5px 14px;
 }
+/* 불멍 몰입: 장소 팻말(방명록 · 게시판 · LP) · 이름표 · NPC 표시도 함께 흐리게. 말풍선(대화)은 그대로 */
+.gb-tag, .lp-tag, .nametag, .npc-mark { transition: opacity .25s ease; }
+body.calm .gb-tag:not(.near), body.calm .lp-tag, body.calm .nametag, body.calm .npc-mark { opacity: .06 !important; transition: opacity 1.8s ease; }
