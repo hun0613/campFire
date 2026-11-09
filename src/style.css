@@ -881,3 +881,15 @@ body.touch.map-open #mapPanel, body.touch.map-auto #mapPanel { opacity: 1; visib
   body:not(.touch).map-auto #mapPanel { opacity: 1; visibility: visible; transition: opacity .25s ease, visibility 0s; }
 }
 body.touch .bag-btn b:empty, .bag-btn b:empty { display: none; }
+
+/* ---------- PC: 모닥불에 앉아 있을 때 UI를 오른쪽 아래로 (가운데 모닥불이 잘 보이게) ---------- */
+body:not(.touch).seated #bottom {
+  left: auto; right: 20px; bottom: 18px; transform: none; align-items: flex-end; gap: 8px;
+  max-width: min(440px, 38vw);
+}
+body:not(.touch).seated #bottom .pill { white-space: normal; text-align: right; }
+body:not(.touch).seated #powders { justify-content: flex-start; max-width: min(440px, 38vw); }
+/* 남은 장작은 화면 위 가운데에 작게 */
+body:not(.touch).seated #fireTimer {
+  position: fixed; top: 16px; left: 50%; transform: translateX(-50%); font-size: 14px; padding: 5px 14px;
+}
