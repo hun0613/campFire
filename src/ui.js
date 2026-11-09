@@ -23,7 +23,7 @@ export const UI = {
     setTimeout(() => el.remove(), ms);
   },
 
-  setOnline(n) { $('online').textContent = n; },
+  setOnline(n) { $('online').textContent = n; $('dockToggle').dataset.n = n; }, // 접힌 메뉴 버튼에도 접속자 수 배지
 
   setInventory(inv, { onThrow, canThrow }) {
     $('woodCount').textContent = inv.wood;

@@ -734,3 +734,33 @@ body:not(.touch) .join-card { scrollbar-width: thin; }
   body:not(.touch) #previewCanvas { min-height: 150px; height: 150px; }
   body:not(.touch) #joinBtn { bottom: 8px; }
 }
+
+/* ---------- 모바일: 오른쪽 메뉴(독) 접기 · 펼치기 ---------- */
+.dock-toggle { position: relative; }
+body.touch #topright .dock-toggle { font-size: 17px; font-weight: 800; }
+/* 접힌 상태: ☰ 버튼 하나 (오른쪽 위에 접속자 수 배지) */
+body.touch:not(.dock-open) #topright { padding: 5px; gap: 0; }
+body.touch:not(.dock-open) #topright > :not(.dock-toggle) { display: none; }
+body.touch .dock-toggle::after {
+  content: attr(data-n); position: absolute; top: -5px; right: -6px; min-width: 17px; height: 17px; padding: 0 4px; box-sizing: border-box;
+  border-radius: 999px; background: #5fd36b; color: #fff; font-size: 10.5px; font-weight: 800; line-height: 17px; text-align: center;
+  box-shadow: 0 0 0 2px rgba(255, 248, 232, .95);
+}
+body.touch.dock-open .dock-toggle::after { display: none; }
+body.touch.dock-open #topright .dock-toggle { background: #ffd9a6; }
+/* 지도는 접힌 메뉴 바로 아래(세로 화면) · 왼쪽(가로 화면)에 */
+@media (orientation: portrait) {
+  body.touch:not(.dock-open) #mapPanel { top: calc(max(10px, env(safe-area-inset-top)) + 56px); }
+}
+body.touch:not(.dock-open) #mapPanel { right: max(8px, env(safe-area-inset-right)); }
+@media (orientation: landscape) {
+  body.touch:not(.dock-open) #mapPanel { top: calc(max(10px, env(safe-area-inset-top)) + 56px); }
+}
+
+/* ---------- 세로 화면: 남은 장작 · 알림을 상태창 바로 아래에 (상태창 높이가 바뀌어도 겹치지 않게) ---------- */
+@media (orientation: portrait) {
+  body.touch.seated #fireTimer { top: calc(var(--status-b, 92px) + 8px); }
+  body.touch.seated #musicHint { top: calc(var(--status-b, 92px) + 46px); }
+  body.touch #toasts { top: calc(var(--status-b, 74px) + 8px); }
+  body.touch.seated #toasts { top: calc(var(--status-b, 74px) + 46px); }
+}

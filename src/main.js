@@ -234,6 +234,27 @@ $('joinBtn').onclick = doJoin;
 $('nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') doJoin(); });
 
 $('helpBtn').onclick = () => $('help').classList.remove('hidden');
+
+// ---------------------------------------------------------------- 모바일: 오른쪽 메뉴(독) 접기 · 펼치기
+// 처음에는 ☰ 버튼 하나만 (접속자 수 배지). 누르면 펼쳐지고, 메뉴를 하나 고르거나 화면을 만지면 다시 접힌다
+function setDock(open) {
+  document.body.classList.toggle('dock-open', open);
+  $('dockToggle').textContent = open ? '✕' : '☰';
+  $('dockToggle').title = open ? '메뉴 접기' : '메뉴 펼치기';
+  $('dockToggle').setAttribute('aria-expanded', String(open));
+}
+$('dockToggle').onclick = (e) => { e.stopPropagation(); setDock(!document.body.classList.contains('dock-open')); };
+$('topright').addEventListener('click', (e) => {
+  if (isTouch && e.target.closest('.icon-btn') && e.target.id !== 'dockToggle') setTimeout(() => setDock(false), 250);
+});
+renderer.domElement.addEventListener('pointerdown', () => { if (document.body.classList.contains('dock-open')) setDock(false); });
+
+// 상태창(왼쪽 위) 높이가 바뀌면(루미의 부탁 줄 등) 남은 장작 · 알림을 그 바로 아래로
+if (typeof ResizeObserver !== 'undefined') {
+  const placeUnderStatus = () => document.documentElement.style.setProperty('--status-b', `${Math.round($('status').getBoundingClientRect().bottom)}px`);
+  new ResizeObserver(placeUnderStatus).observe($('status'));
+  addEventListener('resize', placeUnderStatus);
+}
 function setView(fp) {
   view.fp = fp;
   store.set('view', fp ? 'fp' : 'tp');
