@@ -670,10 +670,11 @@ body.touch.seated #musicBtn {
 .store-card .btn.ghost { margin-top: 18px; }
 
 /* ---------- 루미의 부탁 · ✦ 특별한 가루 ---------- */
-.q-lumi { position: relative; margin-top: 6px; padding: 6px 0 8px; border-top: 2px dashed #ead5ad; font-size: 13.5px; }
+/* 제목 · 진행 수는 한 줄(좁으면 진행 수가 다음 줄로), 막대는 늘 그 아래 따로 한 줄 → 글자와 겹치지 않게 */
+.q-lumi { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 4px; row-gap: 2px; margin-top: 6px; padding-top: 6px; border-top: 2px dashed #ead5ad; font-size: 13.5px; }
 .q-lumi b { color: #8a5cd6; font-weight: normal; }
-.q-lumi span { float: right; margin-left: 8px; color: var(--brown-2); font-variant-numeric: tabular-nums; }
-.q-lumi i { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; border-radius: 4px; background: linear-gradient(90deg, #b38cff var(--p), #eadcf8 var(--p)); }
+.q-lumi span { margin-left: auto; padding-left: 6px; color: var(--brown-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.q-lumi i { flex: 0 0 100%; height: 4px; margin-top: 5px; border-radius: 4px; background: linear-gradient(90deg, #b38cff var(--p), #eadcf8 var(--p)); }
 .q-lumi.done span { color: #8a5cd6; }
 .q-lumi.done { animation: lumiDone 1.6s ease-in-out infinite; }
 @keyframes lumiDone { 50% { color: #8a5cd6; } }
