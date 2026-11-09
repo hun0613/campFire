@@ -983,7 +983,33 @@ function lerpAngle(a, b, t) {
 function refreshInventory() {
   const pit = state.sitting ? pits.get(state.sitting.pit) : null;
   UI.setInventory(state.inv, { onThrow: throwPowder, canThrow: !!pit && pit.state === 'lit' });
+  refreshBag();
 }
+
+// ---------------------------------------------------------------- 🎒 가방 (서 있을 때 가진 가루 보기)
+let bagLast = -1;
+function refreshBag() {
+  const list = state.inv.powders;
+  const n = list.length;
+  $('bagCount').textContent = n;
+  if (bagLast >= 0 && n > bagLast) { $('bagBtn').classList.remove('bump'); void $('bagBtn').offsetWidth; $('bagBtn').classList.add('bump'); }
+  bagLast = n;
+  $('bagBtn').classList.toggle('has-legend', list.some((p) => p.legend));
+  if ($('bagPanel').classList.contains('hidden')) return;
+  const legend = list.filter((p) => p.legend).length;
+  $('bagSub').textContent = n ? `마법 가루 ${n}/${CFG.MAX_POWDERS}${legend ? ` · ✦ ${legend}` : ''}` : '';
+  $('bagList').innerHTML = n ? list.map((p) => UI.powderChip(p)).join('')
+    : `<div class="bag-empty">가루가 없어요.<br>길 건너 <b>루미</b>에게 가면 ${CFG.BASE_POWDERS}개까지 채워 줘요 ✨</div>`;
+}
+function setBag(open) {
+  $('bagPanel').classList.toggle('hidden', !open);
+  $('bagBtn').classList.toggle('on', open);
+  if (open) refreshBag();
+}
+$('bagBtn').onclick = (e) => { e.stopPropagation(); e.currentTarget.blur(); setBag($('bagPanel').classList.contains('hidden')); };
+addEventListener('pointerdown', (e) => {
+  if (!$('bagPanel').classList.contains('hidden') && !e.target.closest('#bagPanel, #bagBtn')) setBag(false);
+}, true);
 
 // ---------------------------------------------------------------- 상호작용
 function findInteraction() {
@@ -1362,7 +1388,10 @@ function updateLocal(dt) {
     run = touch.mag > 0.92;
   }
   const moving = ix !== 0 || iz !== 0;
-  if (isTouch && document.body.classList.contains('seated') !== !!state.sitting) document.body.classList.toggle('seated', !!state.sitting);
+  if (document.body.classList.contains('seated') !== !!state.sitting) {
+    document.body.classList.toggle('seated', !!state.sitting);
+    if (state.sitting) setBag(false); // 앉으면 가루 칸이 다시 나오니 가방은 닫는다
+  }
 
   if (state.sitting) {
     if (moving) standUp();

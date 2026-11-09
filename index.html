@@ -95,6 +95,14 @@
     </div>
     <button id="chatToggle" class="chat-toggle">💬</button>
 
+    <!-- 🎒 가방: 서 있을 때는 가루 칸 대신 이 버튼으로 가진 가루를 본다 (앉으면 가루 칸이 다시 나온다) -->
+    <button id="bagBtn" class="bag-btn" title="내 가방">🎒<b id="bagCount">0</b></button>
+    <div id="bagPanel" class="bag-panel hidden">
+      <div class="bag-head">🎒 내 가방 <small id="bagSub"></small></div>
+      <div id="bagList" class="bag-list"></div>
+      <div class="bag-hint">모닥불에 앉으면 <span class="pc-only-inline">숫자키로</span><span class="touch-only-inline">가루를 눌러</span> 뿌릴 수 있어요 🔥</div>
+    </div>
+
     <div id="dialog" class="hidden">
       <div class="dname">루미</div>
       <div class="dtext"></div>
@@ -109,7 +117,7 @@
           <li><b>동쪽 장작 패는 곳</b>에서 통나무 앞에 서서 <kbd>E</kbd> (꾹 누르면 계속 패요)</li>
           <li>장작 패는 곳 길 건너 <b>루미</b>에게 가면 장작 없이도 랜덤 <b>마법 가루</b>를 3개까지 채워 줘요. 루미의 <b>부탁</b>을 들어주면 <b>✦ 특별한 가루</b>를 받아요</li>
           <li><b>글램핑장 앞 화로</b>에서 <kbd>E</kbd>로 장작을 쌓고, 한 번 더 <kbd>E</kbd>로 불을 붙여요</li>
-          <li>타오르는 불 앞에서 <kbd>E</kbd>로 앉아 불멍! <kbd>1</kbd>~<kbd>9</kbd> 로 가루를 뿌려요. 장작이 없어도 빈 화로 의자에 앉아 쉴 수 있어요</li>
+          <li>타오르는 불 앞에서 <kbd>E</kbd>로 앉아 불멍! <kbd>1</kbd>~<kbd>9</kbd> 로 가루를 뿌려요. 서 있을 때는 아래 <b>🎒 가방</b>을 눌러 가진 가루를 볼 수 있어요. 장작이 없어도 빈 화로 의자에 앉아 쉴 수 있어요</li>
           <li>앉은 채로 옆의 <b>💿 LP 플레이어</b>를 누르면(<kbd>M</kbd>) 곡을 검색해서 틀 수 있어요. 기타를 치며 옆 TV로 음악이 나오고, 같은 모닥불에 앉은 사람만 들려요</li>
           <li>장작은 10분 동안 타요. 다 타면 다시 장작을 패러 가요 🪓</li>
           <li>광장의 <b>📖 방명록</b>에서 한마디를 남기고, 다른 캠퍼들의 방명록도 구경할 수 있어요</li>

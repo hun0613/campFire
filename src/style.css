@@ -780,3 +780,60 @@ body.touch .chat-toggle:active { background: rgba(255, 248, 232, .5); }
 /* 앉아 있을 때는 조이스틱 자리에 가루가 오므로, 채팅 버튼은 가루 바로 위 왼쪽에 */
 body.touch.seated .chat-toggle { left: calc(16px + env(safe-area-inset-left)); bottom: calc(26px + env(safe-area-inset-bottom)); }
 body.touch.seated:has(#powders > .powder) .chat-toggle { bottom: calc(80px + env(safe-area-inset-bottom)); } /* 가루가 있으면 가루 바로 위 */
+
+/* ---------- 🎒 가방: 서 있을 때는 가루 칸을 숨기고 가방 버튼으로 (앉으면 지금처럼 가루 칸) ---------- */
+body:not(.seated) #powders { display: none; }
+.pc-only-inline { display: inline; } body.touch .pc-only-inline { display: none; }
+.bag-btn {
+  position: fixed; z-index: 6; left: 50%; transform: translateX(-50%); bottom: 22px;
+  display: flex; align-items: center; gap: 6px; padding: 7px 14px 7px 12px; border-radius: 999px; cursor: pointer;
+  background: rgba(255, 248, 232, .9); border: 3px solid #f1dfba; box-shadow: var(--shadow);
+  font: inherit; font-size: 20px; line-height: 1; color: var(--brown);
+}
+.bag-btn b { font-size: 15px; font-weight: normal; min-width: 10px; }
+.bag-btn.on { background: #ffe7c6; border-color: var(--orange); }
+.bag-btn.has-legend { border-color: #ffd36b; box-shadow: var(--shadow), 0 0 12px rgba(255, 200, 90, .55); }
+.bag-btn.bump { animation: bagBump .5s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes bagBump { 40% { transform: translateX(-50%) scale(1.18); } }
+body.seated .bag-btn, body.seated .bag-panel { display: none; }
+/* 서 있을 때 PC: 상호작용 안내가 가방 위에 오도록 */
+body:not(.touch):not(.seated) #bottom { bottom: 80px; }
+.bag-panel {
+  position: fixed; z-index: 7; left: 50%; transform: translateX(-50%); bottom: 80px;
+  width: min(340px, calc(100vw - 32px)); max-height: min(60vh, 420px); overflow-y: auto;
+  background: rgba(255, 248, 232, .97); border: 3px solid #f1dfba; border-radius: 20px; box-shadow: var(--shadow);
+  padding: 12px 14px 12px; color: var(--brown); animation: pop .25s cubic-bezier(.2, 1.4, .4, 1);
+}
+.bag-panel.hidden { display: none; }
+.bag-head { font-size: 17px; margin-bottom: 8px; }
+.bag-head small { font-size: 13px; color: var(--brown-2); margin-left: 6px; }
+.bag-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.bag-list .pw { display: inline-flex; align-items: center; gap: 6px; background: white; padding: 4px 10px; border-radius: 10px; font-size: 14px; }
+.bag-list .pw i { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
+.bag-list .pw.legend { background: linear-gradient(90deg, #fff6d8, #fde9ff); box-shadow: 0 0 0 2px #ffd36b; }
+.bag-empty { font-size: 14px; line-height: 1.6; color: var(--brown-2); padding: 6px 0; }
+.bag-empty b { color: var(--orange-2); font-weight: normal; }
+.bag-hint { margin-top: 10px; font-size: 12.5px; color: #b08d66; }
+/* 좁은 PC 창: 채팅은 왼쪽 아래, 가방은 오른쪽 아래 */
+@media (max-width: 640px) {
+  body:not(.touch) .bag-btn { left: auto; right: 16px; transform: none; }
+  body:not(.touch) .bag-btn.bump { animation: none; }
+  body:not(.touch) .bag-panel { left: auto; right: 16px; transform: none; }
+}
+/* 모바일: 💬 채팅 버튼 오른쪽에 같은 반투명 동그라미로 */
+body.touch .bag-btn {
+  left: calc(198px + env(safe-area-inset-left)); transform: none; bottom: calc(26px + env(safe-area-inset-bottom));
+  width: 42px; height: 42px; padding: 0; justify-content: center; font-size: 19px;
+  background: rgba(255, 248, 232, .26); border: 2px solid rgba(255, 248, 232, .45);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
+}
+body.touch .bag-btn b {
+  position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box;
+  border-radius: 999px; background: rgba(255, 248, 232, .95); color: var(--brown); font-size: 11px; font-weight: 800; line-height: 18px; text-align: center;
+}
+body.touch .bag-btn.on { background: rgba(255, 231, 198, .7); }
+body.touch .bag-btn.has-legend { border-color: rgba(255, 211, 107, .9); }
+body.touch .bag-btn.bump { animation: bagBumpM .5s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes bagBumpM { 40% { transform: scale(1.18); } }
+body.touch .bag-panel { left: calc(16px + env(safe-area-inset-left)); transform: none; bottom: calc(80px + env(safe-area-inset-bottom)); width: min(320px, calc(100vw - 32px)); }
+body.touch.chat-open .bag-btn, body.touch.chat-open .bag-panel { display: none; }
