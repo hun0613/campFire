@@ -1333,11 +1333,13 @@ function updateLocal(dt) {
     if (keys.has('KeyD') || keys.has('ArrowRight')) ix += 1;
   }
   let run = keys.has('ShiftLeft') || keys.has('ShiftRight');
-  if (!blocked && touch?.active && touch.mag > 0) {
+  // 앉아 있을 때는 조이스틱을 쓰지 않는다: 시점을 돌리려고 화면을 쓸다가 일어나 버리지 않게 (일어나기 버튼으로만 일어난다)
+  if (!blocked && !state.sitting && touch?.active && touch.mag > 0) {
     ix = touch.x; iz = touch.y;
     run = touch.mag > 0.92;
   }
   const moving = ix !== 0 || iz !== 0;
+  if (isTouch && document.body.classList.contains('seated') !== !!state.sitting) document.body.classList.toggle('seated', !!state.sitting);
 
   if (state.sitting) {
     if (moving) standUp();

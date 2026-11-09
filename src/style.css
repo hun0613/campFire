@@ -675,3 +675,7 @@ body.touch .q-lumi { font-size: 12px; }
 .powder.legend { border-color: #ffd36b; box-shadow: 0 0 0 2px rgba(255, 211, 107, .35), 0 0 14px rgba(255, 200, 90, .55); }
 .powder.legend::after { content: '✦'; position: absolute; top: -7px; right: -5px; font-size: 13px; color: #ffcf4a; text-shadow: 0 0 6px #fff3b0; }
 .dtext .pw.legend { background: linear-gradient(90deg, #fff6d8, #fde9ff); box-shadow: 0 0 0 2px #ffd36b; }
+
+/* 앉아 있을 때: 조이스틱 영역을 꺼서 화면 어디를 쓸어도 시점만 돌아가게 (일어나기는 오른쪽 아래 버튼) */
+body.touch.seated #joyZone { pointer-events: none; }
+body.touch.seated #joyBase { opacity: 0; }
