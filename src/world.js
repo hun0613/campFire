@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { toon, glow, radialTexture, textTexture, mulberry32 } from './toon.js';
 import { createSky } from './sky.js';
-import { TENTS, PITS, STUMPS, NPC, WOODYARD, BOUNDS } from '../shared/config.js';
+import { TENTS, PITS, STUMPS, NPC, KEEPER, WOODYARD, BOUNDS } from '../shared/config.js';
 
 const W = { minX: -60, maxX: 60, minZ: -42, maxZ: 42 };
 const tmpM = new THREE.Matrix4();
@@ -18,6 +18,7 @@ export function isPath(x, z) {
   for (const p of PITS) if ((x - p.x) ** 2 + (z - p.z) ** 2 < 3.7 * 3.7) return true;
   if (((x - WOODYARD.x) / 8.5) ** 2 + ((z - WOODYARD.z) / 7.5) ** 2 < 1) return true;
   if ((x - (NPC.x + NPC.front.x)) ** 2 + (z - (NPC.z + NPC.front.z)) ** 2 < 6.2 * 6.2) return true;
+  if ((x - KEEPER.x) ** 2 + (z - (KEEPER.z + 1.2)) ** 2 < 4.2 * 4.2) return true; // 창고 앞마당
   return false;
 }
 
@@ -68,6 +69,7 @@ function groundTexture() {
   for (const p of PITS) circle(p.x, p.z, 3.7);
   ellipse(WOODYARD.x, WOODYARD.z, 8.5, 7.5);
   circle(NPC.x + NPC.front.x, NPC.z + NPC.front.z, 6.2);
+  circle(KEEPER.x, KEEPER.z + 1.2, 4.2);
   g.shadowBlur = 0;
   for (let i = 0; i < 26000; i++) {
     const x = rand() * w, y = rand() * h;
@@ -379,13 +381,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     const ends = pile.flatMap((p) => [{ ...p, z: p.z + 2.51 }, { ...p, z: p.z - 2.51 }]);
     scene.add(instanced(new THREE.CircleGeometry(0.31, 12), toon('#e2b77d', { side: THREE.DoubleSide }), ends.map((e) => ({ ...e, rx: 0 })), { cast: false }));
     for (const dz of [-1.5, 0, 1.5, 3]) addCol(px, pz + dz, 1.4);
-    // 쪼갠 장작 더미
-    const split = [];
-    for (let row = 0; row < 3; row++) for (let i = 0; i < 6 - row; i++) {
-      split.push({ x: WOODYARD.x - 5 + i * 0.32 + row * 0.16, y: 0.12 + row * 0.22, z: WOODYARD.z - 6.5, rx: Math.PI / 2, ry: 0, sx: 1, sy: 1, sz: 1, color: '#b98455' });
-    }
-    scene.add(instanced(new THREE.BoxGeometry(0.22, 0.9, 0.2), toon('#ffffff'), split));
-    addCol(WOODYARD.x - 4.1, WOODYARD.z - 6.5, 1.1);
+    // (쪼갠 장작 더미는 북서쪽 장작 창고 안에 쌓여 있다)
     // 꽂혀 있는 도끼 장식
     lamp(WOODYARD.x - 4.5, WOODYARD.z + 5.7, true, '#ffb565', 10); // 장작 패는 곳 앞 큰길 가
   }
@@ -450,6 +446,51 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   sign(WOODYARD.x - 8, WOODYARD.z + 1, '🪓 장작 패는 곳', { ry: -Math.PI / 2 }); // 광장 쪽(서쪽)을 본다
   sign(NPC.x - 6, NPC.z - 2.4, '✨ 루미의 마법 가루', { ry: -Math.PI / 2 });
   sign(-8.5, 9.5, '🏕️ 불멍 캠핑장 광장', { w: 2.4 });
+  sign(KEEPER.x - 4.4, KEEPER.z + 2.0, '📦 장작 창고'); // 오두막 서쪽 앞 (광장에서 오면 먼저 보인다)
+
+  // ---------- 장작 창고 (장작 패는 곳 북서쪽). 앞이 트인 나무 오두막에 장작이 가득, 창고지기 보리가 앞에 선다
+  {
+    const cx = KEEPER.x, cz = KEEPER.z - 2.6; // 오두막 가운데 (보리 뒤)
+    const W2 = 2.8, D2 = 1.6, H = 2.5;          // 반폭 · 반깊이 · 처마 높이
+    const plank = toon('#8a5a36'), dark = toon('#5e3d24'), roofMat = toon('#6d4a34');
+    const g = new THREE.Group();
+    g.position.set(cx, 0, cz);
+    scene.add(g);
+    const box = (w, h, d, x, y, z, m) => {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+      b.position.set(x, y, z);
+      b.castShadow = true; b.receiveShadow = true;
+      g.add(b);
+      return b;
+    };
+    box(W2 * 2 + 0.2, 0.18, D2 * 2 + 0.2, 0, 0.09, 0, dark);           // 바닥
+    box(W2 * 2, H + 0.4, 0.14, 0, (H + 0.4) / 2, -D2, plank);          // 뒷벽 (뒤가 높다)
+    for (const sx of [-1, 1]) box(0.14, H, D2 * 2, sx * W2, H / 2, 0, plank); // 옆벽
+    for (const sx of [-1, 1]) box(0.16, H, 0.16, sx * W2, H / 2, D2, dark);   // 앞기둥
+    box(W2 * 2 + 0.2, 0.16, 0.16, 0, H, D2, dark);                      // 앞 들보
+    const roof = box(W2 * 2 + 0.9, 0.14, D2 * 2 + 1.0, 0, H + 0.38, 0.1, roofMat);
+    roof.rotation.x = 0.2;                                              // 앞(남쪽)으로 기운 외지붕
+    // 안에 가득 쌓인 쪼갠 장작 (앞에서 보이는 단면)
+    const logs = [];
+    const shades = ['#b98455', '#a8743f', '#c99566', '#9c6a3c'];
+    for (let row = 0; row < 7; row++) for (let i = 0; i < 15; i++) {
+      logs.push({ x: -W2 + 0.4 + i * 0.34 + (row % 2) * 0.17, y: 0.34 + row * 0.3, z: -0.2, rx: Math.PI / 2, color: shades[(i * 3 + row) % 4] });
+    }
+    g.add(instanced(new THREE.CylinderGeometry(0.15, 0.15, 2.4, 7), toon('#ffffff'), logs));
+    // 보리 옆 낮은 장작 받침대 (맡긴 장작을 올려 두는 곳)
+    box(1.3, 0.5, 0.8, 2.0, 0.25, D2 + 1.1, plank);
+    const top = [];
+    for (let i = 0; i < 4; i++) top.push({ x: 1.55 + i * 0.3, y: 0.62, z: D2 + 1.1, rx: Math.PI / 2, color: shades[i % 4] });
+    g.add(instanced(new THREE.CylinderGeometry(0.13, 0.13, 0.7, 7), toon('#ffffff'), top));
+    // 처마 끝 랜턴 (발광만) + 앞마당 가로등
+    const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), glow('#ffcf85', 3));
+    lantern.position.set(-W2 + 0.3, H - 0.25, D2 + 0.1);
+    g.add(lantern);
+    lamp(cx + W2 + 1.5, KEEPER.z + 0.6, true, '#ffb565', 8);
+    // 충돌: 오두막 뒤 · 옆 (앞은 트여 있어도 장작이 막고 있다), 받침대
+    for (const dx of [-2.1, -0.7, 0.7, 2.1]) addCol(cx + dx, cz - 0.4, 1.0);
+    addCol(cx + 2.0, cz + D2 + 1.1, 0.7);
+  }
 
   // ---------- NPC 가루 공방 (동쪽 장작 마당, 큰길 남쪽, 광장 쪽을 본다)
   {
@@ -531,6 +572,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
       for (const p of PITS) if ((x - p.x) ** 2 + (z - p.z) ** 2 < 5 ** 2) return true;
       if ((x - (WOODYARD.x + 6.5)) ** 2 + (z - (WOODYARD.z + 1)) ** 2 < 5 ** 2) return true;
       if ((x - NPC.x) ** 2 + (z - NPC.z) ** 2 < 6 ** 2) return true;
+      if ((x - KEEPER.x) ** 2 + (z - (KEEPER.z - 2.5)) ** 2 < 6.5 ** 2) return true;
       return false;
     };
     const all = [];

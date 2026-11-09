@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import {
-  CFG, PITS, STUMPS, NPC, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
+  CFG, PITS, STUMPS, NPC, KEEPER, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
 } from '../shared/config.js';
 import * as guestbook from './guestbook.js';
 import { handleAdmin, adminOn } from './admin.js';
@@ -100,12 +100,12 @@ const SAVE_SECRET = process.env.SAVE_SECRET || crypto.randomBytes(32).toString('
 if (!process.env.SAVE_SECRET && isProd) console.warn('⚠️  SAVE_SECRET 이 없어 서버 재시작 후에는 기기 백업을 복원할 수 없어요.');
 const SAVE_TTL = 14 * 24 * 3600 * 1000;
 const PID = /^[A-Za-z0-9_-]{16,64}$/;
-const saves = new Map(); // pid -> { wood, chops, powders, canPowder, x, z, at }
+const saves = new Map(); // pid -> { wood, stored, chops, powders, canPowder, x, z, at }
 const pitOwnerKey = new Map(); // pitId -> pid (공개되지 않음)
 const sign = (pid, data) => crypto.createHmac('sha256', SAVE_SECRET).update(`${pid}|${data}`).digest('base64url');
 
 function snapshotOf(p) {
-  return { wood: p.wood, chops: p.chops, powders: p.powders, canPowder: p.canPowder };
+  return { wood: p.wood, stored: p.stored, chops: p.chops, powders: p.powders, canPowder: p.canPowder };
 }
 function remember(p) {
   if (!p.pid) return;
@@ -113,12 +113,13 @@ function remember(p) {
 }
 function validSnapshot(s) {
   if (!s || typeof s !== 'object') return null;
-  const wood = s.wood | 0, chops = s.chops | 0;
+  const wood = s.wood | 0, chops = s.chops | 0, stored = s.stored | 0; // stored: 창고 (예전 백업에는 없어서 0)
   if (wood < 0 || wood > CFG.MAX_WOOD || chops < 0 || chops >= CFG.CHOPS_PER_WOOD) return null;
+  if (stored < 0 || stored > CFG.MAX_STORED) return null;
   if (!Array.isArray(s.powders) || s.powders.length > CFG.MAX_POWDERS) return null;
   const powders = s.powders.filter((q) => q && HEX.test(q.color) && typeof q.effect === 'string' && typeof q.name === 'string')
     .map((q) => ({ ...q }));
-  return { wood, chops, powders, canPowder: s.canPowder !== false };
+  return { wood, stored, chops, powders, canPowder: s.canPowder !== false };
 }
 /** 서버 기억 → 없으면 서명된 기기 백업 순서로 복원 */
 function restore(pid, backup) {
@@ -267,7 +268,7 @@ function handle(ws, ctx, m) {
       id: nextId++, pid, name, look,
       x: SPAWN.x + (Math.random() - 0.5) * 6, z: SPAWN.z + (Math.random() - 0.5) * 2, ry: Math.PI,
       anim: 'idle', seat: null,
-      wood: saved?.wood ?? 0, chops: saved?.chops ?? 0, powders: saved?.powders ?? [], canPowder: saved?.canPowder ?? true,
+      wood: saved?.wood ?? 0, stored: saved?.stored ?? 0, chops: saved?.chops ?? 0, powders: saved?.powders ?? [], canPowder: saved?.canPowder ?? true,
       lastChop: 0, lastChat: 0,
     };
     // 방금 전까지 있던 자리로 (새로고침)
@@ -284,7 +285,7 @@ function handle(ws, ctx, m) {
         if (key === pid && pit.state !== 'empty') { pit.owner = p.id; broadcast({ t: 'pit', pit }); }
       }
     }
-    send(ws, { t: 'welcome', id: p.id, me: publicPlayer(p), restored: saved ? { wood: p.wood, powders: p.powders.length } : null });
+    send(ws, { t: 'welcome', id: p.id, me: publicPlayer(p), restored: saved ? { wood: p.wood, stored: p.stored, powders: p.powders.length } : null });
     send(ws, inv(p));
     send(ws, quotaMsg());
     broadcast({ t: 'join', player: publicPlayer(p) }, ws);
@@ -313,7 +314,7 @@ function handle(ws, ctx, m) {
       me.lastChop = now;
       if (me.wood >= CFG.MAX_WOOD) {
         broadcast({ t: 'act', id: me.id, a: 'chop', stump: m.stump | 0 }, ws);
-        send(ws, { t: 'toast', text: '장작을 더 들 수 없어요!' });
+        send(ws, { t: 'toast', text: '장작을 더 들 수 없어요! 창고지기 보리에게 맡겨 보세요 📦' });
         return;
       }
       me.chops += 1;
@@ -349,6 +350,21 @@ function handle(ws, ctx, m) {
         me.canPowder = false;
       }
       send(ws, { t: 'npc', kind, powders: given, wood: me.wood });
+      send(ws, inv(me));
+      break;
+    }
+    case 'store': { // 장작 창고: op 'put' 맡기기 / 'take' 찾기
+      if (dist(me, KEEPER.x, KEEPER.z) > RANGE.keeper + 1.5) return;
+      const want = Math.max(1, Math.min(CFG.MAX_STORED, m.n | 0));
+      let n = 0, reason = '';
+      if (m.op === 'put') {
+        n = Math.min(want, me.wood, CFG.MAX_STORED - me.stored);
+        if (n > 0) { me.wood -= n; me.stored += n; } else reason = me.wood ? 'storeFull' : 'noWood';
+      } else if (m.op === 'take') {
+        n = Math.min(want, me.stored, CFG.MAX_WOOD - me.wood);
+        if (n > 0) { me.stored -= n; me.wood += n; } else reason = me.stored ? 'handsFull' : 'empty';
+      } else return;
+      send(ws, { t: 'stored', op: m.op, n, reason });
       send(ws, inv(me));
       break;
     }

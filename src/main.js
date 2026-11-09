@@ -24,7 +24,7 @@ import { Woodcut } from './woodcut.js';
 import { GuestbookStand } from './guestbook.js';
 import { NoticeBoard } from './board.js';
 import { LightPool } from './lightpool.js';
-import { CFG, PITS, STUMPS, NPC, BOUNDS, RANGE, LOOKS, GUESTBOOK, BOARD } from '../shared/config.js';
+import { CFG, PITS, STUMPS, NPC, KEEPER, BOUNDS, RANGE, LOOKS, GUESTBOOK, BOARD } from '../shared/config.js';
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -135,10 +135,16 @@ npc.root.position.set(NPC.x, 0, NPC.z);
 npc.root.rotation.y = NPC.ry;
 scene.add(npc.root);
 
+// NPC 보리 (장작 창고지기)
+const keeper = new Character({ skin: '#f6c9a0', hair: '#6b4a2b', shirt: '#5f8a45', pants: '#5a4330', hat: 'beanie' }, { name: '📦 보리 · 장작 창고지기', kind: 'npc' });
+keeper.root.position.set(KEEPER.x, 0, KEEPER.z);
+keeper.root.rotation.y = KEEPER.ry;
+scene.add(keeper.root);
+
 // ---------------------------------------------------------------- 상태
 const state = {
   myId: null,
-  inv: { wood: 0, chops: 0, powders: [], canPowder: true },
+  inv: { wood: 0, stored: 0, chops: 0, powders: [], canPowder: true },
   sitting: null,
   clockOffset: 0,
   lastSent: { x: 0, z: 0, ry: 0, anim: '' },
@@ -373,8 +379,8 @@ net.on('welcome', (m) => {
   if (firstTime) $('helpClose').addEventListener('click', afterHelp, { once: true });
   else afterHelp();
   const r = m.restored;
-  if (r && (r.wood || r.powders)) {
-    UI.addChat('', `🎒 가지고 있던 장작 ${r.wood}개${r.powders ? `, 가루 ${r.powders}개` : ''}를 그대로 챙겨 왔어요!`, true);
+  if (r && (r.wood || r.powders || r.stored)) {
+    UI.addChat('', `🎒 가지고 있던 장작 ${r.wood}개${r.powders ? `, 가루 ${r.powders}개` : ''}를 그대로 챙겨 왔어요!${r.stored ? ` (창고에 ${r.stored}개)` : ''}`, true);
   } else UI.addChat('', '🌙 불멍 캠핑장에 오신 걸 환영해요! 동쪽에서 장작을 패 보세요.', true);
   updateOnline();
 });
@@ -401,7 +407,8 @@ net.on('snap', (m) => {
 net.on('inv', (m) => {
   if (m.save) store.set('save', m.save); // 서버가 서명한 백업 (서버가 재시작돼도 장작 복원)
   const prev = state.inv;
-  state.inv = { wood: m.wood, chops: m.chops, powders: m.powders, canPowder: m.canPowder };
+  state.inv = { wood: m.wood, stored: m.stored || 0, chops: m.chops, powders: m.powders, canPowder: m.canPowder };
+  if (storeIsOpen()) renderStore(prev);
   if (m.gained && me && state.lastStumpIdx != null) splitLog(state.lastStumpIdx, me.char);
   me?.char.setCarry(m.wood);
   refreshInventory();
@@ -410,8 +417,61 @@ net.on('inv', (m) => {
     floatText('+1 🪵', me.char.root.position.clone().setY(2.3));
     sound.wood();
     if (m.wood === CFG.WOOD_PER_FIRE && m.canPowder) UI.toast('장작 5개 완성! 길 건너 루미에게 가 보세요 ✨');
+    if (m.wood === CFG.MAX_WOOD) UI.toast(`장작이 ${CFG.MAX_WOOD}개 가득! 북서쪽 창고지기 보리에게 맡기면 더 팰 수 있어요 📦`);
   }
   if (prev.powders.length < m.powders.length) sound.gift();
+});
+
+// ---------------------------------------------------------------- 장작 창고 (창고지기 보리)
+const STORE_SAY = {
+  hello: ['장작은 내가 잘 맡아 둘게! 🪵', '어서 와! 오늘도 장작 패느라 수고 많았지?', '창고는 네 기기에만 열리는 너만의 칸이야 📦'],
+  put: (n) => `${n}개 받았어! 차곡차곡 쌓아 둘게 🪵`,
+  take: (n) => `여기 ${n}개! 따뜻한 불 피우렴 🔥`,
+  noWood: '손에 든 장작이 없네. 통나무 앞에서 패 오렴 🪓',
+  storeFull: `창고가 꽉 찼어! (최대 ${CFG.MAX_STORED}개) 모닥불에 좀 쓰고 오렴`,
+  handsFull: `손이 가득 찼어! (최대 ${CFG.MAX_WOOD}개) 화로에 쌓고 다시 오렴`,
+  empty: '창고가 비어 있어. 장작을 패서 맡겨 보렴!',
+};
+const storeIsOpen = () => !$('storeModal').classList.contains('hidden');
+function renderStore(prev) {
+  const inv = state.inv;
+  const hand = $('storeHand'), box = $('storeBox');
+  hand.textContent = inv.wood; box.textContent = inv.stored;
+  $('storeHandMax').textContent = `/ ${CFG.MAX_WOOD}`;
+  $('storeBoxMax').textContent = `/ ${CFG.MAX_STORED}`;
+  if (prev) {
+    for (const [el, a, b] of [[hand, prev.wood, inv.wood], [box, prev.stored, inv.stored]]) {
+      if (a !== b) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+    }
+  }
+  const canPut = inv.wood > 0 && inv.stored < CFG.MAX_STORED;
+  const canTake = inv.stored > 0 && inv.wood < CFG.MAX_WOOD;
+  for (const b of $('storeModal').querySelectorAll('[data-op]')) b.disabled = b.dataset.op === 'put' ? !canPut : !canTake;
+}
+function openStore() {
+  faceTo(KEEPER.x, KEEPER.z);
+  keeper.play('wave');
+  $('storeSay').textContent = STORE_SAY.hello[Math.floor(Math.random() * STORE_SAY.hello.length)];
+  renderStore();
+  $('storeModal').classList.remove('hidden');
+  state.storeOpenedAt = performance.now();
+}
+function closeStore() { $('storeModal').classList.add('hidden'); }
+$('storeClose').onclick = closeStore;
+$('storeModal').addEventListener('click', (e) => { if (e.target.id === 'storeModal' && performance.now() - (state.storeOpenedAt || 0) > 600) closeStore(); });
+for (const b of $('storeModal').querySelectorAll('[data-op]')) {
+  b.onclick = () => {
+    const op = b.dataset.op;
+    const n = b.dataset.n === 'all' ? CFG.MAX_STORED : Number(b.dataset.n);
+    net.send({ t: 'store', op, n });
+  };
+}
+net.on('stored', (m) => {
+  if (m.n > 0) {
+    $('storeSay').textContent = STORE_SAY[m.op](m.n);
+    sound.wood();
+    track('wood_store', { op: m.op, n: m.n });
+  } else if (STORE_SAY[m.reason]) $('storeSay').textContent = STORE_SAY[m.reason];
 });
 
 net.on('npc', (m) => {
@@ -876,6 +936,8 @@ function findInteraction() {
   });
   const dn = Math.hypot(me.x - NPC.x, me.z - NPC.z);
   if (dn < RANGE.npc && dn < bestD) { best = { type: 'npc' }; bestD = dn; }
+  const dk = Math.hypot(me.x - KEEPER.x, me.z - KEEPER.z);
+  if (dk < RANGE.keeper && dk < bestD) { best = { type: 'keeper' }; bestD = dk; }
   const dg = Math.hypot(me.x - GUESTBOOK.x, me.z - GUESTBOOK.z);
   if (dg < RANGE.guestbook && dg < bestD) { best = { type: 'guestbook' }; bestD = dg; }
   const db = Math.hypot(me.x - BOARD.x, me.z - BOARD.z);
@@ -895,6 +957,7 @@ function promptFor(it) {
     return woodcut.stateOf(it.idx) === 'empty' ? ['<kbd>E</kbd> 통나무 올리기 <small>(꾹 누르면 계속 패요)</small>'] : ['<kbd>E</kbd> 장작 패기 <small>(꾹 누르기)</small>'];
   }
   if (it.type === 'npc') return ['<kbd>E</kbd> 루미와 이야기하기'];
+  if (it.type === 'keeper') return [`<kbd>E</kbd> 장작 창고 열기 📦 <small>(맡긴 장작 ${inv.stored}개)</small>`];
   if (it.type === 'guestbook') return ['<kbd>E</kbd> 방명록 펼쳐 보기 📖'];
   if (it.type === 'board') return ['<kbd>E</kbd> 캠핑장 소식 보기 📌'];
   if (it.type === 'pit') {
@@ -921,6 +984,8 @@ function interact(it) {
   else if (it.type === 'npc') {
     net.send({ t: 'npc' });
     // NPC가 나를 바라보도록
+  } else if (it.type === 'keeper') {
+    openStore();
   } else if (it.type === 'board') {
     faceTo(BOARD.x, BOARD.z);
     openBoard();
@@ -959,7 +1024,7 @@ function tryChop(it) {
     me.char.play('place', { onImpact: () => { woodcut.place(it.idx); sound.pop?.(); } });
     return;
   }
-  if (state.inv.wood >= CFG.MAX_WOOD) { UI.toast('장작을 더 들 수 없어요! 모닥불에 써 보세요 🔥'); return; }
+  if (state.inv.wood >= CFG.MAX_WOOD) { UI.toast('장작을 더 들 수 없어요! 북서쪽 창고지기 보리에게 맡겨 보세요 📦'); return; }
   me.char.play('chop', {
     onImpact: () => {
       effects.chips(new THREE.Vector3(s.x, 0.66, s.z));
@@ -1015,6 +1080,7 @@ function actionFor(it) {
   if (!it) return null;
   if (it.type === 'chop') return woodcut.stateOf(it.idx) === 'empty' ? { icon: '🪵', label: '통나무 올리기' } : { icon: '🪓', label: '꾹 패기' };
   if (it.type === 'npc') return { icon: '💬', label: '대화' };
+  if (it.type === 'keeper') return { icon: '📦', label: '창고' };
   if (it.type === 'guestbook') return { icon: '📖', label: '방명록' };
   if (it.type === 'board') return { icon: '📌', label: '소식' };
   if (it.type === 'seated') return { icon: '🚶', label: '일어나기' };
@@ -1128,6 +1194,10 @@ addEventListener('keydown', (e) => {
   }
   if (!$('boardModal').classList.contains('hidden')) {
     if (['Escape', 'KeyE', 'Enter', 'Space'].includes(e.code) && !e.repeat) closeBoard();
+    return;
+  }
+  if (storeIsOpen()) {
+    if (['Escape', 'KeyE'].includes(e.code) && !e.repeat) closeStore();
     return;
   }
   if (!$('help').classList.contains('hidden')) {
@@ -1439,8 +1509,18 @@ function updateNpc(dt) {
     if (d > RANGE.npc + 2.5 && UI.dialogOpen()) UI.dialogClose();
     const can = state.inv.wood >= CFG.WOOD_PER_FIRE && state.inv.canPowder && state.inv.powders.length < CFG.MAX_POWDERS;
     npc.markEl.style.display = can ? '' : 'none';
+    // 보리도 가까이 오면 나를 본다. 멀어지면 창고 창을 닫는다
+    const dk = Math.hypot(me.x - KEEPER.x, me.z - KEEPER.z);
+    const tk = dk < 8 ? Math.atan2(me.x - KEEPER.x, me.z - KEEPER.z) : KEEPER.ry;
+    keeper.root.rotation.y = lerpAngle(keeper.root.rotation.y, tk, Math.min(1, dt * 4));
+    if (dk < 6 && !keeper._greeted) { keeper._greeted = true; keeper.play('wave'); }
+    if (dk > 10) keeper._greeted = false;
+    if (dk > RANGE.keeper + 2.5 && storeIsOpen()) closeStore();
+    keeper.markEl.textContent = '📦';
+    keeper.markEl.style.display = state.inv.wood >= CFG.MAX_WOOD && state.inv.stored < CFG.MAX_STORED ? '' : 'none';
   }
   npc.update(dt);
+  keeper.update(dt);
 }
 
 function questText() {
@@ -1453,6 +1533,7 @@ function questText() {
   }
   if (pitList.some((p) => p.owner === state.myId && p.state === 'stacked')) return '쌓아둔 장작에 <b>불을 붙여요</b> 🔥';
   if (inv.wood >= W && inv.canPowder && inv.powders.length < CFG.MAX_POWDERS) return '장작 패는 곳 길 건너 <b>루미</b>에게 가서 마법 가루를 받아요 ✨';
+  if (inv.wood >= CFG.MAX_WOOD) return `장작이 가득! <b>화로</b>에 쌓거나 북서쪽 <b>창고지기 보리</b>에게 맡겨요 📦`;
   if (inv.wood >= W) return '<b>글램핑장 앞 화로</b>에 장작을 쌓아요';
   if (inv.powders.length && pitList.some((p) => p.state === 'lit')) return '타오르는 <b>모닥불</b>에 앉아 가루를 뿌려 봐요 🔥';
   return `동쪽 <b>통나무</b>에서 장작을 패요 (${inv.wood}/${W})`;

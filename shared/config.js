@@ -3,7 +3,8 @@
 export const CFG = {
   WOOD_PER_FIRE: 5,        // 모닥불 하나에 필요한 장작 수 (= 루미에게 가루를 받기 위한 장작 수)
   CHOPS_PER_WOOD: 3,       // 도끼질 몇 번에 장작 1개
-  MAX_WOOD: 30,
+  MAX_WOOD: 30,            // 손에 들 수 있는 장작 수 (패는 횟수에는 제한이 없고, 가득 차면 창고에 맡긴다)
+  MAX_STORED: 300,         // 장작 창고에 맡길 수 있는 수 (기기마다 하나)
   FIRE_DURATION: 600_000,  // 모닥불 지속 시간 (ms)
   POWDERS_PER_VISIT: 3,    // 한 번에 받는 가루 수
   MAX_POWDERS: 9,
@@ -37,13 +38,16 @@ export const STUMPS = [
 // 가루 상인 NPC: face 는 공방 모형의 회전(모형은 +x 쪽이 앞), front 는 손님이 서는 방향, ry 는 루미가 바라보는 방향
 export const NPC = { x: 46, z: 9, ry: -Math.PI / 2, face: Math.PI, front: { x: -1, z: 0 }, name: '루미' };
 
+// 장작 창고지기 NPC: 장작 패는 곳 바로 북서쪽(광장 쪽). 창고 오두막을 등지고 남쪽(장작 마당 · 큰길 쪽)을 본다
+export const KEEPER = { x: 38, z: -16.5, ry: 0, name: '보리' };
+
 export const SPAWN = { x: 0, z: 10.5 };
 
 // 광장 가운데: 왼쪽 방명록, 오른쪽 캠핑장 소식 게시판. 나란히 서서 둘 다 입구(남쪽)를 본다
 export const GUESTBOOK = { x: -3.4, z: 4.4 };
 export const BOARD = { x: 3.4, z: 4.4 };
 
-export const RANGE = { stump: 2.0, npc: 3.6, pit: 3.2, guestbook: 2.8, board: 2.8 };
+export const RANGE = { stump: 2.0, npc: 3.6, keeper: 3.4, pit: 3.2, guestbook: 2.8, board: 2.8 };
 
 export function seatPos(pit, i) {
   const a = Math.PI / 4 + i * (Math.PI * 2 / CFG.SEATS_PER_PIT);

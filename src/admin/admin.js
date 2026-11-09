@@ -250,7 +250,7 @@ $('nReload').onclick = loadNotices;
 // ---------------------------------------------------------------- 통계 (GA4)
 const statsState = { range: '7d', loaded: false, timer: null };
 const EVENT_LABEL = {
-  game_join: '🏕️ 입장', wood_chop: '🪓 장작 패기', fire_light: '🔥 불 붙이기', fire_sit: '🪵 모닥불 앉기', fire_stand: '🚶 일어나기',
+  game_join: '🏕️ 입장', wood_chop: '🪓 장작 패기', wood_store: '📦 장작 창고', fire_light: '🔥 불 붙이기', fire_sit: '🪵 모닥불 앉기', fire_stand: '🚶 일어나기',
   powder_use: '✨ 마법 가루', guestbook_write: '📖 방명록', music_play: '🎶 노래 틀기', view_toggle: '👁️ 시점 전환', stargaze: '🌌 하늘 보기',
 };
 const DEVICE_LABEL = { mobile: '📱 모바일', desktop: '💻 PC', tablet: '📟 태블릿' };

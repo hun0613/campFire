@@ -647,3 +647,18 @@ body.touch.seated #musicBtn {
 .board-title { font-family: Jua, sans-serif; font-size: 18px; color: var(--brown); margin-top: 6px; }
 .board-text { font-size: 14.5px; line-height: 1.6; color: #4a3424; margin-top: 2px; white-space: pre-wrap; word-break: break-word; }
 .board-item .gb-reply { margin-top: 6px; }
+
+/* ---------- 장작 창고 ---------- */
+.store-card { width: min(420px, calc(100vw - 24px)); }
+.store-say { text-align: center; font-size: 15px; color: var(--brown-2); line-height: 1.5; min-height: 22px; }
+.store-counts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0 6px; }
+.store-counts > div { background: var(--cream-2); border-radius: 18px; padding: 12px 10px; text-align: center; display: grid; gap: 2px; }
+.store-counts span { font-size: 13px; color: var(--brown-2); }
+.store-counts b { font-size: 30px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.store-counts b.bump { animation: storeBump .35s ease; }
+.store-counts small { font-size: 12px; color: var(--brown-2); }
+@keyframes storeBump { 40% { transform: scale(1.25); color: var(--orange-2); } }
+.store-row { display: grid; grid-template-columns: 56px 1fr 1fr; gap: 10px; align-items: center; margin-top: 12px; }
+.store-row > span { font-size: 15px; color: var(--brown); }
+.store-row .btn { margin-top: 0; padding: 10px 0; font-size: 17px; }
+.store-card .btn.ghost { margin-top: 18px; }

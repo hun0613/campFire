@@ -141,6 +141,20 @@
     </div>
   </div>
 
+  <div id="storeModal" class="overlay hidden">
+    <div class="card help-card store-card">
+      <div class="title small">📦 보리의 장작 창고</div>
+      <div class="store-say" id="storeSay"></div>
+      <div class="store-counts">
+        <div><span>🎒 손에 든 장작</span><b id="storeHand">0</b><small id="storeHandMax"></small></div>
+        <div><span>📦 창고에 맡긴 장작</span><b id="storeBox">0</b><small id="storeBoxMax"></small></div>
+      </div>
+      <div class="store-row"><span>맡기기</span><button class="btn" data-op="put" data-n="5">5개</button><button class="btn" data-op="put" data-n="all">전부</button></div>
+      <div class="store-row"><span>찾기</span><button class="btn" data-op="take" data-n="5">5개</button><button class="btn" data-op="take" data-n="all">손 가득</button></div>
+      <button class="btn ghost" id="storeClose">닫기</button>
+    </div>
+  </div>
+
   <div id="boardModal" class="overlay hidden">
     <div class="card help-card gb-card board-card">
       <div class="title small">📌 캠핑장 소식</div>
