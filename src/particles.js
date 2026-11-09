@@ -5,13 +5,16 @@ attribute float aSize; attribute float aAlpha; attribute float aShape; attribute
 uniform float uScale;
 varying vec3 vColor; varying float vAlpha; varying float vShape; varying float vRot;
 void main(){
-  vColor = aColor; vAlpha = aAlpha; vShape = aShape; vRot = aRot;
+  vColor = aColor; vRot = aRot; vShape = aShape;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  gl_PointSize = aSize * uScale / -mv.z;
+  // 눈앞(1m 안쪽)으로 날아온 입자는 부드럽게 사라지고, 화면을 덮을 만큼 커지지 않게 (1인칭 눈부심 방지)
+  vAlpha = aAlpha * smoothstep(0.35, 1.2, -mv.z);
+  gl_PointSize = min(aSize * uScale / -mv.z, uScale * 0.09);
   gl_Position = projectionMatrix * mv;
 }`;
 const FS = `
 uniform float uAdditive;
+uniform float uGlow; // 빛 세기 (1인칭으로 불 가까이에서 볼 때 눈부시지 않게 낮춘다)
 varying vec3 vColor; varying float vAlpha; varying float vShape; varying float vRot;
 void main(){
   vec2 p = gl_PointCoord - 0.5;
@@ -39,7 +42,7 @@ void main(){
     a = smoothstep(0.5, 0.1, d);
   }
   if (a <= 0.001) discard;
-  gl_FragColor = vec4(vColor, a * vAlpha);
+  gl_FragColor = vec4(vColor * uGlow, a * vAlpha);
 }`;
 
 /** CPU 파티클 풀. additive=true 면 빛나는 마법 효과, false 면 연기/나무 조각 */
@@ -69,7 +72,7 @@ export class Particles {
     this.aRot = attr('aRot', this.rot, 1);
     geo.setDrawRange(0, 0);
     const mat = new THREE.ShaderMaterial({
-      uniforms: { uScale: shared.uScale, uAdditive: { value: additive ? 1 : 0 } },
+      uniforms: { uScale: shared.uScale, uAdditive: { value: additive ? 1 : 0 }, uGlow: { value: 1 } },
       vertexShader: VS, fragmentShader: FS,
       transparent: true, depthWrite: false,
       blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,

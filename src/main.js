@@ -1490,8 +1490,8 @@ function updateCamera(dt, t) {
     const el = cam.look;
     fpDir.set(-Math.sin(cam.yaw) * Math.cos(el), Math.sin(el), -Math.cos(cam.yaw) * Math.cos(el));
     // 앉아 있으면 불까지 2m 남짓이라 너무 가깝다 → 눈 위치를 살짝 뒤 · 위로 빼서 불 전체가 보이게
-    camera.position.copy(fpPos).addScaledVector(fpDir, state.sitting ? -0.75 : 0.3);
-    if (state.sitting) camera.position.y += 0.25;
+    camera.position.copy(fpPos).addScaledVector(fpDir, state.sitting ? -1.35 : 0.3);
+    if (state.sitting) camera.position.y += 0.4; // 앉아서 1인칭: 의자 뒤에서 살짝 위로 물러나 모닥불 둘레와 사람들까지 보이게
     if (state.shake > 0) {
       state.shake -= dt;
       camera.position.x += (Math.random() - 0.5) * state.shake * 0.2;
@@ -1597,11 +1597,14 @@ function updateFires(t, dt) {
   let nearLit = Infinity;
   for (const p of pitList) {
     const d = camera.position.distanceTo(p.pos);
-    p.viewDim = 0.38 + 0.62 * THREE.MathUtils.smoothstep(d, 2.5, 9);
+    p.viewDim = (0.38 + 0.62 * THREE.MathUtils.smoothstep(d, 2.5, 9)) * (view.fp && state.sitting ? 0.78 : 1); // 1인칭으로 앉으면 불꽃 한가운데가 하얗게 뜨지 않게 한 번 더
     if (p.state === 'lit' && d < nearLit) nearLit = d;
     p.update(t, dt, now);
   }
-  const bloomTarget = 0.22 + 0.2 * THREE.MathUtils.smoothstep(nearLit, 2.5, 9);
+  const bloomTarget = (view.fp ? 0.16 : 0.22) + 0.2 * THREE.MathUtils.smoothstep(nearLit, 2.5, 9);
+  // 가루 효과(빛나는 파티클): 1인칭으로 앉아 있으면 불이 눈앞이라 눈부시다 → 빛 세기를 낮춘다
+  const glowTarget = view.fp && state.sitting ? 0.5 : 1;
+  glowFx.points.material.uniforms.uGlow.value += (glowTarget - glowFx.points.material.uniforms.uGlow.value) * Math.min(1, dt * 4);
   bloom.strength += (bloomTarget - bloom.strength) * Math.min(1, dt * 3);
   // 가까운 모닥불에 실제 조명 배정
   const lit = pitList.filter((p) => p.intensity > 0.02)
@@ -1612,7 +1615,8 @@ function updateFires(t, dt) {
     if (!e) { L.intensity = 0; return; }
     L.position.set(e.p.pos.x, 1.1 * e.p.height, e.p.pos.z);
     L.color.copy(e.p.tip).lerp(FIRE_COLOR, 0.35);
-    L.intensity = 14 * e.p.intensity * e.p.flicker;
+    // 가루 색이 바닥에 번지는 빛도 1인칭으로 앉아 있으면 조금 낮춘다
+    L.intensity = 14 * e.p.intensity * e.p.flicker * (view.fp && state.sitting ? 0.72 : 1);
   });
   // 연기 & 소리
   let level = 0;
