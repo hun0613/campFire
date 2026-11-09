@@ -78,6 +78,80 @@ export class Guide {
     }
 
     this.#drawMap(me, target, pits, remotes, camYaw);
+    if (document.body.classList.contains('map-auto') && !document.body.classList.contains('map-open')) this.#drawRadar(me, target, pits, remotes, camYaw);
+  }
+
+  // ---------------------------------------------------------------- 원형 레이더 (걸을 때)
+  // 위쪽 = 내가 바라보는(카메라) 방향. 반경 RANGE m 안만 그리고, 갈 곳이 밖이면 테두리에 화살표 + 거리
+  #drawRadar(me, target, pits, remotes, camYaw) {
+    if (!me) return;
+    const cv = this.radar || (this.radar = document.getElementById('radar'));
+    if (!cv) return;
+    const S = 92, dpr = Math.min(devicePixelRatio, 2);
+    if (cv.width !== S * dpr) { cv.width = cv.height = S * dpr; this.rctx = cv.getContext('2d'); }
+    const g = this.rctx;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, S, S);
+    const C = S / 2, R = S / 2 - 3, RANGE = 24, k = R / RANGE;
+    const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw);   // 앞
+    const rx = Math.cos(camYaw), rz = -Math.sin(camYaw);    // 오른쪽
+    const P = (x, z) => { const dx = x - me.x, dz = z - me.z; return [C + (dx * rx + dz * rz) * k, C - (dx * fx + dz * fz) * k]; };
+    g.save();
+    g.beginPath(); g.arc(C, C, R, 0, Math.PI * 2); g.clip();
+    g.fillStyle = 'rgba(28, 52, 34, 0.62)'; g.fillRect(0, 0, S, S);
+    // 길
+    g.strokeStyle = 'rgba(214, 186, 140, 0.75)'; g.lineCap = 'round';
+    const line = (x1, z1, x2, z2, w) => { const a = P(x1, z1), b = P(x2, z2); g.lineWidth = w * k; g.beginPath(); g.moveTo(...a); g.lineTo(...b); g.stroke(); };
+    line(-50, 0, 50, 0, 3.4);
+    for (const t of TENTS) line(t.x, 0, t.x, Math.sign(t.z) * 23, 2.2);
+    g.fillStyle = 'rgba(214, 186, 140, 0.75)';
+    { const [px, pz] = P(0, 0); g.beginPath(); g.arc(px, pz, 11.5 * k, 0, Math.PI * 2); g.fill(); }
+    // 텐트 · 화로
+    g.fillStyle = 'rgba(242, 230, 207, 0.9)';
+    for (const t of TENTS) { const [x, y] = P(t.x, t.z); g.beginPath(); g.arc(x, y, 3 * k, 0, Math.PI * 2); g.fill(); }
+    for (const p of pits) {
+      const [x, y] = P(p.pos.x, p.pos.z);
+      g.fillStyle = p.state === 'lit' ? '#ff8a2a' : p.state === 'stacked' ? '#c98a4a' : 'rgba(110, 104, 118, 0.9)';
+      g.beginPath(); g.arc(x, y, p.state === 'lit' ? 3.2 : 2.2, 0, Math.PI * 2); g.fill();
+    }
+    // 장소 아이콘
+    g.font = '11px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (const [x, z, ic] of [[WOODYARD.x, WOODYARD.z, '🪓'], [NPC.x + NPC.front.x, NPC.z + NPC.front.z, '✨'], [KEEPER.x, KEEPER.z, '📦'], [GUESTBOOK.x, GUESTBOOK.z, '📖']]) {
+      const [px, py] = P(x, z); g.fillText(ic, px, py);
+    }
+    // 다른 사람
+    g.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    for (const r of remotes) { const [x, y] = P(r.x, r.z); g.beginPath(); g.arc(x, y, 1.8, 0, Math.PI * 2); g.fill(); }
+    g.restore();
+    // 갈 곳: 안이면 깜빡이는 동그라미, 밖이면 테두리 화살표 + 거리
+    if (target) {
+      const [tx, ty] = P(target.x, target.z);
+      const dx = tx - C, dy = ty - C, dd = Math.hypot(dx, dy);
+      const pulse = 1 + Math.sin(this.time * 5) * 0.2;
+      g.strokeStyle = '#ffc46b'; g.fillStyle = '#ffc46b';
+      if (dd < R - 6) {
+        g.lineWidth = 2; g.beginPath(); g.arc(tx, ty, 5 * pulse, 0, Math.PI * 2); g.stroke();
+      } else {
+        const ux = dx / dd, uy = dy / dd, ax = C + ux * (R - 7), ay = C + uy * (R - 7);
+        g.save(); g.translate(ax, ay); g.rotate(Math.atan2(uy, ux));
+        g.beginPath(); g.moveTo(6 * pulse, 0); g.lineTo(-4, -5); g.lineTo(-4, 5); g.closePath(); g.fill();
+        g.restore();
+        const m = Math.round(Math.hypot(target.x - me.x, target.z - me.z));
+        g.font = '9px Jua, sans-serif'; g.fillStyle = '#fff3dc';
+        g.fillText(`${m}m`, C + ux * (R - 19), C + uy * (R - 19));
+      }
+    }
+    // 나 (가운데, 캐릭터가 향한 쪽)
+    const hx = Math.sin(me.ry), hz = Math.cos(me.ry);
+    const ang = Math.atan2(-(hx * fx + hz * fz), hx * rx + hz * rz);
+    g.save(); g.translate(C, C); g.rotate(ang);
+    g.fillStyle = '#ffe9b0'; g.strokeStyle = 'rgba(60, 40, 20, .8)'; g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(6, 0); g.lineTo(-4, -4); g.lineTo(-2, 0); g.lineTo(-4, 4); g.closePath(); g.fill(); g.stroke();
+    g.restore();
+    // 북쪽 표시
+    { const nx = -rz, ny = fz; const nd = Math.hypot(nx, ny) || 1; g.font = '9px Jua, sans-serif'; g.fillStyle = 'rgba(255, 243, 220, .85)'; g.fillText('N', C + (nx / nd) * (R - 6), C - (-ny / nd) * (R - 6)); }
+    // 테두리
+    g.strokeStyle = 'rgba(255, 248, 232, .55)'; g.lineWidth = 2; g.beginPath(); g.arc(C, C, R, 0, Math.PI * 2); g.stroke();
   }
 
   #drawMap(me, target, pits, remotes, camYaw) {

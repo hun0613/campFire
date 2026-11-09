@@ -875,10 +875,22 @@ body.calm .chat-toggle, body.calm #touchControls, body.calm .beacon, body.calm #
 /* ---------- 지도 자동 표시: 걸을 때 나타나고, 멈추면 잠시 뒤 사라진다 (모바일 · 좁은 PC 창) ---------- */
 body.touch #mapPanel { display: block; opacity: 0; visibility: hidden; transform: translateY(-6px) scale(.97); transform-origin: top right;
   transition: opacity .35s ease, transform .35s ease, visibility 0s linear .35s; }
-body.touch.map-open #mapPanel, body.touch.map-auto #mapPanel { opacity: 1; visibility: visible; transform: none; transition: opacity .25s ease, transform .25s ease, visibility 0s; }
+body.touch.map-open #mapPanel { opacity: 1; visibility: visible; transform: none; transition: opacity .25s ease, transform .25s ease, visibility 0s; }
+
+/* 걸을 때는 큰 지도 대신 작은 원형 레이더 (화면을 덜 가리게). ☰ 메뉴 🗺️로 연 큰 지도가 있으면 레이더는 숨긴다 */
+#radar { display: none; }
+body.touch #radar, body:not(.touch) #radar {
+  position: fixed; z-index: 5; width: 92px; height: 92px; border-radius: 50%; pointer-events: none;
+  top: calc(max(10px, env(safe-area-inset-top)) + 100px); right: max(8px, env(safe-area-inset-right));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
+  opacity: 0; visibility: hidden; transform: scale(.9); transition: opacity .35s ease, transform .35s ease, visibility 0s linear .35s;
+}
+body.touch #radar { display: block; }
+@media (orientation: landscape) { body.touch #radar { top: calc(max(10px, env(safe-area-inset-top)) + 100px); } }
+body.touch.map-auto:not(.map-open) #radar { opacity: 1; visibility: visible; transform: none; transition: opacity .25s ease, transform .25s ease, visibility 0s; }
 @media (max-width: 640px) {
-  body:not(.touch) #mapPanel { display: block; opacity: 0; visibility: hidden; transition: opacity .35s ease, visibility 0s linear .35s; }
-  body:not(.touch).map-auto #mapPanel { opacity: 1; visibility: visible; transition: opacity .25s ease, visibility 0s; }
+  body:not(.touch) #radar { display: block; top: 74px; right: 16px; } /* 오른쪽 위 버튼 줄 아래 (큰 지도 자리) */
+  body:not(.touch).map-auto #radar { opacity: 1; visibility: visible; transform: none; transition: opacity .25s ease, transform .25s ease, visibility 0s; }
 }
 body.touch .bag-btn b:empty, .bag-btn b:empty { display: none; }
 
