@@ -984,7 +984,19 @@ function refreshInventory() {
   const pit = state.sitting ? pits.get(state.sitting.pit) : null;
   UI.setInventory(state.inv, { onThrow: throwPowder, canThrow: !!pit && pit.state === 'lit' });
   refreshBag();
+  requestAnimationFrame(() => markPowderOverflow?.());
 }
+
+// 앉았을 때 가루 줄: 넘치면 끝을 흐리게, PC는 마우스 휠로 옆으로 넘긴다
+const powderRow = $('powders');
+const markPowderOverflow = () => powderRow.classList.toggle('more', powderRow.scrollWidth > powderRow.clientWidth + 2 && powderRow.scrollLeft + powderRow.clientWidth < powderRow.scrollWidth - 4);
+powderRow.addEventListener('scroll', markPowderOverflow, { passive: true });
+powderRow.addEventListener('wheel', (e) => {
+  if (powderRow.scrollWidth <= powderRow.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+  e.preventDefault();
+  powderRow.scrollLeft += e.deltaY;
+}, { passive: false });
+if (typeof ResizeObserver !== 'undefined') new ResizeObserver(markPowderOverflow).observe(powderRow);
 
 // ---------------------------------------------------------------- 🎒 가방 (서 있을 때 가진 가루 보기)
 let bagLast = -1;
@@ -997,7 +1009,7 @@ function refreshBag() {
   $('bagBtn').classList.toggle('has-legend', list.some((p) => p.legend));
   if ($('bagPanel').classList.contains('hidden')) return;
   const legend = list.filter((p) => p.legend).length;
-  $('bagSub').textContent = n ? `마법 가루 ${n}/${CFG.MAX_POWDERS}${legend ? ` · ✦ ${legend}` : ''}` : '';
+  $('bagSub').textContent = n ? `마법 가루 ${n}개${legend ? ` · ✦ 특별한 가루 ${legend}개` : ''}` : '';
   $('bagList').innerHTML = n ? list.map((p) => UI.powderChip(p)).join('')
     : `<div class="bag-empty">가루가 없어요.<br>길 건너 <b>루미</b>에게 가면 ${CFG.BASE_POWDERS}개까지 채워 줘요 ✨</div>`;
 }

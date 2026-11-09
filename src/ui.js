@@ -40,7 +40,7 @@ export const UI = {
       el.className = `powder${canThrow ? '' : ' disabled'}${prevIds.has(p.id) ? '' : ' new'}${p.legend ? ' legend' : ''}`;
       el.dataset.id = p.id;
       const bg = powderBg(p);
-      el.innerHTML = `<span class="key">${i + 1}</span><span class="bag" style="background:${bg};box-shadow:0 0 12px ${p.color}"></span><span class="tip">${esc(p.name)}</span>`;
+      el.innerHTML = `${i < 9 ? `<span class="key">${i + 1}</span>` : ''}<span class="bag" style="background:${bg};box-shadow:0 0 12px ${p.color}"></span><span class="tip">${esc(p.name)}</span>`;
       el.addEventListener('click', () => onThrow(i));
       return el;
     }));

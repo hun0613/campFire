@@ -7,7 +7,7 @@ export const CFG = {
   MAX_STORED: 300,         // 장작 창고에 맡길 수 있는 수 (기기마다 하나)
   FIRE_DURATION: 600_000,  // 모닥불 지속 시간 (ms)
   BASE_POWDERS: 3,         // 루미가 장작 없이 늘 채워 주는 기본 가루 수 (가방에 이보다 적으면 여기까지 채운다)
-  MAX_POWDERS: 9,
+  MAX_POWDERS: 99,         // 가루는 사실상 제한 없음. 저장 데이터가 끝없이 커지지 않게 막는 안전장치만 둔다
   SEATS_PER_PIT: 4,
   SEAT_RADIUS: 2.4,
   EFFECT_DURATION: 12_000, // 가루 효과 지속 시간 (ms)

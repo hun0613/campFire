@@ -133,7 +133,7 @@ function validQuest(q) {
 function restore(pid, backup) {
   const mem = saves.get(pid);
   if (mem && Date.now() - mem.at < SAVE_TTL) return { ...validSnapshot(mem), x: mem.x, z: mem.z, fresh: Date.now() - mem.at < 30 * 60 * 1000 };
-  if (backup && typeof backup.data === 'string' && typeof backup.sig === 'string' && backup.data.length < 4000) {
+  if (backup && typeof backup.data === 'string' && typeof backup.sig === 'string' && backup.data.length < 24000) {
     const expected = sign(pid, backup.data);
     if (expected.length === backup.sig.length && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(backup.sig))) {
       try {
@@ -631,7 +631,7 @@ function handle(ws, ctx, m) {
 }
 
 // ---------------------------------------------------------------- WebSocket
-const wss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
+const wss = new WebSocketServer({ noServer: true, maxPayload: 32768 }); // 가루를 많이 가진 사람의 저장 백업도 들어오게
 server.on('upgrade', (req, socket, head) => {
   if (req.url && req.url.startsWith('/ws')) {
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));

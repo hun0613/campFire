@@ -837,3 +837,14 @@ body.touch .bag-btn.bump { animation: bagBumpM .5s cubic-bezier(.2, 1.6, .4, 1);
 @keyframes bagBumpM { 40% { transform: scale(1.18); } }
 body.touch .bag-panel { left: calc(16px + env(safe-area-inset-left)); transform: none; bottom: calc(80px + env(safe-area-inset-bottom)); width: min(320px, calc(100vw - 32px)); }
 body.touch.chat-open .bag-btn, body.touch.chat-open .bag-panel { display: none; }
+
+/* 앉아 있을 때 가루가 많으면 한 줄로 두고 옆으로 밀어서 본다 (숫자키는 1~9번째까지) */
+body.seated #powders { flex-wrap: nowrap; overflow-x: auto; overflow-y: visible; padding-top: 10px; scrollbar-width: none; max-width: calc(100vw - 32px); }
+body.seated #powders::-webkit-scrollbar { display: none; }
+body.seated #powders .powder { flex: none; }
+body.touch.seated #powders { max-width: min(62vw, 360px); padding-top: 10px; }
+/* 넘치면 오른쪽 끝을 흐리게 해서 옆에 더 있다는 걸 알린다 */
+body.seated #powders.more { -webkit-mask-image: linear-gradient(to right, #000 82%, transparent); mask-image: linear-gradient(to right, #000 82%, transparent); }
+/* PC: 왼쪽 채팅창(약 380px)과 겹치지 않게 가운데 폭을 제한 */
+body:not(.touch).seated #powders { max-width: max(280px, calc(100vw - 800px)); }
+@media (max-width: 640px) { body:not(.touch).seated #powders { max-width: calc(50vw - 24px); } }
