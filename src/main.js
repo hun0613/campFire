@@ -1490,8 +1490,8 @@ function updateCamera(dt, t) {
     const el = cam.look;
     fpDir.set(-Math.sin(cam.yaw) * Math.cos(el), Math.sin(el), -Math.cos(cam.yaw) * Math.cos(el));
     // 앉아 있으면 불까지 2m 남짓이라 너무 가깝다 → 눈 위치를 살짝 뒤 · 위로 빼서 불 전체가 보이게
-    camera.position.copy(fpPos).addScaledVector(fpDir, state.sitting ? -1.35 : 0.3);
-    if (state.sitting) camera.position.y += 0.4; // 앉아서 1인칭: 의자 뒤에서 살짝 위로 물러나 모닥불 둘레와 사람들까지 보이게
+    camera.position.copy(fpPos).addScaledVector(fpDir, state.sitting ? -0.95 : 0.3);
+    if (state.sitting) camera.position.y += 0.16; // 앉아서 1인칭: 의자에 앉은 눈높이 그대로, 반 걸음만 물러나 모닥불 둘레가 보이게
     if (state.shake > 0) {
       state.shake -= dt;
       camera.position.x += (Math.random() - 0.5) * state.shake * 0.2;
