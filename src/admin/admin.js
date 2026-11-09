@@ -308,7 +308,7 @@ function barList(items, { valueFmt = num, sub } = {}) {
   return `<ul class="bars">${items.map((x) => `
     <li title="${esc(x.label)}: ${valueFmt(x.value)}${sub ? ` · ${sub(x)}` : ''}">
       <span class="bar-label">${esc(x.label)}</span>
-      <span class="bar-track"><span class="bar-fill" style="width:${(x.value / max) * 100}%"></span></span>
+      <span class="bar-track"><span class="bar-fill${x.value ? '' : ' zero'}" style="width:${(x.value / max) * 100}%"></span></span>
       <span class="bar-val">${valueFmt(x.value)}${sub ? `<small>${sub(x)}</small>` : ''}</span>
     </li>`).join('')}</ul>`;
 }
@@ -333,6 +333,68 @@ function trendChart(trend) {
       <circle cx="${x(i)}" cy="${y(d.users)}" r="4" class="dot"/></g>`).join('');
   return `<div class="chart-wrap"><svg viewBox="0 0 ${W} ${H}" class="trend" role="img" aria-label="최근 14일 일별 방문자">
     ${grid}${xl}<polyline points="${pts}" class="line"/>${hits}</svg><div class="tip" hidden></div></div>`;
+}
+
+// 시간대별 방문자 세로 막대 (0~23시, 마우스를 올리면 그 시간 숫자)
+const BANDS = [
+  { name: '새벽', from: 0, to: 6 },
+  { name: '오전', from: 6, to: 12 },
+  { name: '오후', from: 12, to: 18 },
+  { name: '저녁 · 밤', from: 18, to: 24 },
+];
+const hourLabel = (h) => `${h < 12 ? '오전' : '오후'} ${h % 12 === 0 ? 12 : h % 12}시`;
+function hourChart(hours) {
+  const narrow = innerWidth < 640; // 휴대폰에서는 좁은 그림으로 그려 글자가 읽히게
+  const W = narrow ? 480 : 1100, H = narrow ? 230 : 240, P = { l: narrow ? 30 : 40, r: 8, t: 26, b: 30 };
+  const max = Math.max(4, ...hours.map((d) => d.users));
+  const step = Math.pow(10, Math.floor(Math.log10(max)));
+  const top = Math.ceil(max / step) * step;
+  const cw = (W - P.l - P.r) / 24, bw = Math.max(6, cw - 6);
+  const y = (v) => H - P.b - (v / top) * (H - P.t - P.b);
+  const grid = [0, 0.5, 1].map((f) => {
+    const v = Math.round(top * f);
+    return `<line x1="${P.l}" x2="${W - P.r}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${P.l - 6}" y="${y(v) + 4}" class="axis" text-anchor="end">${v}</text>`;
+  }).join('');
+  // 시간대 구분선과 이름
+  const bands = BANDS.map((b) => `${b.from ? `<line x1="${P.l + b.from * cw}" x2="${P.l + b.from * cw}" y1="${P.t - 14}" y2="${H - P.b}" class="band-line"/>` : ''}
+    <text x="${P.l + ((b.from + b.to) / 2) * cw}" y="${P.t - 10}" class="band-name" text-anchor="middle">${b.name}</text>`).join('');
+  const xl = hours.map((d) => (d.hour % 3 === 0 ? `<text x="${P.l + (d.hour + 0.5) * cw}" y="${H - 8}" class="axis" text-anchor="middle">${d.hour}시</text>` : '')).join('');
+  const bars = hours.map((d) => {
+    const bh = Math.max(d.users ? 3 : 0, H - P.b - y(d.users));
+    const avg = d.users ? ` · 1인당 ${dur(Math.round(d.engagementSec / d.users))}` : '';
+    const r = Math.min(4, bw / 2, bh);
+    const x0 = P.l + d.hour * cw + (cw - bw) / 2, y0 = H - P.b - bh;
+    // 위쪽만 둥근 막대
+    const path = bh ? `M${x0},${H - P.b} V${y0 + r} Q${x0},${y0} ${x0 + r},${y0} H${x0 + bw - r} Q${x0 + bw},${y0} ${x0 + bw},${y0 + r} V${H - P.b} Z` : '';
+    return `<g class="pt" data-tip="${hourLabel(d.hour)}~${(d.hour + 1) % 12 || 12}시 · 방문자 ${num(d.users)}명 · 입장 ${num(d.joins)}번${avg}">
+      <rect x="${P.l + d.hour * cw}" y="${P.t}" width="${cw}" height="${H - P.t - P.b}" fill="transparent"/>
+      ${path ? `<path d="${path}" class="col"/>` : ''}</g>`;
+  }).join('');
+  return `<div class="chart-wrap"><svg viewBox="0 0 ${W} ${H}" class="trend hours${narrow ? ' narrow' : ''}" role="img" aria-label="시간대별 방문자">
+    ${grid}${bands}${xl}${bars}</svg><div class="tip" hidden></div></div>`;
+}
+
+function hourSection(r) {
+  if (!r.hours) return `<div class="card"><h2>언제 많이 오나요</h2><p class="hint">시간대 조회에 실패했어요${r.hourError ? `: ${esc(r.hourError)}` : ''}</p></div>`;
+  const total = r.hours.reduce((s, d) => s + d.users, 0);
+  const sums = BANDS.map((b) => ({ ...b, users: r.hours.slice(b.from, b.to).reduce((s, d) => s + d.users, 0) }));
+  const best = total ? sums.reduce((a, b) => (b.users > a.users ? b : a)) : null;
+  const peak = total ? r.hours.reduce((a, b) => (b.users > a.users ? b : a)) : null;
+  const DAY = ['일', '월', '화', '수', '목', '금', '토'];
+  const days = [1, 2, 3, 4, 5, 6, 0].map((i) => r.weekdays[i]); // 월요일부터
+  const tz = r.timeZone && r.timeZone !== 'Asia/Seoul'
+    ? `<p class="hint">⚠️ GA4 속성 시간대가 <code>${esc(r.timeZone)}</code> 이라서 시간이 한국 시간과 달라요. GA4 관리 → 속성 세부정보에서 시간대를 대한민국으로 바꾸세요.</p>` : '';
+  return `<div class="card">
+      <h2>언제 많이 오나요 <small>${RANGE_LABEL[r.range]}</small>${help('하루를 새벽(0~6시) · 오전(6~12시) · 오후(12~18시) · 저녁·밤(18~24시)으로 나눠 방문자를 세요 (한국 시간). 한 사람이 오전과 밤에 두 번 오면 양쪽에 다 세서, 합치면 위의 방문자 수보다 커요. 막대에 마우스를 올리면 그 시간의 입장 횟수와 1인당 머문 시간도 보여요.')}</h2>
+      ${total ? `<p class="peak">가장 붐비는 때는 <b>${best.name}</b>, 그중에서도 <b>${hourLabel(peak.hour)}</b>대예요.</p>` : '<p class="hint">아직 데이터가 없어요.</p>'}
+      <div class="bands">${sums.map((b) => `<div class="band${b === best ? ' best' : ''}"><span>${b.name} <small>${b.from}~${b.to}시</small></span><b>${num(b.users)}명</b><small>${total ? pct(b.users / total) : '–'}</small></div>`).join('')}</div>
+      <div class="hours-2">
+        ${hourChart(r.hours)}
+        <div><p class="hint" style="margin:0">요일별 방문자${help('요일마다 방문자 수예요. 「최근 7일」에서는 요일마다 하루씩, 「최근 28일」에서는 4번씩 더한 값이에요.')}</p>
+        ${barList(days.map((d) => ({ label: `${DAY[d.day]}요일`, value: d.users })), { valueFmt: (v) => `${num(v)}명` })}</div>
+      </div>
+      ${tz}
+    </div>`;
 }
 
 function renderStats$(d) {
@@ -369,6 +431,8 @@ function renderStats$(d) {
       <h2>최근 14일 방문자${help('날짜별 방문자 수예요. 점에 마우스를 올리면 그날 처음 온 사람과 입장 횟수도 보여요. 오늘 숫자는 GA4가 처리하는 동안 늦게 채워져요.')}</h2>
       ${trendChart(r.trend)}
     </div>
+
+    ${hourSection(r)}
 
     <div class="stats-2">
       <div class="card">

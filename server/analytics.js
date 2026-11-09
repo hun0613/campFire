@@ -101,7 +101,7 @@ export function report(range = '7d') {
   return cached(`r:${range}`, 5 * 60_000, async () => {
     const dateRanges = [{ startDate: start, endDate: 'today' }];
     const trendRange = [{ startDate: '13daysAgo', endDate: 'today' }];
-    const [a, b, c] = await Promise.all([
+    const [a, b, c, h] = await Promise.all([
       call('batchRunReports', {
         requests: [
           // 0 요약
@@ -135,7 +135,26 @@ export function report(range = '7d') {
           { dateRanges, dimensions: [{ name: 'customEvent:view' }], metrics: [{ name: 'eventCount' }], dimensionFilter: inList('eventName', ['heartbeat']) },
         ],
       }).catch((e) => ({ error: e.message })),
+      // 시간대 · 요일 (GA4 속성의 시간대 기준)
+      call('batchRunReports', {
+        requests: [
+          { dateRanges, dimensions: [{ name: 'hour' }], metrics: [{ name: 'activeUsers' }, { name: 'userEngagementDuration' }] },
+          { dateRanges, dimensions: [{ name: 'hour' }], metrics: [{ name: 'eventCount' }], dimensionFilter: inList('eventName', ['game_join']) },
+          { dateRanges, dimensions: [{ name: 'dayOfWeek' }], metrics: [{ name: 'activeUsers' }] },
+        ],
+      }).catch((e) => ({ error: e.message })),
     ]);
+
+    // 0~23시를 빈 시간까지 채운다. 요일은 0=일요일
+    let hours = null, weekdays = null, timeZone = null;
+    if (!h.error) {
+      timeZone = h.reports[0]?.metadata?.timeZone || null;
+      const hu = new Map(rows(h.reports[0]).map((r) => [Number(r.hour), r]));
+      const hj = new Map(rows(h.reports[1]).map((r) => [Number(r.hour), r.eventCount]));
+      hours = Array.from({ length: 24 }, (_, i) => ({ hour: i, users: hu.get(i)?.activeUsers || 0, engagementSec: Math.round(hu.get(i)?.userEngagementDuration || 0), joins: hj.get(i) || 0 }));
+      const wd = new Map(rows(h.reports[2]).map((r) => [Number(r.dayOfWeek), r.activeUsers]));
+      weekdays = Array.from({ length: 7 }, (_, i) => ({ day: i, users: wd.get(i) || 0 }));
+    }
 
     const [sum = {}] = rows(a.reports[0]);
     const joinsBySrc = new Map(rows(a.reports[3]).map((r) => [`${r.sessionSource} / ${r.sessionMedium}`, r.eventCount]));
@@ -185,6 +204,10 @@ export function report(range = '7d') {
       newVsReturning: rows(b.reports[3]).filter((r) => r.newVsReturning).map((r) => ({ name: r.newVsReturning, users: r.activeUsers })),
       sitting,
       viewShare,
+      hours,
+      weekdays,
+      timeZone,
+      hourError: h.error || null,
       customError: c.error || null,
     };
   });

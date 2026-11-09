@@ -215,6 +215,21 @@ label input, label textarea { margin-top: 4px; font-weight: 400; }
 .trend .line { fill: none; stroke: var(--fire); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .trend .dot { fill: var(--fire); stroke: var(--card); stroke-width: 2; opacity: 0; transition: opacity .1s; }
 .trend .pt.on .dot { opacity: 1; }
+.trend .col { fill: var(--fire); }
+.trend .pt:hover .col, .trend .pt.on .col { fill: var(--fire-d); }
+.trend .band-line { stroke: var(--line); stroke-width: 1; stroke-dasharray: 4 4; }
+.trend .band-name { fill: var(--sub); font-size: 13px; font-weight: 700; }
+.trend.narrow .axis, .trend.narrow .band-name { font-size: 17px; }
+.bar-fill.zero { min-width: 0; }
+.peak { margin: 4px 0 12px; }
+.peak b { color: var(--fire-d); }
+.bands { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
+.band { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 2px; }
+.band span { color: var(--sub); font-size: 13px; font-weight: 700; }
+.band b { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.band.best { border-color: var(--fire); background: color-mix(in srgb, var(--fire) 9%, transparent); }
+.hours-2 { display: grid; grid-template-columns: 2.4fr 1fr; gap: 20px; align-items: start; }
+@media (max-width: 960px) { .hours-2 { grid-template-columns: 1fr; } .bands { grid-template-columns: repeat(2, 1fr); } }
 .tip { position: absolute; pointer-events: none; background: var(--night); color: #fff3dc; font-size: 12px; padding: 6px 10px; border-radius: 8px; white-space: nowrap; }
 .setup ol { padding-left: 4px; list-style: none; display: grid; gap: 8px; }
 .setup code, .hint code { background: var(--bg); padding: 1px 6px; border-radius: 6px; font-size: 12px; }
