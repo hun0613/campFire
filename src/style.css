@@ -196,8 +196,14 @@ html, body {
 @media (max-width: 640px) {
   #status { min-width: 0; padding: 8px 12px; }
   .quest { font-size: 13px; max-width: 200px; }
-  #chat { width: calc(100vw - 32px); bottom: 150px; }
-  #chatLog { max-height: 110px; }
+  /* PC 창을 좁혔을 때: 채팅은 왼쪽 아래 그대로 (화면 가운데를 가리지 않게), 안내 · 가루는 오른쪽 아래로 비켜 준다
+     (휴대폰은 body.touch 규칙이 따로 있다) */
+  #chat { width: min(300px, calc(50vw - 24px)); }
+  #chatLog { max-height: 120px; }
+  body:not(.touch) .msg { font-size: 13.5px; }
+  body:not(.touch) #bottom { left: auto; right: 16px; transform: none; align-items: flex-end; max-width: calc(50vw - 24px); }
+  body:not(.touch) #bottom .pill { white-space: normal; text-align: right; font-size: 15px; padding: 8px 14px; }
+  body:not(.touch) #powders { flex-wrap: wrap; justify-content: flex-end; }
 }
 .dtext b { color: var(--orange-2); font-weight: normal; }
 
@@ -679,3 +685,10 @@ body.touch .q-lumi { font-size: 12px; }
 /* 앉아 있을 때: 조이스틱 영역을 꺼서 화면 어디를 쓸어도 시점만 돌아가게 (일어나기는 오른쪽 아래 버튼) */
 body.touch.seated #joyZone { pointer-events: none; }
 body.touch.seated #joyBase { opacity: 0; }
+/* PC 창이 아주 좁을 때: 오른쪽 위 버튼 줄이 왼쪽 상태창과 겹치지 않게 「명 캠핑 중」 글자를 숨기고 간격을 줄인다 */
+@media (max-width: 560px) {
+  body:not(.touch) .online-label { display: none; }
+  body:not(.touch) #topright { gap: 2px; padding-left: 10px; padding-right: 8px; }
+  body:not(.touch) #status { max-width: calc(100vw - 268px); }
+  body:not(.touch) .quest { max-width: none; }
+}
