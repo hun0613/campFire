@@ -1369,7 +1369,7 @@ const ptrEnd = (e) => {
   ptrs.delete(e.pointerId);
   if (ptrs.size < 2) pinchD = 0;
   if (ptrs.size === 1) { const [p] = ptrs.values(); lastPX = p.x; lastPY = p.y; cam.dragging = true; }
-  if (ptrs.size === 0) { cam.dragging = false; state.camReturn = true; } // 손을 떼면 시야가 캐릭터 등 뒤로 돌아간다
+  if (ptrs.size === 0) cam.dragging = false;
 };
 canvas.addEventListener('pointerup', ptrEnd);
 canvas.addEventListener('pointercancel', ptrEnd);
@@ -1523,16 +1523,6 @@ function updateCamera(dt, t) {
     pitch = Math.min(cam.pitch, 0.5);
   } else {
     camTarget.set(me.x, 1.0, me.z);
-    // 모바일: 손으로 시야를 돌리고 있지 않으면 카메라가 캐릭터가 바라보는 쪽(등 뒤)으로 따라간다.
-    // 걷는 동안은 늘 따라가고, 화면을 쓸었다가 손을 떼면 다시 등 뒤로 부드럽게 돌아간다
-    if (isTouch && !cam.dragging) {
-      const walking = touch?.active && touch.mag > 0;
-      const behind = me.ry + Math.PI;
-      if (walking || state.camReturn) {
-        cam.yaw = lerpAngle(cam.yaw, behind, Math.min(1, dt * (walking ? 2.4 : 3.2)));
-        if (!walking && Math.abs(Math.atan2(Math.sin(behind - cam.yaw), Math.cos(behind - cam.yaw))) < 0.01) state.camReturn = false;
-      }
-    }
   }
   cam.target.lerp(camTarget, Math.min(1, dt * (me ? 6 : 1)));
   cam.curDist += (dist - cam.curDist) * Math.min(1, dt * 3);
