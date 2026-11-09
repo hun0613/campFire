@@ -1012,7 +1012,7 @@ let bagLast = -1;
 function refreshBag() {
   const list = state.inv.powders;
   const n = list.length;
-  $('bagCount').textContent = n;
+  $('bagCount').textContent = n || ''; // 비어 있으면 숫자를 숨긴다
   if (bagLast >= 0 && n > bagLast) { $('bagBtn').classList.remove('bump'); void $('bagBtn').offsetWidth; $('bagBtn').classList.add('bump'); }
   bagLast = n;
   $('bagBtn').classList.toggle('has-legend', list.some((p) => p.legend));
@@ -1410,6 +1410,11 @@ function updateLocal(dt) {
     run = touch.mag > 0.92;
   }
   const moving = ix !== 0 || iz !== 0;
+  // 길 찾기: 걷는 동안에는 지도를 자동으로 띄우고, 멈추면 잠시 뒤 숨긴다 (모바일 · 좁은 PC 창처럼 지도가 접혀 있을 때)
+  const tNow = performance.now();
+  if (moving && !state.sitting) state.lastMoveAt = tNow;
+  const mapAuto = !state.sitting && tNow - (state.lastMoveAt || -1e9) < 1800;
+  if (mapAuto !== document.body.classList.contains('map-auto')) document.body.classList.toggle('map-auto', mapAuto);
   if (document.body.classList.contains('seated') !== !!state.sitting) {
     document.body.classList.toggle('seated', !!state.sitting);
     if (state.sitting) setBag(false); // 앉으면 가루 칸이 다시 나오니 가방은 닫는다

@@ -871,3 +871,13 @@ body.touch.seated #seatViewBtn { position: fixed; right: calc(16px + env(safe-ar
 #status, #topright, #mapPanel, #bottom, #chat, .chat-toggle, #touchControls, .beacon, #fireTimer { transition: opacity .25s ease; }
 body.calm #status, body.calm #topright, body.calm #mapPanel, body.calm #bottom, body.calm #chat,
 body.calm .chat-toggle, body.calm #touchControls, body.calm .beacon, body.calm #fireTimer { opacity: .07; transition: opacity 1.8s ease; }
+
+/* ---------- 지도 자동 표시: 걸을 때 나타나고, 멈추면 잠시 뒤 사라진다 (모바일 · 좁은 PC 창) ---------- */
+body.touch #mapPanel { display: block; opacity: 0; visibility: hidden; transform: translateY(-6px) scale(.97); transform-origin: top right;
+  transition: opacity .35s ease, transform .35s ease, visibility 0s linear .35s; }
+body.touch.map-open #mapPanel, body.touch.map-auto #mapPanel { opacity: 1; visibility: visible; transform: none; transition: opacity .25s ease, transform .25s ease, visibility 0s; }
+@media (max-width: 640px) {
+  body:not(.touch) #mapPanel { display: block; opacity: 0; visibility: hidden; transition: opacity .35s ease, visibility 0s linear .35s; }
+  body:not(.touch).map-auto #mapPanel { opacity: 1; visibility: visible; transition: opacity .25s ease, visibility 0s; }
+}
+body.touch .bag-btn b:empty, .bag-btn b:empty { display: none; }
