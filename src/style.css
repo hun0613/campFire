@@ -699,8 +699,11 @@ body.touch.seated #joyBase { opacity: 0; }
 body:not(.touch) .overlay > .card.help-card { max-height: calc(100vh - 32px); overflow-y: auto; scrollbar-width: thin; }
 /* 안내서 「알겠어요!」 · 입장 버튼은 스크롤해도 늘 카드 아래에 보이게 */
 body:not(.touch) #helpClose,
-body:not(.touch) #joinBtn { position: sticky; bottom: 0; z-index: 2; box-shadow: 0 5px 0 #c95c1c, 0 -16px 16px 2px var(--cream), 0 26px 0 14px var(--cream); }
-body:not(.touch) #joinBtn:active { box-shadow: 0 1px 0 #c95c1c, 0 -16px 16px 2px var(--cream); }
+body:not(.touch) #joinBtn { position: sticky; bottom: 0; z-index: 2; }
+/* 아래에 붙어 있을 때만 뒤로 지나가는 내용을 크림색으로 가린다 (끝까지 내리면 가리지 않아 설치 버튼이 보임) */
+body:not(.touch) #helpClose,
+body:not(.touch) #joinBtn.stuck { box-shadow: 0 5px 0 #c95c1c, 0 -16px 16px 2px var(--cream), 0 26px 0 14px var(--cream); }
+body:not(.touch) #joinBtn.stuck:active { box-shadow: 0 1px 0 #c95c1c, 0 -16px 16px 2px var(--cream); }
 body:not(.touch) .join-card { scrollbar-width: thin; }
 
 /* 창 높이가 낮으면 입장 화면 · 안내서를 촘촘하게 */

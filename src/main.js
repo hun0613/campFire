@@ -232,6 +232,16 @@ function doJoin() {
   net.send({ t: 'join', name, look, pid: devicePid(), save: store.get('save', null), quota: store.get('quota', null) });
 }
 $('joinBtn').onclick = doJoin;
+// 입장 버튼이 카드 아래에 붙어 있는지(sticky) 확인해 표시: 붙어 있을 때만 아래 내용을 가린다
+{
+  const card = document.querySelector('.join-card'), jb = $('joinBtn');
+  const end = document.createElement('div'); jb.after(end);
+  const sync = () => jb.classList.toggle('stuck', end.getBoundingClientRect().top - jb.getBoundingClientRect().bottom > 1);
+  card.addEventListener('scroll', sync, { passive: true });
+  addEventListener('resize', sync);
+  new ResizeObserver(sync).observe(card);
+  requestAnimationFrame(sync);
+}
 $('nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') doJoin(); });
 
 $('helpBtn').onclick = () => $('help').classList.remove('hidden');
