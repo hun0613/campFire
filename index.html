@@ -57,6 +57,7 @@
         <span class="wood-icon">🪵</span>
         <span class="wood-num"><b id="woodCount">0</b><small> 장작</small></span>
         <span id="chopDots" class="dots"></span>
+        <span class="coin-num" title="코인 · 매일 밤 12시에 30개로 채워져요">🪙 <b id="coinCount">0</b></span>
       </div>
       <div id="quest" class="quest"></div>
     </div>
@@ -82,7 +83,11 @@
       <div id="fireTimer" class="pill fire hidden"></div>
       <div id="prompt" class="pill hidden"></div>
       <div id="musicHint" class="pill music-hint hidden">📺 옆 TV 화면을 한 번 눌러 같이 들어요</div>
-      <button id="musicBtn" class="pill music-btn hidden"></button>
+      <!-- 앉아 있을 때 쓰는 버튼 묶음: 모바일에서는 오른쪽 아래(일어나기 위)에 세로로 쌓는다 -->
+      <div id="seatBtns" class="seat-btns">
+        <button id="feedBtn" class="pill feed-btn hidden" title="타는 불에 장작 1개 더 넣기 · 2분 더 타요 (F)"></button>
+        <button id="musicBtn" class="pill music-btn hidden"></button>
+      </div>
       <button id="seatViewBtn" class="pill seat-view-btn" title="시점 바꾸기 (V)"></button>
       <div id="powders"></div>
     </div>
@@ -122,13 +127,16 @@
           <li><b>글램핑장 앞 화로</b>에서 <kbd>E</kbd>로 장작을 쌓고, 한 번 더 <kbd>E</kbd>로 불을 붙여요</li>
           <li>타오르는 불 앞에서 <kbd>E</kbd>로 앉아 불멍! <kbd>1</kbd>~<kbd>9</kbd> 로 가루를 뿌려요. 서 있을 때는 아래 <b>🎒 가방</b>을 눌러 가진 가루를 볼 수 있어요. 장작이 없어도 빈 화로 의자에 앉아 쉴 수 있어요</li>
           <li>앉은 채로 옆의 <b>💿 LP 플레이어</b>를 누르면(<kbd>M</kbd>) 곡을 검색해서 틀 수 있어요. 기타를 치며 옆 TV로 음악이 나오고, 같은 모닥불에 앉은 사람만 들려요</li>
-          <li>장작은 10분 동안 타요. 다 타면 다시 장작을 패러 가요 🪓</li>
+          <li>장작은 10분 동안 타요. 타는 중에 <b>🪵 장작 더 넣기</b>(F)로 1개에 2분씩 늘릴 수 있어요 (10분 → 12분 → 14분…, 최대 30분). 다 타면 음악도 멈춰요 🪓</li>
           <li>광장의 <b>📖 방명록</b>에서 한마디를 남기고, 다른 캠퍼들의 방명록도 구경할 수 있어요</li>
-          <li>오른쪽 위 <b>💌 버튼</b>으로 친구에게 캠핑장 링크를 보낼 수 있어요</li>
+          <li>오른쪽 위 <b>💌 버튼</b>으로 친구에게 캠핑장 링크를 보낼 수 있어요. 하루 한 번 <b>🪙 코인 10개</b>를 더 받아요</li>
+          <li><b>🪙 코인</b>은 매일 밤 12시에 30개로 채워져요. 루미의 가루 공방에서 <b>✦ 특별한 가루</b>를 10코인에 살 수 있어요</li>
+          <li><b>🏕️ 글램핑 텐트</b>는 문 앞에서 <b>들어가기</b>를 누르면 들어가요 (한 동에 5명까지, 문 위 ⛺ 표시가 지금 인원). 가운데 <b>화로</b>에 장작 5개를 넣어 불을 피우면 지붕 연통에서 연기가 올라가요. 둘레 소파에 앉으면 TV장 스피커로 노래도 틀 수 있어요. 나올 때는 문 앞에서 <b>🚪 나가기</b>. 텐트 안에서 한 말은 <b>텐트 안 사람에게만</b> 보여요. 채팅에서 이름을 누르면 그 캠퍼를 차단할 수 있어요</li>
           <li>걸을 때는 3인칭, <b>모닥불에 앉으면 1인칭</b>으로 바뀌어요. 앉아 있을 때 오른쪽 아래 작은 <b>🎥 / 👁️ 버튼</b>(PC는 <kbd>V</kbd>)으로 바꿀 수 있어요</li>
           <li>화면을 위로 끌어 올리면 <b>밤하늘</b>을 올려다볼 수 있어요. 은하수와 별자리, 가끔 떨어지는 별똥별 🌠</li>
         </ol>
         <div id="lanHelp" class="lan hidden"></div>
+        <div id="blockInfo" class="block-info hidden">🚫 차단한 캠퍼 <b id="blockN">0</b>명 · 이 기기에서 채팅이 보이지 않아요 <button id="unblockAll" class="link-btn" type="button">모두 풀기</button></div>
         <div class="keys pc-only">
           <span><kbd>WASD</kbd> 이동</span><span><kbd>Shift</kbd> 달리기</span>
           <span><kbd>드래그</kbd> 시점 (위로 끌면 하늘 보기)</span><span><kbd>휠</kbd> 줌</span><span><kbd>V</kbd> 시점</span><span><kbd>M</kbd> 음악</span><span><kbd>Enter</kbd> 채팅</span>
@@ -166,6 +174,44 @@
       <div class="store-row"><span>맡기기</span><button class="btn" data-op="put" data-n="5">5개</button><button class="btn" data-op="put" data-n="all">전부</button></div>
       <div class="store-row"><span>찾기</span><button class="btn" data-op="take" data-n="5">5개</button><button class="btn" data-op="take" data-n="all">손 가득</button></div>
       <button class="btn ghost" id="storeClose">닫기</button>
+    </div>
+  </div>
+
+  <div id="shopModal" class="overlay hidden">
+    <div class="card help-card shop-card">
+      <div class="title small">✨ 루미의 가루 공방</div>
+      <div class="shop-top"><div class="store-say" id="shopSay"></div><div class="shop-coins">🪙 <b id="shopCoins">0</b></div></div>
+      <div id="shopQuest" class="shop-quest hidden"></div>
+      <div class="shop-label">✦ 특별한 가루 <small>한 개에 🪙 10</small></div>
+      <div id="shopShelf" class="shop-shelf"></div>
+      <div id="shopBag" class="shop-bag"></div>
+      <button id="shopShare" class="btn shop-share hidden" type="button">💌 친구에게 알려 주고 오늘 🪙 10 더 받기</button>
+      <div class="shop-note">코인은 매일 밤 12시에 30개로 다시 채워져요 (남은 코인은 넘어가지 않아요)</div>
+      <button class="btn ghost" id="shopClose">닫기</button>
+    </div>
+  </div>
+
+  <div id="coinIntro" class="overlay hidden">
+    <div class="card help-card coin-card">
+      <div class="coin-hero">🪙</div>
+      <div class="title small">코인이 생겼어요!</div>
+      <ul class="coin-list">
+        <li>매일 밤 <b>12시</b>마다 코인 <b>30개</b>가 채워져요</li>
+        <li>루미의 가루 공방에서 <b>✦ 특별한 가루</b>를 <b>10코인</b>에 살 수 있어요</li>
+        <li>오른쪽 위 <b>💌 버튼</b>으로 친구를 초대하면 하루 한 번 <b>+10코인</b></li>
+        <li>그리고 <b>🏕️ 글램핑 텐트</b> 안에 들어갈 수 있어요. 화로 불멍 · 소파 · 해먹 · 스피커 음악, 텐트 안 이야기는 텐트 안에만 들려요</li>
+      </ul>
+      <button class="btn" id="ciShare" type="button">💌 친구에게 공유하고 🪙 10 받기</button>
+      <button class="btn ghost" id="ciClose" type="button">나중에 할게요</button>
+    </div>
+  </div>
+
+  <div id="blockModal" class="overlay hidden">
+    <div class="card help-card block-card">
+      <div class="title small">🚫 <span id="blockName"></span>님을 차단할까요?</div>
+      <div class="store-say">차단하면 이 기기에서 이 캠퍼의 채팅과 말풍선이 보이지 않아요.<br>안내서(?)에서 언제든 풀 수 있어요.</div>
+      <button class="btn" id="blockOk" type="button">차단하기</button>
+      <button class="btn ghost" id="blockCancel" type="button">취소</button>
     </div>
   </div>
 

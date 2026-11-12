@@ -52,7 +52,7 @@ export function createSky(scene, { lowSpec = false } = {}) {
           vec3 c = mix(bottom, mid, smoothstep(-0.02, 0.25, h));
           c = mix(c, top, smoothstep(0.25, 0.9, h));
           float m = max(dot(d, moonDir), 0.0);
-          c += vec3(0.25, 0.27, 0.45) * pow(m, 18.0) * 0.6;
+          c += vec3(0.25, 0.27, 0.45) * pow(m, 18.0) * 0.35;
           // 은하수: 큰 원을 따라 흐르는 뿌연 빛 + 가운데 어두운 먼지 띠
           float k = dot(d, mwN);
           float band = exp(-k * k / 0.022);
@@ -170,11 +170,12 @@ export function createSky(scene, { lowSpec = false } = {}) {
   group.add(lines);
 
   // ---------- 달
-  const moon = new THREE.Mesh(new THREE.SphereGeometry(13, 32, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff3d2').multiplyScalar(2.2), fog: false }));
+  // 블룸에 번져 눈부시지 않게 밝기를 낮췄다 (2.2 → 0.9: 블룸 문턱 바로 위라 살짝만 번진다)
+  const moon = new THREE.Mesh(new THREE.SphereGeometry(13, 32, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff3d2').multiplyScalar(0.9), fog: false }));
   moon.position.copy(MOON_DIR).multiplyScalar(420);
   group.add(moon);
-  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTexture(), color: '#b9c4ff', transparent: true, opacity: 0.35, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
-  halo.scale.setScalar(120);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTexture(), color: '#b9c4ff', transparent: true, opacity: 0.1, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+  halo.scale.setScalar(80);
   halo.position.copy(moon.position);
   group.add(halo);
 

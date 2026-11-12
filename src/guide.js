@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { TENTS, STUMPS, NPC, KEEPER, WOODYARD, BOUNDS, GUESTBOOK, BOARD } from '../shared/config.js';
+import { CFG, TENTS, STUMPS, NPC, KEEPER, WOODYARD, BOUNDS, GUESTBOOK, BOARD } from '../shared/config.js';
 
 // 목적지 안내: 멀리서 보이는 빛기둥 + 표지, 미니맵
 
@@ -108,7 +108,7 @@ export class Guide {
     { const [px, pz] = P(0, 0); g.beginPath(); g.arc(px, pz, 11.5 * k, 0, Math.PI * 2); g.fill(); }
     // 텐트 · 화로
     g.fillStyle = 'rgba(242, 230, 207, 0.9)';
-    for (const t of TENTS) { const [x, y] = P(t.x, t.z); g.beginPath(); g.arc(x, y, 3 * k, 0, Math.PI * 2); g.fill(); }
+    for (const t of TENTS) { const [x, y] = P(t.x, t.z); g.beginPath(); g.arc(x, y, CFG.TENT_R * k, 0, Math.PI * 2); g.fill(); }
     for (const p of pits) {
       const [x, y] = P(p.pos.x, p.pos.z);
       g.fillStyle = p.state === 'lit' ? '#ff8a2a' : p.state === 'stacked' ? '#c98a4a' : 'rgba(110, 104, 118, 0.9)';
@@ -174,7 +174,7 @@ export class Guide {
     g.beginPath(); g.arc(X(0), Z(0), 11.5 * sx, 0, Math.PI * 2); g.fill();
     // 텐트
     g.fillStyle = '#f2e6cf';
-    for (const t of TENTS) { g.beginPath(); g.arc(X(t.x), Z(t.z), 3 * sx, 0, Math.PI * 2); g.fill(); }
+    for (const t of TENTS) { g.beginPath(); g.arc(X(t.x), Z(t.z), CFG.TENT_R * sx, 0, Math.PI * 2); g.fill(); }
     // 화로
     for (const p of pits) {
       const lit = p.state === 'lit', st = p.state === 'stacked';

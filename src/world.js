@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { toon, glow, radialTexture, textTexture, mulberry32 } from './toon.js';
 import { createSky } from './sky.js';
-import { TENTS, PITS, STUMPS, NPC, KEEPER, WOODYARD, BOUNDS } from '../shared/config.js';
+import { CFG, TENTS, PITS, STUMPS, NPC, KEEPER, WOODYARD, BOUNDS, TENT_WH, TENT_RH, EGG } from '../shared/config.js';
 
 const W = { minX: -60, maxX: 60, minZ: -42, maxZ: 42 };
 const tmpM = new THREE.Matrix4();
@@ -133,7 +133,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   scene.add(hemi);
   const ambient = new THREE.AmbientLight('#3a3f7a', 0.18);
   scene.add(ambient);
-  const moonLight = new THREE.DirectionalLight('#9fb2ff', 0.55);
+  const moonLight = new THREE.DirectionalLight('#9fb2ff', 0.45); // 달빛 (눈부시다는 의견에 0.55 → 0.45)
   moonLight.castShadow = true;
   moonLight.shadow.mapSize.setScalar(lowSpec ? 1024 : 2048);
   const sc = moonLight.shadow.camera;
@@ -254,19 +254,45 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   const canvasMat = toon('#f2e6cf', { emissive: new THREE.Color('#6a4520'), emissiveIntensity: 0.55, side: THREE.DoubleSide });
   const roofMat = toon('#eadbbd', { emissive: new THREE.Color('#5a3a18'), emissiveIntensity: 0.4, side: THREE.DoubleSide });
   const deckMat = toon('#9b6a43');
-  const doorMat = glow('#ffb35c', 2.2);
+  const doorMat = glow('#ffb35c', 0.95); // 문 안쪽 불빛: 눈부시지 않게 은은하게 (2.2 → 0.95)
   const flapMat = toon('#e2d1ae', { side: THREE.DoubleSide, emissive: new THREE.Color('#7a5020'), emissiveIntensity: 0.6 });
+  // 문: 사람이 드나들 수 있게 어깨가 있는 오각형 (v1.15부터 텐트 안에 들어갈 수 있다)
   const doorShape = new THREE.Shape();
-  doorShape.moveTo(-0.8, 0); doorShape.lineTo(0.8, 0); doorShape.lineTo(0, 2.0); doorShape.closePath();
+  doorShape.moveTo(-0.9, 0); doorShape.lineTo(0.9, 0); doorShape.lineTo(0.9, 1.25); doorShape.lineTo(0, 2.0); doorShape.lineTo(-0.9, 1.25); doorShape.closePath();
   const doorGeo = new THREE.ShapeGeometry(doorShape);
   const flapShape = new THREE.Shape();
-  flapShape.moveTo(0, 0); flapShape.lineTo(0.55, 0); flapShape.lineTo(0, 2.0); flapShape.closePath();
+  flapShape.moveTo(0, 0); flapShape.lineTo(0.45, 0); flapShape.lineTo(0, 1.9); flapShape.closePath();
   const flapGeo = new THREE.ShapeGeometry(flapShape);
-  const wallGeo = new THREE.CylinderGeometry(3, 3, 1.5, 28, 1, true);
-  const roofGeo = new THREE.ConeGeometry(3.35, 2.6, 28, 1, true);
-  const deckGeo = new THREE.BoxGeometry(8, 0.15, 8.5);
+  // 텐트 크기: 둥근 벽 반지름 TR (v1.15: 안에 화로와 둥근 소파가 들어가게 3 → 6.2, 층고도 높였다)
+  const TR = CFG.TENT_R, WH = TENT_WH, RH = TENT_RH; // 벽 높이 · 지붕 높이
+  // 창문: 벽 천에 구멍(alphaMap)을 내고 나무 창틀 + 유리. 밖에서는 안쪽 불빛이 비치는 따뜻한 유리, 들어간 텐트에서는 맑은 유리 (tent.js)
+  const WIN_DEG = [65, 120, 180, 240, 295], WIN_W = 1.1, WIN_Y0 = 0.95, WIN_Y1 = 2.1;
+  {
+    const cv = document.createElement('canvas');
+    cv.width = 2048; cv.height = 128;
+    const cx = cv.getContext('2d');
+    cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height);
+    cx.fillStyle = '#000';
+    const du = WIN_W / (Math.PI * 2 * TR);
+    for (const d of WIN_DEG) {
+      const u = d / 360;
+      cx.fillRect((u - du / 2) * cv.width, (1 - WIN_Y1 / WH) * cv.height, du * cv.width, ((WIN_Y1 - WIN_Y0) / WH) * cv.height);
+    }
+    canvasMat.alphaMap = new THREE.CanvasTexture(cv);
+    canvasMat.alphaTest = 0.5;
+  }
+  const winFrameMat = toon('#7a5233');
+  const winGlassGeo = new THREE.PlaneGeometry(WIN_W, WIN_Y1 - WIN_Y0);
+  const winBarH = new THREE.BoxGeometry(WIN_W + 0.16, 0.08, 0.14);
+  const winBarV = new THREE.BoxGeometry(0.08, WIN_Y1 - WIN_Y0 + 0.08, 0.14);
+  const winMullion = new THREE.BoxGeometry(0.04, WIN_Y1 - WIN_Y0, 0.08);
+  const wallGeo = new THREE.CylinderGeometry(TR, TR, WH, 36, 1, true);
+  const roofGeo = new THREE.ConeGeometry(TR + 0.4, RH, 36, 1, true);
+  const DW = TR * 2 + 0.9, DD = TR * 2 + 1.4, DZ = 0.4; // 데크 (문 앞이 조금 더 길다)
+  const deckGeo = new THREE.BoxGeometry(DW, 0.15, DD);
   const bunting = ['#ff7a6b', '#ffd36b', '#7fd3a8', '#7fb6ff', '#d59bff'];
 
+  const tents = new Map(); // id -> 텐트 안에 들어갔을 때 숨기거나 흐리게 할 부분
   for (const t of TENTS) {
     const g = new THREE.Group();
     g.position.set(t.x, 0, t.z);
@@ -274,73 +300,97 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     scene.add(g);
 
     const deck = new THREE.Mesh(deckGeo, deckMat);
-    deck.position.set(0, 0.075, 0.7);
+    deck.position.set(0, 0.075, DZ);
     deck.receiveShadow = true;
     deck.castShadow = true;
     g.add(deck);
-    const dz = t.z + Math.cos(t.facing) * 0.7;
-    decks.push({ minX: t.x - 4, maxX: t.x + 4, minZ: dz - 4.25, maxZ: dz + 4.25, h: 0.15 });
+    const dz = t.z + Math.cos(t.facing) * DZ;
+    decks.push({ minX: t.x - DW / 2, maxX: t.x + DW / 2, minZ: dz - DD / 2, maxZ: dz + DD / 2, h: 0.15 });
 
     const wall = new THREE.Mesh(wallGeo, canvasMat);
-    wall.position.y = 0.15 + 0.75;
+    wall.position.y = 0.15 + WH / 2;
     wall.castShadow = true;
     const roof = new THREE.Mesh(roofGeo, roofMat);
-    roof.position.y = 0.15 + 1.5 + 1.3;
+    roof.position.y = 0.15 + WH + RH / 2;
     roof.castShadow = true;
-    const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.6, 6), toon('#6b4a2b'));
-    tip.position.y = 4.4;
+    // 지붕 꼭대기: 안 화로의 연통이 뚫고 나온다 (연통 · 연기는 fire.js). 깃발은 연통 옆에
+    const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.3, 0.12, 12), toon('#6b4a2b'));
+    tip.position.y = 0.15 + WH + RH - 0.1;
     const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.28), toon(bunting[TENTS.indexOf(t) % bunting.length], { side: THREE.DoubleSide }));
-    flag.position.set(0.24, 4.55, 0);
-    g.add(wall, roof, tip, flag);
+    flag.position.set(0.42, 0.15 + WH + RH + 0.55, 0);
+    const flagPole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.75, 5), toon('#6b4a2b'));
+    flagPole.position.set(0.2, 0.15 + WH + RH + 0.3, 0);
+    g.add(wall, roof, tip, flag, flagPole);
+    // 창문
+    const glassMat = new THREE.MeshBasicMaterial({ color: '#ffb766', transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false });
+    const glass = [];
+    for (const d of WIN_DEG) {
+      const a = (d * Math.PI) / 180;
+      const w = new THREE.Group();
+      w.position.set(Math.sin(a) * (TR - 0.01), 0.15, Math.cos(a) * (TR - 0.01));
+      w.rotation.y = a;
+      const gl = new THREE.Mesh(winGlassGeo, glassMat);
+      gl.position.y = (WIN_Y0 + WIN_Y1) / 2;
+      glass.push(gl);
+      const top = new THREE.Mesh(winBarH, winFrameMat); top.position.y = WIN_Y1 + 0.04;
+      const bot = new THREE.Mesh(winBarH, winFrameMat); bot.position.y = WIN_Y0 - 0.04;
+      const l = new THREE.Mesh(winBarV, winFrameMat); l.position.set(-WIN_W / 2 - 0.04, (WIN_Y0 + WIN_Y1) / 2, 0);
+      const r = new THREE.Mesh(winBarV, winFrameMat); r.position.set(WIN_W / 2 + 0.04, (WIN_Y0 + WIN_Y1) / 2, 0);
+      const mu = new THREE.Mesh(winMullion, winFrameMat); mu.position.y = (WIN_Y0 + WIN_Y1) / 2;
+      const mh = new THREE.Mesh(new THREE.BoxGeometry(WIN_W, 0.04, 0.08), winFrameMat); mh.position.y = (WIN_Y0 + WIN_Y1) / 2;
+      w.add(gl, top, bot, l, r, mu, mh);
+      g.add(w);
+    }
     updaters.push((time) => { flag.rotation.y = Math.sin(time * 2 + t.x) * 0.3; });
 
     // 열린 문 (안쪽 불빛)
     const door = new THREE.Mesh(doorGeo, doorMat);
-    door.position.set(0, 0.16, 2.97);
+    door.position.set(0, 0.16, TR - 0.03);
     g.add(door);
     for (const side of [-1, 1]) {
       const flap = new THREE.Mesh(flapGeo, flapMat);
-      flap.position.set(side * 0.82, 0.16, 3.05);
+      flap.position.set(side * 0.92, 0.16, TR + 0.05);
       flap.scale.x = -side;
       flap.rotation.y = side * -0.5;
       g.add(flap);
     }
     // 문 앞 빛
-    const spill = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshBasicMaterial({ map: radialTexture(), color: '#ff9f4a', transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
+    const spill = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshBasicMaterial({ map: radialTexture(), color: '#ff9f4a', transparent: true, opacity: 0.2, depthWrite: false, blending: THREE.AdditiveBlending }));
     spill.rotation.x = -Math.PI / 2;
-    spill.position.set(0, 0.17, 3.6);
+    spill.position.set(0, 0.17, TR + 0.6);
     g.add(spill);
 
     // 지붕 둘레 전구
     const local = new THREE.Vector3();
-    for (let i = 0; i < 22; i++) {
-      const a = (i / 22) * Math.PI * 2;
-      local.set(Math.cos(a) * 3.12, 1.72 - (i % 2) * 0.06, Math.sin(a) * 3.12);
+    for (let i = 0; i < 30; i++) {
+      const a = (i / 30) * Math.PI * 2;
+      local.set(Math.cos(a) * (TR + 0.12), 0.15 + WH + 0.07 - (i % 2) * 0.06, Math.sin(a) * (TR + 0.12));
       local.applyEuler(new THREE.Euler(0, t.facing, 0));
       bulbs.push({ x: t.x + local.x, y: local.y, z: t.z + local.z, color: i % 3 === 0 ? '#ffe6a6' : '#ffc17a' });
     }
 
     // 문 옆 랜턴 + 화분
     const lanternPost = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.1, 6), toon('#3b3229'));
-    lanternPost.position.set(1.7, 0.7, 3.4);
+    lanternPost.position.set(1.9, 0.7, TR + 0.45);
     const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), glow('#ffcf85', 3.5));
-    lantern.position.set(1.7, 1.3, 3.4);
+    lantern.position.set(1.9, 1.3, TR + 0.45);
     g.add(lanternPost, lantern);
     const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.17, 0.32, 10), toon('#c46a42'));
-    pot.position.set(-1.8, 0.31, 3.3);
+    pot.position.set(-2.0, 0.31, TR + 0.35);
     const plant = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), toon('#4d9a54'));
-    plant.position.set(-1.8, 0.7, 3.3);
+    plant.position.set(-2.0, 0.7, TR + 0.35);
     plant.castShadow = true;
     g.add(pot, plant);
 
     // 쿨러 박스
     const cooler = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.4), toon(bunting[(TENTS.indexOf(t) + 2) % bunting.length]));
-    cooler.position.set(2.8, 0.35, 2.3);
+    cooler.position.set((TR + 0.7) * 0.7, 0.35, (TR + 0.7) * 0.7);
     cooler.rotation.y = 0.4;
     cooler.castShadow = true;
     g.add(cooler);
 
-    addCol(t.x, t.z, 3.25);
+    colliders.push({ x: t.x, z: t.z, r: TR + 0.25, tent: t }); // 텐트 벽: 문으로는 드나들 수 있게 main.js 에서 따로 처리
+    tents.set(t.id, { wall, roof, tip, flag, door, spill, glass, glassMat, group: g });
   }
 
   // ---------- 장작 패는 곳
@@ -560,6 +610,37 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     { const [lx, lz] = at(3.2, 0); lightSpots.push({ pos: new THREE.Vector3(lx, 1.8, lz), color: new THREE.Color('#d7b0ff'), intensity: 6, distance: 11 }); }
     for (const [dx, dz, r] of [[1.25, -1.1, 0.75], [1.25, 0, 0.75], [1.25, 1.1, 0.75], [-1.2, 0, 1.4], [-1.2, -1.6, 0.8], [-1.2, 1.6, 0.8]]) addCol(...at(dx, dz), r);
   }
+  // ---------- 숨겨진 가루병 (이스터에그): 루미 공방 뒤 선반 너머 풀숲에 쓰러진 작은 병. 가까이 가야 반짝임이 보인다
+  let egg;
+  {
+    egg = new THREE.Group();
+    egg.position.set(EGG.x, 0, EGG.z);
+    const jarMat = glow('#c9a2ff', 1.1);
+    const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 0.22, 10), jarMat);
+    jar.rotation.z = Math.PI / 2 - 0.25; jar.position.y = 0.1;
+    const cork = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.06, 8), toon('#a57a4e'));
+    cork.rotation.z = Math.PI / 2 - 0.25; cork.position.set(0.14, 0.135, 0);
+    egg.add(jar, cork);
+    for (let i = 0; i < 6; i++) { // 덮어 둔 풀
+      const b = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.38, 3), toon(i % 2 ? '#3f7a45' : '#4f8f50'));
+      b.position.set((Math.random() - 0.5) * 0.4, 0.17, (Math.random() - 0.5) * 0.35);
+      b.rotation.set((Math.random() - 0.5) * 0.6, 0, (Math.random() - 0.5) * 0.6);
+      egg.add(b);
+    }
+    const spark = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTexture(), color: '#e2c8ff', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+    spark.position.y = 0.32; spark.scale.setScalar(0.35);
+    egg.add(spark);
+    scene.add(egg);
+    const hue = new THREE.Color();
+    updaters.push((t) => {
+      if (!egg.visible) return;
+      hue.setHSL((t * 0.08) % 1, 0.8, 0.72);
+      jarMat.color.copy(hue).multiplyScalar(1.1);
+      const tw = Math.max(0, Math.sin(t * 2.3)) ** 6; // 가끔 반짝
+      spark.material.opacity = 0.15 + tw * 0.7;
+      spark.scale.setScalar(0.3 + tw * 0.35);
+    });
+  }
 
   // ---------- 나무
   {
@@ -568,7 +649,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     const tooClose = (x, z, list, d) => list.some((p) => (p.x - x) ** 2 + (p.z - z) ** 2 < d * d);
     const blocked = (x, z) => {
       if (isPath(x, z)) return true;
-      for (const t of TENTS) if ((x - t.x) ** 2 + (z - t.z) ** 2 < 5.5 ** 2) return true;
+      for (const t of TENTS) if ((x - t.x) ** 2 + (z - t.z) ** 2 < (CFG.TENT_R + 2.8) ** 2) return true;
       for (const p of PITS) if ((x - p.x) ** 2 + (z - p.z) ** 2 < 5 ** 2) return true;
       if ((x - (WOODYARD.x + 6.5)) ** 2 + (z - (WOODYARD.z + 1)) ** 2 < 5 ** 2) return true;
       if ((x - NPC.x) ** 2 + (z - NPC.z) ** 2 < 6 ** 2) return true;
@@ -587,7 +668,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
       if (Math.abs(x) < BOUNDS.maxX + 3 && Math.abs(z) < BOUNDS.maxZ + 3 && !inside) continue; // 울타리 바로 옆 비우기
       if (blocked(x, z)) continue;
       if (tooClose(x, z, all, inside ? 4 : 2.6)) continue;
-      if (inside && Math.abs(z) > 20 && Math.abs(z) < 33 && TENTS.some((t) => Math.abs(t.x - x) < 5)) continue;
+      if (inside && Math.abs(z) > 20 && Math.abs(z) < 37 && TENTS.some((t) => Math.abs(t.x - x) < CFG.TENT_R + 1.8)) continue;
       const s = 0.8 + rand() * 0.7;
       const tree = { x, z, s, ry: rand() * 6.28, ring };
       all.push(tree);
@@ -623,26 +704,26 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     while (tufts.length < (lowSpec ? 1400 : 2600) && tries++ < 30000) {
       const x = (rand() * 2 - 1) * 58, z = (rand() * 2 - 1) * 40;
       if (isPath(x, z)) continue;
-      if (TENTS.some((t) => Math.abs(x - t.x) < 4.2 && Math.abs(z - t.z) < 4.6)) continue;
+      if (TENTS.some((t) => Math.abs(x - t.x) < CFG.TENT_R + 1.2 && Math.abs(z - t.z) < CFG.TENT_R + 1.8)) continue;
       tufts.push({ x, y: 0.12, z, ry: rand() * 6, s: 0.7 + rand() * 0.8, color: rand() > 0.5 ? '#6fb35a' : '#5a9e4c' });
     }
     tries = 0;
     while (flowers.length < 420 && tries++ < 20000) {
       const x = (rand() * 2 - 1) * 56, z = (rand() * 2 - 1) * 37;
       if (isPath(x, z)) continue;
-      if (TENTS.some((t) => Math.abs(x - t.x) < 4.2 && Math.abs(z - t.z) < 4.6)) continue;
+      if (TENTS.some((t) => Math.abs(x - t.x) < CFG.TENT_R + 1.2 && Math.abs(z - t.z) < CFG.TENT_R + 1.8)) continue;
       flowers.push({ x, y: 0.18, z, s: 0.7 + rand() * 0.6, color: ['#ffe9f2', '#ffd1e6', '#fff3a8', '#c9d8ff', '#ffffff'][Math.floor(rand() * 5)] });
     }
     for (const t of TENTS) {
       for (let i = 0; i < 4; i++) {
         const a = Math.PI + (i / 3 - 0.5) * 2.2 + t.facing;
-        bushes.push({ x: t.x + Math.sin(a) * 3.9, y: 0.35, z: t.z + Math.cos(a) * 4.1, s: 0.55 + rand() * 0.35, color: ['#3f8a4c', '#4f9a58'][i % 2] });
+        bushes.push({ x: t.x + Math.sin(a) * (CFG.TENT_R + 1.1), y: 0.35, z: t.z + Math.cos(a) * (CFG.TENT_R + 1.1), s: 0.55 + rand() * 0.35, color: ['#3f8a4c', '#4f9a58'][i % 2] });
       }
     }
     tries = 0;
     while (bushes.length < 160 && tries++ < 5000) {
       const x = (rand() * 2 - 1) * 56, z = (rand() * 2 - 1) * 37;
-      if (isPath(x, z) || TENTS.some((t) => Math.abs(x - t.x) < 5 && Math.abs(z - t.z) < 5)) continue;
+      if (isPath(x, z) || TENTS.some((t) => Math.abs(x - t.x) < CFG.TENT_R + 1.8 && Math.abs(z - t.z) < CFG.TENT_R + 2.0)) continue;
       if (Math.abs(x) < 50 && Math.abs(z) < 30 && rand() > 0.25) continue;
       bushes.push({ x, y: 0.3, z, s: 0.5 + rand() * 0.5, color: ['#3f8a4c', '#4f9a58', '#356f40'][Math.floor(rand() * 3)] });
     }
@@ -725,12 +806,16 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   }
 
   return {
+    tents,
     colliders,
     lightSpots,
     occluders,
     stumpMeshes,
     heightAt,
     moonLight,
+    egg,
+    hemi,
+    ambient,
     sky,
     update(t, dt, camera, focus, shared) {
       moonLight.position.copy(focus).add(moonOffset);

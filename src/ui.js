@@ -70,11 +70,14 @@ export const UI = {
     el.textContent = text;
   },
 
-  addChat(name, text, sys = false) {
+  addChat(name, text, sys = false, { tag = null, tent = false } = {}) {
     const log = $('chatLog');
     const el = document.createElement('div');
-    el.className = `msg${sys ? ' sys' : ''}`;
-    el.innerHTML = sys ? esc(text) : `<b>${esc(name)}</b>${esc(text)}`;
+    el.className = `msg${sys ? ' sys' : ''}${tent ? ' tent' : ''}`;
+    if (tag) el.dataset.tag = tag;
+    // 이름을 누르면 차단할 수 있다 (tag 가 있는 캠퍼 채팅만)
+    const who = tag ? `<b class="who" data-tag="${esc(tag)}" data-name="${esc(name)}" title="눌러서 차단하기">${esc(name)}</b>` : `<b>${esc(name)}</b>`;
+    el.innerHTML = sys ? esc(text) : `${tent ? '<i class="tent-mark" title="텐트 안 대화">🏕️</i>' : ''}${who}${esc(text)}`;
     log.appendChild(el);
     setTimeout(() => el.classList.add('faded'), 7000);
     while (log.children.length > 60) log.firstChild.remove();

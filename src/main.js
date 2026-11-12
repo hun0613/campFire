@@ -24,7 +24,10 @@ import { Woodcut } from './woodcut.js';
 import { GuestbookStand } from './guestbook.js';
 import { NoticeBoard } from './board.js';
 import { LightPool } from './lightpool.js';
-import { CFG, PITS, STUMPS, NPC, KEEPER, BOUNDS, RANGE, LOOKS, GUESTBOOK, BOARD, QUESTS } from '../shared/config.js';
+import { TentInterior, TENT_PROPS, TENT_ENTRY, collideTents, roofY } from './tent.js';
+import {
+  CFG, PITS, STUMPS, NPC, KEEPER, BOUNDS, RANGE, LOOKS, GUESTBOOK, BOARD, QUESTS, LEGEND_POWDERS, TENTS, FIRES, tentAt, tentLocal, EGG, kstDay,
+} from '../shared/config.js';
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -90,14 +93,15 @@ function resize() {
   camera.aspect = w / h;
   camera.fov = w / h < 1 ? 60 : 42; // 세로 화면에서는 시야를 넓힌다
   camera.updateProjectionMatrix();
-  shared.uScale.value = renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+  shared.uScale.value = baseUScale = renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
 }
+let baseUScale = 600;
 addEventListener('resize', resize);
 resize();
 
 // ---------------------------------------------------------------- 월드
 const world = buildWorld(scene, { lowSpec: isTouch });
-const pits = new Map(PITS.map((d) => [d.id, new FirePit(d, scene, shared)]));
+const pits = new Map(FIRES.map((d) => [d.id, new FirePit(d, scene, shared)])); // 바깥 화로 + 텐트 화로
 const pitList = [...pits.values()];
 const glowFx = new Particles(scene, shared, { max: 5000, additive: true });
 const softFx = new Particles(scene, shared, { max: 1500, additive: false });
@@ -113,7 +117,7 @@ const board = new NoticeBoard(scene, BOARD);
 const lightSpots = [...world.lightSpots, gbStand.lightSpot, board.lightSpot];
 const lampPool = new LightPool(scene, isTouch ? 2 : 3);
 const colliders = [
-  ...world.colliders,
+  ...world.colliders.filter((c) => !c.tent), // 텐트 벽은 collideTents 에서 (들어가기 · 나가기 버튼으로만 드나든다)
   { x: GUESTBOOK.x, z: GUESTBOOK.z, r: 1.35 },
   { x: BOARD.x - 1.5, z: BOARD.z, r: 0.35 }, { x: BOARD.x + 1.5, z: BOARD.z, r: 0.35 }, { x: BOARD.x - 0.6, z: BOARD.z, r: 0.5 }, { x: BOARD.x + 0.6, z: BOARD.z, r: 0.5 },
   ...PITS.map((p) => ({ x: p.x, z: p.z, r: 0.95 })),
@@ -128,6 +132,8 @@ for (let i = 0; i < (isTouch ? 3 : 4); i++) {
   scene.add(L);
   firePool.push(L);
 }
+
+const tentRoom = new TentInterior(scene, world.tents);
 
 // NPC 루미
 const npc = new Character({ skin: '#ffe0c7', hair: '#c9a2ff', shirt: '#6a4bb5', pants: '#3a2f5a', hat: 'wizard' }, { name: '✨ 루미 · 가루 상인', kind: 'npc' });
@@ -144,8 +150,10 @@ scene.add(keeper.root);
 // ---------------------------------------------------------------- 상태
 const state = {
   myId: null,
-  inv: { wood: 0, stored: 0, chops: 0, powders: [], quest: null },
+  inv: { wood: 0, stored: 0, chops: 0, powders: [], quest: null, coins: 0, coinDay: '', shareDay: '' },
   sitting: null,
+  tent: null,   // 지금 들어가 있는 글램핑 텐트 (TENTS 항목)
+  tentMusic: new Map(), // 텐트 id -> 블루투스 스피커로 트는 곡
   clockOffset: 0,
   lastSent: { x: 0, z: 0, ry: 0, anim: '' },
   sendT: 0,
@@ -278,6 +286,10 @@ function setView(fp, { silent = false } = {}) {
   $('seatViewBtn').title = `${fp ? '3인칭' : '1인칭'}으로 보기${isTouch ? '' : ' (V)'}`;
   $('seatViewBtn').setAttribute('aria-label', $('seatViewBtn').title);
   document.body.classList.toggle('fp', fp);
+  if (changed && !fp && me && state.sitting && state.tent) { // 텐트 화로 3인칭: 내 옆 뒤쪽 높은 곳에서 화로와 둘레 소파를 내려다본다
+    const pd = pits.get(state.sitting.pit);
+    cam.yaw = Math.atan2(me.x - pd.pos.x, me.z - pd.pos.z) + 0.75; cam.pitch = 0.75; cam.dist = 6;
+  }
   if (changed && !silent && me) {
     track('view_toggle', { view: fp ? 'fp' : 'tp' });
     UI.toast(fp ? '👁️ 1인칭 시점' : '🎥 3인칭 시점', 1600);
@@ -285,8 +297,8 @@ function setView(fp, { silent = false } = {}) {
 }
 $('seatViewBtn').onclick = (e) => { e.currentTarget.blur(); setView(!view.fp); };
 // 💌 친구 초대: 휴대폰은 공유 창, PC는 링크 복사. 공유하면 루미의 「친구 초대」 부탁이 채워진다
-$('shareBtn').onclick = async (e) => {
-  e.currentTarget.blur();
+$('shareBtn').onclick = (e) => { e.currentTarget.blur(); $('shareBtn').classList.remove('pulse'); shareInvite(); };
+async function shareInvite() {
   const url = `${location.origin}/?utm_source=friend&utm_medium=share&utm_campaign=invite`;
   const text = '🔥 같이 불멍하자! 장작 패고 모닥불 피우고, 별 보면서 쉬는 3D 캠핑장이야';
   let ok = false;
@@ -299,7 +311,8 @@ $('shareBtn').onclick = async (e) => {
     }
   }
   if (ok) { net.send({ t: 'quest', ev: 'share' }); track('share', { method: navigator.share ? 'share' : 'copy' }); }
-};
+  return ok;
+}
 initPWA();
 initAnalytics();
 $('seatViewBtn').textContent = '👁️'; $('seatViewBtn').title = `1인칭으로 보기${isTouch ? '' : ' (V)'}`; // 처음엔 3인칭 (setView는 카메라 준비 뒤에 쓴다)
@@ -392,6 +405,8 @@ net.on('replaced', () => {
 net.on('hello', (m) => {
   state.clockOffset = m.now - Date.now();
   for (const p of m.pits) pits.get(p.id)?.setState(p);
+  state.tentMusic.clear();
+  for (const r of m.tentMusic || []) state.tentMusic.set(r.tent, r.music);
   for (const p of m.players) addRemote(p);
   updateOnline();
 });
@@ -401,7 +416,7 @@ net.on('welcome', (m) => {
   const char = new Character(look, { name: m.me.name, kind: 'me' });
   char.root.position.set(m.me.x, 0, m.me.z);
   scene.add(char.root);
-  me = { char, x: m.me.x, z: m.me.z, ry: m.me.ry, name: m.me.name };
+  me = { char, x: m.me.x, z: m.me.z, ry: m.me.ry, name: m.me.name, tag: m.me.tag };
   cam.yaw = 0;
   $('join').classList.add('hidden');
   preview.dispose();
@@ -413,6 +428,11 @@ net.on('welcome', (m) => {
   if (firstTime) {
     $('help').classList.remove('hidden');
     store.set('helpSeen', true);
+    store.set('coinIntroSeen', true); // 처음 온 사람은 안내서에 코인 · 텐트 이야기가 들어 있다
+  } else if (!store.get('coinIntroSeen', false)) {
+    // 원래 오던 사람: v1.15 새 소식(코인 · 루미 상점 · 텐트)을 한 번 알려 준다
+    store.set('coinIntroSeen', true);
+    setTimeout(() => $('coinIntro').classList.remove('hidden'), 900);
   }
   const hintN = store.get('touchHintN', 0);
   const showHint = touch && hintN < 3;
@@ -460,8 +480,14 @@ net.on('snap', (m) => {
 net.on('inv', (m) => {
   if (m.save) store.set('save', m.save); // 서버가 서명한 백업 (서버가 재시작돼도 장작 복원)
   const prev = state.inv;
-  state.inv = { wood: m.wood, stored: m.stored || 0, chops: m.chops, powders: m.powders, quest: m.quest || null };
+  state.inv = {
+    wood: m.wood, stored: m.stored || 0, chops: m.chops, powders: m.powders, quest: m.quest || null,
+    coins: m.coins ?? 0, coinDay: m.coinDay || '', shareDay: m.shareDay || '', eggDay: m.eggDay || '',
+  };
+  world.egg.visible = state.inv.eggDay !== kstDay(); // 오늘 이미 주웠으면 내 화면에서는 숨긴다
   if (storeIsOpen()) renderStore(prev);
+  if (shopIsOpen()) renderShop();
+  setCoins(state.inv.coins, prev.coins);
   if (m.gained && me && state.lastStumpIdx != null) splitLog(state.lastStumpIdx, me.char);
   me?.char.setCarry(m.wood);
   refreshInventory();
@@ -542,6 +568,16 @@ net.on('questDone', (m) => {
 net.on('npc', (m) => {
   const q = m.quest;
   const pages = [];
+  // 처음 만났을 때 · 부탁을 마쳤을 때만 대화로 들려주고, 나머지는 바로 가루 공방(상점)을 연다
+  const talk = m.first || m.finished || m.rewardBlocked;
+  const say = m.basic.length ? `마법 가루 ${m.basic.length}개를 채워 줬어! ✨ 기본 가루는 늘 공짜야`
+    : m.full ? '가방이 가루로 꽉 찼네! 모닥불에 좀 뿌리고 오렴 🔥'
+    : SHOP_SAY[Math.floor(Math.random() * SHOP_SAY.length)];
+  if (!talk) {
+    if (m.basic.length) npc.play('wave');
+    openShop(say);
+    return;
+  }
   const chips = (list) => list.map((p) => UI.powderChip(p)).join('');
   if (m.first) {
     pages.push('안녕! 나는 가루 공방의 루미야 ✨\n모닥불 색을 바꾸는 <b>마법 가루</b>를 만들어.');
@@ -558,6 +594,7 @@ net.on('npc', (m) => {
     pages.push(`자, 마법 가루 ${m.basic.length}개 채워 줬어.\n${chips(m.basic)}`);
     if (!m.finished) npc.play('wave');
   }
+  if (m.first) pages.push(`그리고 <b>🪙 코인</b>이 있으면 공방에서 <b>✦ 특별한 가루</b>도 살 수 있어.\n코인은 매일 밤 12시에 ${CFG.DAILY_COINS}개로 채워져!`);
   if (!m.rewardBlocked) {
     const lap = q.lap ? ` <small>(${q.lap + 1}바퀴째)</small>` : '';
     if (m.first || m.finished) {
@@ -569,11 +606,120 @@ net.on('npc', (m) => {
       pages.push(`부탁한 <b>「${q.title}」</b>은(는) 어떻게 돼 가? (${questProgress(q)})\n${q.desc}`);
     }
   }
-  if (!m.basic.length && !m.finished && !m.first) {
-    pages.unshift(m.full ? '어머, 가방이 가루로 꽉 찼네! 모닥불에 좀 뿌리고 오렴 🔥' : `가루는 아직 넉넉하네! ${CFG.BASE_POWDERS}개보다 적어지면 또 채워 줄게 ✨`);
-  }
-  UI.dialog(pages);
+  UI.dialog(pages, () => openShop(say));
 });
+
+// ---------------------------------------------------------------- 🪙 코인 · 루미의 가루 공방 (상점)
+const SHOP_SAY = ['어서 와! 오늘은 어떤 가루로 모닥불을 물들여 볼래? ✨', '특별한 가루는 내가 밤새 정성껏 빻은 거야 💜', '코인이 모자라면 💌 친구에게 캠핑장을 알려 줘! 하루 한 번 보너스를 줄게'];
+const shopIsOpen = () => !$('shopModal').classList.contains('hidden');
+const shareBonusLeft = () => state.inv.shareDay !== state.inv.coinDay; // 오늘(서버 기준) 공유 보너스를 아직 안 받았는지
+function setCoins(n, prev) {
+  $('coinCount').textContent = n;
+  if (prev != null && prev !== n) { const el = $('coinCount').parentElement; el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+}
+function renderShop() {
+  const inv = state.inv;
+  $('shopCoins').textContent = inv.coins;
+  const full = inv.powders.length >= CFG.MAX_POWDERS;
+  $('shopShelf').innerHTML = Object.entries(LEGEND_POWDERS).map(([id, L]) => {
+    const have = inv.powders.filter((p) => p.effect === id && p.legend).length;
+    const can = inv.coins >= CFG.LEGEND_PRICE && !full;
+    return `<div class="shop-item">
+      <span class="shop-bottle" style="background:${L.bg};box-shadow:0 0 14px ${L.color}"></span>
+      <span class="shop-txt"><b>${escHtml(L.name)}</b><small>${escHtml(L.desc)}${have ? ` · 가방에 ${have}개` : ''}</small></span>
+      <button class="shop-buy" data-effect="${id}"${can ? '' : ' disabled'}>🪙 ${CFG.LEGEND_PRICE}</button>
+    </div>`;
+  }).join('');
+  for (const b of $('shopShelf').querySelectorAll('.shop-buy')) b.onclick = () => { b.disabled = true; net.send({ t: 'buy', effect: b.dataset.effect }); };
+  // 루미의 부탁: 지금 부탁과 진행 상황 (부탁을 들어주면 받는 선물도)
+  const q = inv.quest;
+  if (q?.met) {
+    const def = QUESTS[q.i];
+    const pct = Math.round((q.p / def.goal) * 100);
+    $('shopQuest').innerHTML = `<div class="sq-head">💜 루미의 부탁 <b>${escHtml(def.title)}</b> <span>${q.done ? '완료! 말을 걸면 선물을 줄게' : questProgress(q)}</span></div>
+      <div class="sq-desc">${escHtml(def.desc)}</div><i class="sq-bar" style="--p:${pct}%"></i>
+      <div class="sq-reward">선물: ${escHtml(LEGEND_POWDERS[def.reward].name)}</div>`;
+    $('shopQuest').classList.remove('hidden');
+  } else $('shopQuest').classList.add('hidden');
+  const legend = inv.powders.filter((p) => p.legend).length;
+  $('shopBag').innerHTML = `🎒 가방에 가루 <b>${inv.powders.length}</b>개${legend ? ` (✦ ${legend}개)` : ''} · 기본 가루는 ${CFG.BASE_POWDERS}개까지 공짜로 채워 줘요`;
+  $('shopShare').classList.toggle('hidden', !shareBonusLeft());
+}
+function openShop(say) {
+  faceTo(NPC.x, NPC.z);
+  $('shopSay').textContent = say || SHOP_SAY[0];
+  renderShop();
+  $('shopModal').classList.remove('hidden');
+  state.shopOpenedAt = performance.now();
+  track('shop_open', { coins: state.inv.coins });
+}
+function closeShop() { $('shopModal').classList.add('hidden'); }
+$('shopClose').onclick = closeShop;
+$('shopModal').addEventListener('click', (e) => { if (e.target.id === 'shopModal' && performance.now() - (state.shopOpenedAt || 0) > 600) closeShop(); });
+$('shopShare').onclick = () => shareInvite();
+net.on('bought', (m) => {
+  $('shopSay').textContent = `${m.powder.name} 여기 있어! 타오르는 모닥불에 뿌려 봐 ✨`;
+  npc.play('wave');
+  track('powder_buy', { powder: m.powder.effect, coins: state.inv.coins });
+});
+net.on('buyFail', (m) => {
+  $('shopSay').textContent = m.reason === 'coins'
+    ? `코인이 모자라… 밤 12시가 지나면 ${CFG.DAILY_COINS}개로 채워져.${shareBonusLeft() ? ` 💌 친구에게 알려 주면 오늘 ${CFG.SHARE_BONUS}개를 더 줄게!` : ''}`
+    : '가방이 가루로 꽉 찼어! 모닥불에 좀 뿌리고 오렴 🔥';
+  if (shopIsOpen()) renderShop();
+});
+net.on('coinBonus', (m) => {
+  if (m.n > 0) {
+    UI.toast(`💌 공유 고마워요! 코인 +${m.n} 🪙`, 4000);
+    if (me) floatText(`+${m.n} 🪙`, me.char.root.position.clone().setY(2.3));
+    sound.gift();
+    track('coin_share_bonus', { n: m.n });
+  } else UI.toast('오늘 공유 보너스는 이미 받았어요 · 밤 12시가 지나면 또 받을 수 있어요 💌', 3500);
+});
+net.on('coinReset', (m) => { UI.toast(`🌙 밤 12시가 지났어요! 코인이 ${m.n}개로 채워졌어요 🪙`, 5000); sound.gift(); });
+
+// 코인 안내 (v1.15 새 소식, 한 번만)
+function closeCoinIntro() {
+  $('coinIntro').classList.add('hidden');
+  // 💌 버튼 위치를 알려 준다 (모바일은 ☰ 메뉴 밖에 꺼내 둔 💌)
+  $('shareBtn').classList.add('pulse');
+  setTimeout(() => $('shareBtn').classList.remove('pulse'), 12000);
+  UI.toast('오른쪽 위 💌 버튼으로 언제든 친구를 초대할 수 있어요', 4500);
+}
+$('ciClose').onclick = closeCoinIntro;
+$('ciShare').onclick = async () => { await shareInvite(); closeCoinIntro(); };
+
+// ---------------------------------------------------------------- 차단 (이 기기에서만)
+// 차단한 캠퍼의 채팅과 말풍선은 이 기기에서 보이지 않는다. 다시 접속해도 이어진다 (서버가 주는 표식 tag 기준)
+const blocked = new Map((store.get('blocked', []) || []).filter((b) => b && typeof b.tag === 'string').map((b) => [b.tag, b.name]));
+const saveBlocked = () => { store.set('blocked', [...blocked].map(([tag, name]) => ({ tag, name }))); renderBlockInfo(); };
+function renderBlockInfo() {
+  $('blockInfo').classList.toggle('hidden', !blocked.size);
+  $('blockN').textContent = blocked.size;
+}
+renderBlockInfo();
+let blockTarget = null;
+$('chatLog').addEventListener('click', (e) => {
+  const who = e.target.closest('.who');
+  if (!who || !who.dataset.tag || who.dataset.tag === me?.tag) return;
+  blockTarget = { tag: who.dataset.tag, name: who.dataset.name };
+  $('blockName').textContent = blockTarget.name;
+  $('blockModal').classList.remove('hidden');
+});
+$('blockCancel').onclick = () => $('blockModal').classList.add('hidden');
+$('blockOk').onclick = () => {
+  $('blockModal').classList.add('hidden');
+  if (!blockTarget) return;
+  blocked.set(blockTarget.tag, blockTarget.name);
+  saveBlocked();
+  // 이미 떠 있는 말풍선 · 채팅도 숨긴다
+  for (const el of $('chatLog').querySelectorAll(`.msg[data-tag="${CSS.escape(blockTarget.tag)}"]`)) el.remove();
+  for (const r of remotes.values()) if (r.tag === blockTarget.tag) r.ch.bubbleWrap?.replaceChildren();
+  UI.toast(`🚫 ${blockTarget.name}님을 차단했어요. 이 기기에서 채팅이 보이지 않아요`, 4000);
+  track('block');
+  blockTarget = null;
+};
+$('unblockAll').onclick = () => { blocked.clear(); saveBlocked(); UI.toast('차단을 모두 풀었어요'); };
 
 net.on('pit', (m) => {
   const pit = pits.get(m.pit.id);
@@ -583,6 +729,14 @@ net.on('pit', (m) => {
   if (prev !== 'lit' && pit.state === 'lit') {
     effects.ignite(pit.pos);
     sound.ignite(volAt(pit.pos));
+  } else if (m.fed && pit.state === 'lit') { // 누가 장작을 더 넣었다
+    pit.flare();
+    effects.ignite(pit.pos);
+    if (m.fed === state.myId) {
+      const rem = Math.ceil(pit.remaining(serverNow()) / 1000);
+      UI.toast(`🪵 장작을 넣었어요 · 남은 시간 ${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}`, 2200);
+      track('fire_feed', { pit: pit.id });
+    }
   }
   if (prev === 'empty' && pit.state === 'stacked') sound.pop();
   if (m.burnedOut && state.sitting?.pit === pit.id) {
@@ -598,10 +752,13 @@ net.on('sat', (m) => {
   me.x = m.x; me.z = m.z; me.ry = m.ry;
   // 앉으면 모닥불과 옆 TV·LP가 함께 보이도록 카메라를 TV 반대편에서 비스듬히 바라보게
   const mon = monitors.get(m.pit);
-  const pd = PITS.find((d) => d.id === m.pit);
+  const pd = FIRES.find((d) => d.id === m.pit);
+  if (pd?.kind === 'stove') track('tent_sit', { tent: pd.tent });
   if (view.fp && pd) {
     cam.yaw = Math.atan2(-(pd.x - m.x), -(pd.z - m.z));
     cam.look = -0.14;
+  } else if (pd?.kind === 'stove') {
+    cam.yaw = Math.atan2(m.x - pd.x, m.z - pd.z) + 0.75; cam.pitch = 0.75; cam.dist = 6; // 내 옆 뒤쪽 높은 곳에서 화로와 소파를 내려다본다
   } else if (mon && pd) {
     // TV · LP가 함께 보이는 기본 방향 근처에서, 내 캐릭터가 카메라와 불 사이에 끼지 않는 각도를 고른다
     const base = Math.atan2(-(mon.pos.x - pd.x), -(mon.pos.z - pd.z));
@@ -611,7 +768,9 @@ net.on('sat', (m) => {
   }
   me.char.setAnim('sit');
   refreshInventory();
-  if (!stargazeHinted) {
+  if (pd?.kind === 'stove') {
+    setTimeout(() => UI.toast('🔥 텐트 화로 불멍 · 가만히 있으면 화면이 조용해져요 (🎥 3인칭으로 보면 텐트 안이 다 보여요)', 4500), 1200);
+  } else if (!stargazeHinted) {
     stargazeHinted = true;
     setTimeout(() => UI.toast(isTouch ? '🌌 오른쪽 화면을 위로 쓸어 올리면 밤하늘을 올려다볼 수 있어요' : '🌌 화면을 위로 드래그하면 밤하늘을 올려다볼 수 있어요', 5000), 2500);
   }
@@ -655,11 +814,23 @@ net.on('fx', (m) => {
 });
 
 net.on('chat', (m) => {
-  UI.addChat(m.name, m.text);
+  if (m.tag && blocked.has(m.tag) && m.id !== state.myId) return; // 차단한 캠퍼
+  UI.addChat(m.name, m.text, false, { tag: m.tag, tent: !!m.tent });
   const ch = m.id === state.myId ? me?.char : remotes.get(m.id)?.ch;
   ch?.say(m.text);
 });
+net.on('tentFull', (m) => {
+  if (!me) return;
+  me.x = m.x; me.z = m.z;
+  UI.toast(`이 텐트는 꽉 찼어요 (최대 ${m.cap}명) 🏕️`);
+});
 net.on('sys', (m) => UI.addChat('', m.text, true));
+net.on('eggFound', (m) => { // 숨겨진 가루병을 찾았다
+  world.egg.visible = false;
+  effects.play('stars', new THREE.Vector3(EGG.x, 0, EGG.z), m.powder.color);
+  sound.powder?.(0.6);
+  UI.toast(`✨ 숨겨진 가루병을 찾았어요! ${m.powder.name}를 받았어요`, 4200);
+});
 net.on('toast', (m) => UI.toast(m.text));
 
 /** 통나무가 갈라짐 → 쪼갠 사람이 허리 숙여 줍고, 조각이 그 사람 장작 더미로 날아간다 */
@@ -675,7 +846,7 @@ function addRemote(p) {
   ch.root.position.set(p.x, world.heightAt(p.x, p.z), p.z);
   ch.root.rotation.y = p.ry;
   scene.add(ch.root);
-  remotes.set(p.id, { ch, tx: p.x, tz: p.z, try: p.ry, anim: p.anim, name: p.name });
+  remotes.set(p.id, { ch, tx: p.x, tz: p.z, try: p.ry, anim: p.anim, name: p.name, tag: p.tag });
   ch.setCarry(p.carry || 0);
 }
 function updateOnline() { UI.setOnline(remotes.size + (me ? 1 : 0)); }
@@ -695,8 +866,13 @@ var music = new Music({
   onEnded: (pit, vid) => net.send({ t: 'musicEnd', pit, vid, reason: 'ended' }),
   onError: (pit, vid, code) => net.send({ t: 'musicEnd', pit, vid, reason: 'error', code }),
 });
-const myMusicPit = () => (state.sitting ? pits.get(state.sitting.pit) : null);
+// 음악이 나오는 「방」: 앉아 있는 모닥불, 또는 들어가 있는 글램핑 텐트(블루투스 스피커). 텐트는 서 있어도 들린다
+const tentMusicRoom = (t) => ({ id: t.id, tent: true, state: 'lit', music: state.tentMusic.get(t.id) || null });
+const myMusicPit = () => (state.tent ? tentMusicRoom(state.tent) : state.sitting ? pits.get(state.sitting.pit) : null); // 텐트 안이면 늘 스피커
 const amDJ = () => myMusicPit()?.music?.by === state.myId;
+net.on('tentMusic', (m) => {
+  if (m.music) state.tentMusic.set(m.tent, m.music); else state.tentMusic.delete(m.tent);
+});
 
 const fmtDur = (sec) => (sec ? `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}` : '');
 const escHtml = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -704,7 +880,8 @@ const music$ = { left: 0, hasKey: false, resetAt: 0, busy: false };
 
 function openMusicModal() {
   const pit = myMusicPit();
-  if (!pit || pit.state !== 'lit') { UI.toast('불 붙은 모닥불에 앉아서 곡을 고를 수 있어요 💿'); return; }
+  if (pit?.tent && !state.sitting) { UI.toast('화로 둘레 소파에 앉으면 TV장 스피커로 노래를 틀 수 있어요 🔊'); return; }
+  if (!pit || pit.state !== 'lit') { UI.toast('불 붙은 모닥불이나 텐트 화로 소파에 앉아서 곡을 고를 수 있어요 💿'); return; }
   if (pit.music) { UI.toast('지금 곡이 끝나면 다른 곡을 틀 수 있어요 🎵'); return; }
   $('musicErr').classList.add('hidden');
   $('musicModal').classList.remove('hidden');
@@ -766,7 +943,7 @@ $('musicForm').addEventListener('submit', (e) => {
   $('musicQ').blur();
   net.send({ t: 'search', q });
 });
-$('musicBtn').addEventListener('click', openMusicModal);
+$('musicBtn').addEventListener('click', (e) => { e.currentTarget.blur(); const tip = $('musicBtn').dataset.tip; if (tip) UI.toast(tip, 2600); else openMusicModal(); });
 $('musicCancel').addEventListener('click', closeMusicModal);
 $('musicQ').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMusicModal(); });
 net.on('musicMenu', (m) => {
@@ -940,6 +1117,11 @@ addEventListener('pointerup', (e) => {
   tapStart.delete(e.pointerId);
   if (!s || !me || Math.hypot(e.clientX - s.x, e.clientY - s.y) > 10 || performance.now() - s.t > 400) return;
   raycaster.setFromCamera(new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
+  if (state.tent) { // 텐트 안: 탁자 위 스피커 · 태블릿을 누르면 곡 고르기
+    if (!raycaster.intersectObject(tentRoom.hit, false)[0]) return;
+    if (state.sitting) openMusicModal(); else UI.toast('화로 둘레 소파에 앉으면 TV장 스피커로 노래를 틀 수 있어요 🔊');
+    return;
+  }
   const hit = raycaster.intersectObjects(lpHits, false)[0];
   if (!hit) return;
   const mon = hit.object.userData.monitor;
@@ -955,6 +1137,37 @@ lpTagEl.textContent = '💿 눌러서 곡 고르기';
 const lpTag = new CSS2DObject(lpTagEl);
 lpTag.visible = false;
 scene.add(lpTag);
+// 텐트 문 위 「⛺ 2/5」: 지금 안에 몇 명 있는지 (밖에서 가까이 있을 때만)
+const tentTags = new Map(TENTS.map((t) => {
+  const el = document.createElement('div');
+  el.className = 'lp-tag tent-tag';
+  const o = new CSS2DObject(el);
+  const p = tentLocal(t, 0, CFG.TENT_R + 0.35);
+  o.position.set(p.x, 3.15, p.z);
+  o.visible = false;
+  scene.add(o);
+  return [t.id, { o, el, n: -1 }];
+}));
+let tentTagT = 0;
+let skyDim = 1;
+function updateTentTags(dt) {
+  tentTagT -= dt;
+  if (tentTagT > 0 || !me) return;
+  tentTagT = 0.4;
+  for (const t of TENTS) {
+    const tag = tentTags.get(t.id);
+    const n = tentCount(t);
+    tentRoom.setOccupancy(t.id, n);
+    const vis = !state.tent && Math.hypot(me.x - t.x, me.z - t.z) < 26;
+    tag.o.visible = vis;
+    if (vis && tag.n !== n) {
+      tag.n = n;
+      tag.el.textContent = n >= CFG.TENT_CAP ? `⛺ 가득 ${n}/${CFG.TENT_CAP}` : `⛺ ${n}/${CFG.TENT_CAP}명`;
+      tag.el.classList.toggle('full', n >= CFG.TENT_CAP);
+      tag.el.classList.toggle('busy', n > 0 && n < CFG.TENT_CAP);
+    }
+  }
+}
 
 // 연주자 주위로 ♪, 연주 중인 모닥불 TV 켜기, 내가 앉은 모닥불의 음악 재생
 let noteT = 0;
@@ -964,7 +1177,7 @@ function updateMusicFx(dt) {
   if (emit) noteT = 0;
   for (const p of pitList) {
     const m = p.state === 'lit' ? p.music : null;
-    monitors.get(p.id).update(dt, !!m);
+    monitors.get(p.id)?.update(dt, !!m);
     if (m && emit) {
       const ch = m.by === state.myId ? me?.char : remotes.get(m.by)?.ch;
       if (ch && camera.position.distanceTo(ch.root.position) < 40) {
@@ -977,10 +1190,21 @@ function updateMusicFx(dt) {
   if (me) {
     music.clockOffset = state.clockOffset;
     const pit = myMusicPit();
-    music.update(dt, pit, pit && monitors.get(pit.id), serverNow(), camera);
-    const showTag = !!pit && pit.state === 'lit' && !pit.music;
-    if (showTag) lpTag.position.copy(monitors.get(pit.id).lpPos).setY(1.25);
+    music.update(dt, pit, pit && (pit.tent ? tentRoom : monitors.get(pit.id)), serverNow(), camera);
+    // 곡을 고를 수 있으면 LP(텐트는 스피커) 위에 작은 안내
+    const showTag = pit?.tent ? false : !!pit && pit.state === 'lit' && !pit.music; // 텐트는 「노래 틀기」 버튼이 있어서 스피커 위 안내는 띄우지 않는다 (화면을 덜 가리게)
+    if (showTag) {
+      if (pit.tent) tentRoom.speakerWorld(lpTag.position).setY(1.35); else lpTag.position.copy(monitors.get(pit.id).lpPos).setY(1.25);
+      const txt = pit.tent ? '🔊 눌러서 노래 틀기' : '💿 눌러서 곡 고르기';
+      if (lpTagEl.textContent !== txt) lpTagEl.textContent = txt;
+    }
     lpTag.visible = showTag;
+    // 텐트 스피커로 노래가 나오면 스피커 위로 ♪
+    if (pit?.tent && pit.music && emit) {
+      const pos = tentRoom.speakerWorld(new THREE.Vector3());
+      pos.x += (Math.random() - 0.5) * 0.5; pos.y += 0.5 + Math.random() * 0.3; pos.z += (Math.random() - 0.5) * 0.5;
+      floatText(Math.random() < 0.5 ? '♪' : '♫', pos);
+    }
   }
 }
 
@@ -1050,12 +1274,28 @@ function findInteraction() {
   if (state.sitting) return { type: 'seated', pit: pits.get(state.sitting.pit) };
   let best = null;
   let bestD = Infinity;
+  if (state.tent) {
+    // 텐트 안: 문 앞이면 「나가기」, 그 밖에서는 가운데 화로 (장작 쌓기 · 불 붙이기 · 소파에 앉기)
+    const ex = tentLocal(state.tent, 0, CFG.TENT_R - 0.9);
+    if (Math.hypot(me.x - ex.x, me.z - ex.z) < 1.8) return { type: 'tentExit' };
+    return { type: 'pit', pit: pits.get(`f${state.tent.id}`) };
+  }
+  // 텐트 문 앞: 「들어가기」
+  for (const t of TENTS) {
+    const door = tentLocal(t, 0, CFG.TENT_R + 0.6);
+    const d = Math.hypot(me.x - door.x, me.z - door.z);
+    if (d < 1.8 && d < bestD) { best = { type: 'tentDoor', t }; bestD = d; }
+  }
   STUMPS.forEach((s, i) => {
     const d = Math.hypot(me.x - s.x, me.z - s.z);
     if (d < RANGE.stump && d < bestD) { best = { type: 'chop', idx: i, s }; bestD = d; }
   });
   const dn = Math.hypot(me.x - NPC.x, me.z - NPC.z);
   if (dn < RANGE.npc && dn < bestD) { best = { type: 'npc' }; bestD = dn; }
+  if (world.egg.visible) { // 숨겨진 가루병: 바로 옆에서만
+    const de = Math.hypot(me.x - EGG.x, me.z - EGG.z);
+    if (de < EGG.range && de < bestD) { best = { type: 'egg' }; bestD = de; }
+  }
   const dk = Math.hypot(me.x - KEEPER.x, me.z - KEEPER.z);
   if (dk < RANGE.keeper && dk < bestD) { best = { type: 'keeper' }; bestD = dk; }
   const dg = Math.hypot(me.x - GUESTBOOK.x, me.z - GUESTBOOK.z);
@@ -1063,6 +1303,7 @@ function findInteraction() {
   const db = Math.hypot(me.x - BOARD.x, me.z - BOARD.z);
   if (db < RANGE.board && db < bestD) { best = { type: 'board' }; bestD = db; }
   for (const pit of pitList) {
+    if (pit.stove) continue; // 텐트 화로는 텐트 안에서만
     const d = Math.hypot(me.x - pit.pos.x, me.z - pit.pos.z);
     if (d < RANGE.pit && d < bestD) { best = { type: 'pit', pit }; bestD = d; }
   }
@@ -1080,6 +1321,12 @@ function promptFor(it) {
   if (it.type === 'keeper') return [`<kbd>E</kbd> 장작 창고 열기 📦 <small>(맡긴 장작 ${inv.stored}개)</small>`];
   if (it.type === 'guestbook') return ['<kbd>E</kbd> 방명록 펼쳐 보기 📖'];
   if (it.type === 'board') return ['<kbd>E</kbd> 캠핑장 소식 보기 📌'];
+  if (it.type === 'tentDoor') {
+    const n = tentCount(it.t);
+    return n >= CFG.TENT_CAP ? [`🏕️ ${it.t.label}은(는) 꽉 찼어요 (${n}/${CFG.TENT_CAP}명)`, true] : [`<kbd>E</kbd> 텐트 들어가기 ⛺ <small>(${n}/${CFG.TENT_CAP}명 · 안에서 한 말은 텐트 안에만 들려요)</small>`];
+  }
+  if (it.type === 'tentExit') return ['<kbd>E</kbd> 텐트 밖으로 나가기 🚪'];
+  if (it.type === 'egg') return ['<kbd>E</kbd> 풀숲에서 반짝이는 걸 줍기 ✨'];
   if (it.type === 'pit') {
     const p = it.pit;
     if (p.state === 'empty') {
@@ -1091,6 +1338,7 @@ function promptFor(it) {
   }
   if (it.type === 'seated') {
     const p = it.pit;
+    if (p.stove && p.state !== 'lit') return [`<kbd>E</kbd> 일어나기 · 장작 ${W}개로 화로를 피울 수 있어요 · 노래는 TV장 스피커로`];
     if (p.state !== 'lit') return ['<kbd>E</kbd> 일어나기 · 불을 피우면 가루 · 노래를 쓸 수 있어요'];
     const n = inv.powders.length;
     if (n) return [`<kbd>1</kbd>${n > 1 ? `~<kbd>${n}</kbd>` : ''} 가루 뿌리기 · <kbd>E</kbd> 일어나기`];
@@ -1124,6 +1372,76 @@ function interact(it) {
       track('fire_light', { pit: p.id });
     } else if (p.state === 'lit') net.send({ t: 'sit', pit: p.id });
   } else if (it.type === 'seated') standUp();
+  else if (it.type === 'tentDoor') enterTent(it.t);
+  else if (it.type === 'tentExit') exitTent();
+  else if (it.type === 'egg') { faceTo(EGG.x, EGG.z); me.char.play('light', { onImpact: () => {} }); net.send({ t: 'egg' }); }
+}
+/** 문 앞 「들어가기」: 문 안쪽에 서서 화로를 바라본다. 카메라는 들어가기 전 높이 · 거리를 기억해 두고 텐트 안에 맞춘다 */
+function enterTent(t) {
+  if (!me || state.tent || state.sitting) return;
+  if (tentCount(t) >= CFG.TENT_CAP) { UI.toast(`이 텐트는 꽉 찼어요 (최대 ${CFG.TENT_CAP}명) 🏕️`); return; }
+  const o = tentLocal(t, TENT_ENTRY.x, TENT_ENTRY.z);
+  me.x = o.x; me.z = o.z;
+  me.ry = t.facing + Math.PI;
+  state.camSave = { pitch: cam.pitch, dist: cam.dist };
+  cam.yaw = t.facing - 0.5; // 문 쪽 조금 왼편에서 나와 화로 · 소파를 함께 본다
+  cam.pitch = 0.7; cam.dist = 5.5;
+  cam.curDist = cam.dist; cam.curPitch = cam.pitch;
+  cam.target.set(me.x, 0.9, me.z);
+  net.send({ t: 'move', x: me.x, z: me.z, ry: me.ry, anim: 'idle' });
+}
+/** 문 앞 「나가기」: 문 밖 한 걸음 앞으로 나와 텐트 앞(화로 쪽)을 보게 한다 */
+function exitTent() {
+  const t = state.tent;
+  if (!t || state.sitting) return;
+  const o = tentLocal(t, 0, CFG.TENT_R + 1.3);
+  me.x = o.x; me.z = o.z;
+  me.ry = t.facing;
+  cam.yaw = t.facing + Math.PI; // 카메라는 내 뒤 (텐트 쪽) 높은 곳에서 앞을 본다 (가리는 텐트는 반투명해진다)
+  const sv = state.camSave || { pitch: 0.6, dist: cam.dist };
+  cam.pitch = Math.max(0.6, sv.pitch); cam.dist = Math.max(8, sv.dist);
+  cam.curDist = cam.dist; cam.curPitch = cam.pitch;
+  cam.target.set(me.x, 1.0, me.z);
+  state.camSave = null;
+  net.send({ t: 'move', x: me.x, z: me.z, ry: me.ry, anim: 'idle' });
+}
+
+// ---------------------------------------------------------------- 🏕️ 글램핑 텐트
+/** 텐트 t 안에 있는 사람 수 (나 포함). 다른 사람 위치는 서버가 보내 준 마지막 위치로 센다 */
+function tentCount(t) {
+  let n = me && tentAt(me.x, me.z) === t ? 1 : 0;
+  for (const r of remotes.values()) if (tentAt(r.tx, r.tz) === t) n++;
+  return n;
+}
+/** 내가 텐트에 들어가고 나오는 것 · 다른 텐트 안 사람 숨기기 */
+function updateTentState() {
+  if (!me) return;
+  const t = tentAt(me.x, me.z);
+  if (t !== state.tent) {
+    const prev = state.tent;
+    state.tent = t;
+    tentRoom.set(t);
+    document.body.classList.toggle('in-tent', !!t);
+    // 카메라는 enterTent / exitTent 에서. 그 밖의 길로 나왔으면 (서버가 내보냄 등) 기억해 둔 시점으로
+    if (!t && prev && state.camSave) {
+      cam.pitch = Math.max(0.4, state.camSave.pitch);
+      cam.dist = state.camSave.dist;
+      state.camSave = null;
+    }
+    $('chatInput').placeholder = t ? '텐트 안 사람에게만 보여요…' : (isTouch ? '메시지를 입력하세요…' : 'Enter 를 눌러 채팅…');
+    if (t) {
+      UI.toast(`🏕️ ${t.label} · 여기서 한 말은 텐트 안에만 들려요`, 4200);
+      track('tent_enter', { tent: t.id, n: tentCount(t) });
+    } else if (prev) UI.toast('🌙 텐트 밖으로 나왔어요', 1800);
+  }
+  // 텐트 안에서는 바깥 NPC 이름표가 벽 너머로 보이지 않게
+  if (npc.root.visible === !!state.tent) { npc.root.visible = !state.tent; keeper.root.visible = !state.tent; }
+  // 다른 텐트 안에 있는 사람은 벽 · 지붕에 가려지므로 이름표 · 말풍선까지 숨긴다
+  for (const r of remotes.values()) {
+    const rt = tentAt(r.tx, r.tz);
+    const vis = !rt || rt === state.tent;
+    if (r.ch.root.visible !== vis) r.ch.root.visible = vis;
+  }
 }
 
 function faceTo(x, z) { me.ry = Math.atan2(x - me.x, z - me.z); }
@@ -1215,6 +1533,9 @@ function actionFor(it) {
   if (it.type === 'guestbook') return { icon: '📖', label: '방명록' };
   if (it.type === 'board') return { icon: '📌', label: '소식' };
   if (it.type === 'seated') return { icon: '🚶', label: '일어나기' };
+  if (it.type === 'tentDoor') return tentCount(it.t) >= CFG.TENT_CAP ? null : { icon: '⛺', label: '들어가기' };
+  if (it.type === 'tentExit') return { icon: '🚪', label: '나가기' };
+  if (it.type === 'egg') return { icon: '✨', label: '줍기' };
   if (it.type === 'pit') {
     const p = it.pit;
     if (p.state === 'empty' && state.inv.wood >= CFG.WOOD_PER_FIRE) return { icon: '🪵', label: '장작 쌓기' };
@@ -1264,13 +1585,16 @@ $('chatToggle').addEventListener('click', () => {
 // ▶ 안드로이드 '전체화면' PWA는 키보드가 떠도 화면 크기가 제대로 안 줄어서
 //   VirtualKeyboard API가 알려주는 키보드 높이를 쓴다.
 const root = document.documentElement;
-const vkMode = 'virtualKeyboard' in navigator && matchMedia('(display-mode: fullscreen)').matches;
+// 안드로이드 크롬(브라우저 · 앱 모두): 키보드를 화면 위에 덮어 띄우고(화면을 밀어 올리지 않음) 높이만 받아 UI만 올린다 → 불멍 배경은 그대로
+const vkMode = 'virtualKeyboard' in navigator && isTouch;
 let vkH = 0;
 function fitKeyboard() {
   const vv = window.visualViewport;
   let top, h;
-  if (vkMode) { h = innerHeight - vkH; top = h; } else if (vv) { h = vv.height; top = vv.offsetTop + vv.height; } else { h = innerHeight; top = innerHeight; }
+  let t0 = 0; // 보이는 영역의 위쪽 (iOS 는 화면을 밀어 올리므로 그만큼)
+  if (vkMode) { h = innerHeight - vkH; top = h; } else if (vv) { h = vv.height; top = vv.offsetTop + vv.height; t0 = vv.offsetTop; } else { h = innerHeight; top = innerHeight; }
   root.style.setProperty('--vvb', `${Math.round(top)}px`);
+  root.style.setProperty('--vvt', `${Math.round(t0)}px`);
   root.style.setProperty('--vvh', `${Math.round(h)}px`);
   document.body.classList.toggle('kb-open', vkMode ? vkH > 100 : root.clientHeight - h > 120);
 }
@@ -1331,6 +1655,18 @@ addEventListener('keydown', (e) => {
     if (['Escape', 'KeyE'].includes(e.code) && !e.repeat) closeStore();
     return;
   }
+  if (shopIsOpen()) {
+    if (['Escape', 'KeyE'].includes(e.code) && !e.repeat) closeShop();
+    return;
+  }
+  if (!$('coinIntro').classList.contains('hidden')) {
+    if (['Escape', 'Enter'].includes(e.code)) closeCoinIntro();
+    return;
+  }
+  if (!$('blockModal').classList.contains('hidden')) {
+    if (e.code === 'Escape') $('blockModal').classList.add('hidden');
+    return;
+  }
   if (!$('help').classList.contains('hidden')) {
     if (['Escape', 'Enter', 'Space'].includes(e.code)) $('help').classList.add('hidden');
     return;
@@ -1338,7 +1674,8 @@ addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); chatInput.focus(); return; }
   keys.add(e.code);
   if (e.code === 'KeyM' && !e.repeat && state.sitting) { e.preventDefault(); openMusicModal(); return; }
-  if (e.code === 'KeyV' && !e.repeat) { if (state.sitting) setView(!view.fp); else UI.toast('모닥불에 앉으면 1인칭 · 3인칭을 바꿀 수 있어요', 2000); return; }
+  if (e.code === 'KeyF' && !e.repeat && feedPit()) { feedFire(); return; }
+  if (e.code === 'KeyV' && !e.repeat) { if (state.sitting) setView(!view.fp); else UI.toast('모닥불이나 텐트 화로에 앉으면 1인칭 · 3인칭을 바꿀 수 있어요', 2000); return; }
   if (e.code === 'KeyE' && !e.repeat) {
     const it = findInteraction();
     if (it?.type !== 'chop') interact(it);
@@ -1399,6 +1736,15 @@ function collide(p, r = 0.35) {
       const d = Math.sqrt(d2);
       p.x = c.x + (dx / d) * min;
       p.z = c.z + (dz / d) * min;
+    }
+  }
+  // 텐트 벽 (걸어서는 못 드나든다: 들어가기 · 나가기 버튼으로) + 텐트 안 소품
+  collideTents(p);
+  if (state.tent) {
+    for (const o of TENT_PROPS) {
+      const c = tentLocal(state.tent, o.x, o.z);
+      const dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz), min = o.r + r;
+      if (d < min && d > 1e-6) { p.x = c.x + (dx / d) * min; p.z = c.z + (dz / d) * min; }
     }
   }
   p.x = Math.min(BOUNDS.maxX, Math.max(BOUNDS.minX, p.x));
@@ -1517,7 +1863,7 @@ function updateCamera(dt, t) {
     lookTmp.copy(camera.position).add(fpDir);
     camera.lookAt(lookTmp);
     cam.gaze = THREE.MathUtils.smoothstep(el, 0.35, 1.0);
-    const fov = (innerWidth < innerHeight ? 82 : 72) + 8 * cam.gaze; // 1인칭은 시야를 넓게 (가까운 불·사람이 화면을 꽉 채우지 않게)
+    const fov = (innerWidth < innerHeight ? 82 : 72) + (state.tent ? 12 : 0) + 8 * cam.gaze; // 1인칭은 시야를 넓게 (가까운 불·사람이 화면을 꽉 채우지 않게). 텐트 안은 더 넓게
     if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
     cam.target.set(me.x, 1.0, me.z);
     focus.set(me.x, 0, me.z);
@@ -1530,9 +1876,20 @@ function updateCamera(dt, t) {
     dist = 30; pitch = 0.5;
   } else if (state.sitting) {
     const pit = pits.get(state.sitting.pit);
-    camTarget.set((me.x + pit.pos.x) / 2, 0.9, (me.z + pit.pos.z) / 2);
-    dist = Math.min(cam.dist, 8.5);
-    pitch = Math.min(cam.pitch, 0.5);
+    if (pit.stove) camTarget.set(pit.pos.x, 0.95, pit.pos.z); // 텐트 화로: 화로를 가운데 두고 둘레 소파가 다 보이게
+    else camTarget.set((me.x + pit.pos.x) / 2, 0.9, (me.z + pit.pos.z) / 2);
+    if (state.tent) { // 텐트 화로: 스와이프한 만큼 그대로 보이게 범위를 cam 값 자체에 건다 (숨은 값이 쌓이지 않게). 카메라는 텐트 안에 머문다
+      cam.pitch = Math.min(Math.max(cam.pitch, ORBIT_MIN), 1.05);
+      cam.dist = Math.min(cam.dist, 6.5);
+    } else {
+      dist = Math.min(cam.dist, 8.5);
+      pitch = Math.min(cam.pitch, 0.5);
+    }
+  } else if (state.tent) {
+    // 텐트 안: 실내에 머무는 가까운 3인칭. 좌우 · 위아래 스와이프로 자유롭게 돌려 볼 수 있다 (벽 · 지붕을 넘어가지 않게 아래에서 잡아 둔다)
+    camTarget.set(me.x, 0.9, me.z);
+    cam.pitch = Math.min(Math.max(cam.pitch, 0.25), 1.05);
+    cam.dist = Math.min(cam.dist, 6);
   } else {
     camTarget.set(me.x, 1.0, me.z);
   }
@@ -1550,6 +1907,16 @@ function updateCamera(dt, t) {
     cam.target.y + Math.sin(orbit) * d,
     cam.target.z + Math.cos(cam.yaw) * Math.cos(orbit) * d,
   );
+  if (me && state.tent) { // 텐트 안: 카메라가 벽 · 지붕 밖으로 나가지 않게 (밖이 보이지 않게). 보는 방향은 그대로 두고 바라보는 점 쪽으로 당긴다
+    const t = state.tent, rMax = CFG.TENT_R - 0.4;
+    const inside = (x, y, z) => { const r = Math.hypot(x - t.x, z - t.z); return r <= rMax && y <= roofY(r) - 0.35; };
+    const T = cam.target, P = camera.position;
+    if (!inside(P.x, P.y, P.z)) {
+      let lo = 0, hi = 1; // T + (P - T) * k 가 안에 들어오는 가장 큰 k
+      for (let i = 0; i < 12; i++) { const k = (lo + hi) / 2; if (inside(T.x + (P.x - T.x) * k, T.y + (P.y - T.y) * k, T.z + (P.z - T.z) * k)) lo = k; else hi = k; }
+      P.set(T.x + (P.x - T.x) * lo, T.y + (P.y - T.y) * lo, T.z + (P.z - T.z) * lo);
+    }
+  }
   if (state.shake > 0) {
     state.shake -= dt;
     camera.position.x += (Math.random() - 0.5) * state.shake * 0.4;
@@ -1561,7 +1928,8 @@ function updateCamera(dt, t) {
     camera.lookAt(lookTmp);
   } else camera.lookAt(cam.target);
   // 올려다볼수록 화각을 넓혀 하늘을 크게 담는다
-  const fov = 42 + 18 * cam.gaze;
+  // 텐트 안은 카메라가 가까우니 화각을 넓혀 방이 한눈에 보이게 (좁은 화각이면 머리만 크게 보인다)
+  const fov = state.tent && me ? (innerWidth < innerHeight ? 96 : 84) : 42 + 18 * cam.gaze; // 텐트 안은 넓게 (답답하지 않게)
   if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
   focus.copy(cam.target).setY(0);
 }
@@ -1638,7 +2006,7 @@ function updateFires(t, dt) {
   // 연기 & 소리
   let level = 0;
   for (const { p, d } of lit) {
-    if (d < 45 * 45 && Math.random() < dt * 2.2 * p.intensity) effects.smoke(p.pos, p.intensity);
+    if (!p.stove && d < 45 * 45 && Math.random() < dt * 2.2 * p.intensity) effects.smoke(p.pos, p.intensity); // 텐트 화로 연기는 지붕 위 연통에서 (fire.js)
     const dc = camera.position.distanceTo(p.pos);
     level = Math.max(level, p.intensity * Math.max(0, 1 - (dc - 4) / 16));
   }
@@ -1653,6 +2021,7 @@ function updateNpc(dt) {
     if (d < 6 && !npc._greeted) { npc._greeted = true; npc.play('wave'); }
     if (d > 10) npc._greeted = false;
     if (d > RANGE.npc + 2.5 && UI.dialogOpen()) UI.dialogClose();
+    if (d > RANGE.npc + 2.5 && shopIsOpen()) closeShop();
     const can = state.inv.powders.length < CFG.BASE_POWDERS || !!state.inv.quest?.done || (state.inv.quest && !state.inv.quest.met);
     npc.markEl.style.display = can ? '' : 'none';
     // 보리도 가까이 오면 나를 본다. 멀어지면 창고 창을 닫는다
@@ -1676,6 +2045,13 @@ function questText() {
     const pit = pits.get(state.sitting.pit);
     if (pit.state === 'lit') return inv.powders.length ? '<b>불멍 중…</b> 숫자키로 마법 가루를 뿌려 보세요 ✨' : '<b>불멍 중…</b> 타닥타닥 🔥';
     return pit.state === 'stacked' ? '쌓인 장작에 <b>불을 붙이면</b> 따뜻해져요 🔥 (일어나서 E)' : `<b>쉬는 중…</b> 장작 ${W}개를 모아 오면 불을 피울 수 있어요 🪵`;
+  }
+  if (state.tent) {
+    const sp = pits.get(`f${state.tent.id}`);
+    const tip = sp.state === 'lit' ? '타오르는 <b>화로</b> 둘레 소파에 앉아 쉬어요 🔥'
+      : sp.state === 'stacked' ? '<b>화로</b>에 쌓인 장작에 불을 붙여요 🔥'
+      : inv.wood >= W ? `가운데 <b>화로</b>에 장작 ${W}개를 넣고 불을 피워요 🪵` : `<b>화로</b>는 장작 ${W}개로 피워요 (🪵 ${inv.wood}/${W}) · 소파에 앉아 쉬어도 돼요`;
+    return `🏕️ <b>${state.tent.label}</b> (${tentCount(state.tent)}/${CFG.TENT_CAP}명) · ${tip}`;
   }
   if (pitList.some((p) => p.owner === state.myId && p.state === 'stacked')) return '쌓아둔 장작에 <b>불을 붙여요</b> 🔥';
   if (inv.quest?.done) return '루미의 부탁 완료! 길 건너 <b>루미</b>에게 선물을 받으러 가요 ✨';
@@ -1722,7 +2098,7 @@ function updateHud() {
   // 모바일: 액션 버튼에 이미 표시되는 안내는 중복으로 띄우지 않는다
   UI.setPrompt(UI.dialogOpen() || (isTouch && action && !dim) ? null : html, dim);
   touch?.setAction(action);
-  const target = pickTarget({ me, inv: state.inv, sitting: state.sitting, pitList, myId: state.myId, CFG });
+  const target = state.tent ? null : pickTarget({ me, inv: state.inv, sitting: state.sitting, pitList: pitList.filter((p) => !p.stove || p.owner === state.myId), myId: state.myId, CFG }); // 텐트 안에서는 길 안내를 쉰다
   state.target = target;
   UI.setQuest(questText() + lumiQuestLine() + directionText(target));
   const pit = it?.pit;
@@ -1732,22 +2108,50 @@ function updateHud() {
   } else UI.setFireTimer(null);
   const mp = myMusicPit();
   let mb = null;
-  if (mp && mp.state === 'lit') {
-    if (!mp.music) mb = { text: isTouch ? '💿 곡 고르기' : '💿 곡 고르기 <kbd>M</kbd>', on: true };
-    else if (mp.music.by === state.myId) mb = { text: '🎸 연주 중 · 일어나면 멈춰요', on: false };
-    else mb = { text: '🎵 지금 곡이 끝나면 다른 곡을 틀 수 있어요', on: false };
+  // 버튼 글은 한 줄로 짧게, 자세한 설명은 누르면 알림으로 (tip)
+  const M = isTouch ? '' : ' <kbd>M</kbd>';
+  if (mp?.tent) {
+    if (mp.music?.by === state.myId) mb = { text: '🔊 재생 중', on: false, tip: '🔊 스피커로 트는 중이에요 · 텐트를 나가면 멈춰요' };
+    else if (state.sitting) mb = mp.music ? { text: '🎵 재생 중', on: false, tip: '🎵 지금 곡이 끝나면 다른 곡을 틀 수 있어요' } : { text: `🔊 노래 틀기${M}`, on: true };
+  } else if (mp && mp.state === 'lit') {
+    if (!mp.music) mb = { text: `💿 곡 고르기${M}`, on: true };
+    else if (mp.music.by === state.myId) mb = { text: '🎸 연주 중', on: false, tip: '🎸 연주 중이에요 · 일어나면 멈춰요' };
+    else mb = { text: '🎵 재생 중', on: false, tip: '🎵 지금 곡이 끝나면 다른 곡을 틀 수 있어요' };
   }
   const mbKey = mb ? mb.text + mb.on : '';
   if (state._mb !== mbKey) {
     state._mb = mbKey;
     const b = $('musicBtn');
     b.classList.toggle('hidden', !mb);
-    if (mb) { b.innerHTML = mb.text; b.classList.toggle('off', !mb.on); }
+    if (mb) { b.innerHTML = mb.text; b.classList.toggle('off', !mb.on); b.dataset.tip = mb.tip || ''; b.title = mb.tip || ''; }
   }
   if (!mp && !$('musicModal').classList.contains('hidden')) closeMusicModal();
+  // 🪵 장작 더 넣기: 타는 불 옆(앉아 있어도)에서 손에 장작이 있고, 2분 넘게 늘릴 여유가 있을 때
+  const fp = feedPit();
+  const fk = fp ? (isTouch ? '1' : '0') : '';
+  if (state._fk !== fk) {
+    state._fk = fk;
+    $('feedBtn').classList.toggle('hidden', !fp);
+    if (fp) $('feedBtn').innerHTML = `🪵 장작 <small>+${CFG.FEED_MS / 60000}분</small>${isTouch ? '' : ' <kbd>F</kbd>'}`;
+  }
   const canThrow = !!state.sitting && pits.get(state.sitting.pit)?.state === 'lit';
   if (canThrow !== state._canThrow) { state._canThrow = canThrow; UI.setPowderEnabled(canThrow); }
 }
+
+/** 지금 장작을 더 넣을 수 있는 타는 불 (없으면 null) */
+function feedPit() {
+  const it = findInteraction();
+  const p = it?.pit;
+  if (!p || p.state !== 'lit' || state.inv.wood < 1) return null;
+  if (p.remaining(serverNow()) + CFG.FEED_MS > CFG.FIRE_MAX) return null; // 남은 시간은 30분까지
+  return p;
+}
+function feedFire() {
+  const p = feedPit();
+  if (!p) return;
+  net.send({ t: 'feed', pit: p.id });
+}
+$('feedBtn').onclick = (e) => { e.currentTarget.blur(); feedFire(); };
 
 function updateLabels() {
   const all = [npc, ...[...remotes.values()].map((r) => r.ch), ...(me ? [me.char] : [])];
@@ -1770,7 +2174,7 @@ let lastInputAt = 0;
 const markInput = () => { lastInputAt = performance.now(); };
 for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchmove']) addEventListener(ev, markInput, { passive: true, capture: true });
 
-// ---------------------------------------------------------------- 불멍 몰입: 앉아서 가만히 있으면 UI를 흐리게
+// ---------------------------------------------------------------- 불멍 · 스피커 조명멍 몰입: 앉아서 가만히 있으면 UI를 흐리게
 // 5초 동안 조작이 없으면 화면 UI가 천천히 사라지고, 화면을 만지거나 키를 누르면 바로 돌아온다.
 // 흐린 상태에서 처음 누른 버튼은 UI만 깨운다 (실수로 일어나거나 가루를 뿌리지 않게)
 const CALM_AFTER = 5000;
@@ -1810,10 +2214,23 @@ function frame(now = performance.now()) {
   shared.uTime.value = t;
 
   updateLocal(dt);
+  updateTentState();
+  tentRoom.fadeNear(camera.position, me && !view.fp && !state.tent ? me : null);
+  // 텐트 안: 하늘빛(달빛 · 주변광)을 줄여 어둡게 — 화로 불빛이 주인공
+  {
+    const k = state.tent ? 0.4 : 1;
+    skyDim += (k - skyDim) * Math.min(1, dt * 4);
+    world.hemi.intensity = 0.45 * skyDim; world.ambient.intensity = 0.18 * skyDim; world.moonLight.intensity = 0.45 * skyDim;
+  }
+  updateTentTags(dt);
+  tentRoom.update(dt, !!(state.tent && state.tentMusic.get(state.tent.id)), camera.position);
   me?.char.update(dt);
   updateRemotes(dt);
   updateNpc(dt);
   updateCamera(dt, t);
+  // 불꽃 입자 크기 기준: 텐트 안 3인칭은 화각을 넓혀서(84°) 그대로 두면 입자가 2배 넘게 커져 하얗게 뭉친다 → 실제 화각으로 맞춘다
+  // (바깥은 지금 보이는 불 모양 그대로 둔다)
+  shared.uScale.value = state.tent && !view.fp ? renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) : baseUScale;
   updateOccluders();
   world.update(t, dt, camera, focus, shared);
   updateStargaze(t, dt);
@@ -1840,4 +2257,4 @@ function frame(now = performance.now()) {
 requestAnimationFrame(frame);
 
 // 디버그용
-window.__game = { scene, pits, state, effects, camera, net, cam, preview, monitors, THREE, renderer, get me() { return me; } };
+window.__game = { scene, pits, state, effects, camera, net, cam, preview, monitors, tentRoom, THREE, renderer, get me() { return me; } };

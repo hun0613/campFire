@@ -5,14 +5,28 @@ export const CFG = {
   CHOPS_PER_WOOD: 3,       // 도끼질 몇 번에 장작 1개
   MAX_WOOD: 30,            // 손에 들 수 있는 장작 수 (패는 횟수에는 제한이 없고, 가득 차면 창고에 맡긴다)
   MAX_STORED: 300,         // 장작 창고에 맡길 수 있는 수 (기기마다 하나)
-  FIRE_DURATION: 600_000,  // 모닥불 지속 시간 (ms)
+  FIRE_DURATION: 600_000,  // 모닥불 지속 시간 (ms): 장작 5개로 처음 붙였을 때
+  FEED_MS: 120_000,        // 타는 중에 장작 1개를 더 넣으면 늘어나는 시간 (ms): 언제든 넣으면 10 → 12 → 14분…
+  FIRE_MAX: 1_800_000,     // 장작을 더 넣어도 남은 시간은 30분까지 (한 화로를 끝없이 붙잡아 두지 않게)
   BASE_POWDERS: 3,         // 루미가 장작 없이 늘 채워 주는 기본 가루 수 (가방에 이보다 적으면 여기까지 채운다)
   MAX_POWDERS: 99,         // 가루는 사실상 제한 없음. 저장 데이터가 끝없이 커지지 않게 막는 안전장치만 둔다
   SEATS_PER_PIT: 4,
   SEAT_RADIUS: 2.4,
   EFFECT_DURATION: 12_000, // 가루 효과 지속 시간 (ms)
   CHOP_COOLDOWN: 450,
+  DAILY_COINS: 30,         // 매일 00시(한국 시간)에 코인을 이 수로 다시 맞춘다 (남은 코인은 이어지지 않음)
+  SHARE_BONUS: 10,         // 💌 공유 보너스 (하루 한 번)
+  LEGEND_PRICE: 10,        // 루미 상점: ✦ 특별한 가루 한 개 값
+  MAX_COINS: 99,
+  TENT_CAP: 5,             // 글램핑 텐트 한 동에 들어갈 수 있는 사람 수
+  TENT_R: 6.2,             // 글램핑 텐트 둥근 벽의 반지름 (v1.15: 안에 들어가 쉴 수 있게 3 → 6.2로 넓힘)
+  TENT_INNER: 6.1,         // 텐트 중심에서 이 거리 안이면 「텐트 안」
 };
+
+/** 한국 시간 기준 오늘 날짜 (YYYY-MM-DD) — 코인 충전 · 공유 보너스 기준 */
+export function kstDay(now = Date.now()) {
+  return new Date(now + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
 
 export const BOUNDS = { minX: -55, maxX: 55, minZ: -35, maxZ: 35 };
 
@@ -21,9 +35,9 @@ export const TENT_XS = [-42, -28, -14, 0, 14, 28];
 export const TENTS = [];
 export const PITS = [];
 TENT_XS.forEach((x, i) => {
-  TENTS.push({ id: `n${i}`, x, z: -27, facing: 0 });        // 문이 +z(가운데)를 향함
+  TENTS.push({ id: `n${i}`, x, z: -29.5, facing: 0, label: `북쪽 ${i + 1}번 글램핑` });        // 문이 +z(가운데)를 향함
   PITS.push({ id: `tn${i}`, x, z: -18.5, kind: 'tent', label: `북쪽 ${i + 1}번 글램핑` });
-  TENTS.push({ id: `s${i}`, x, z: 27, facing: Math.PI });   // 문이 -z를 향함
+  TENTS.push({ id: `s${i}`, x, z: 29.5, facing: Math.PI, label: `남쪽 ${i + 1}번 글램핑` });   // 문이 -z를 향함
   PITS.push({ id: `ts${i}`, x, z: 18.5, kind: 'tent', label: `남쪽 ${i + 1}번 글램핑` });
 });
 // 동쪽 끝 「장작 마당」: 큰길 북쪽에 장작 패는 곳, 길 건너 남쪽에 루미의 가루 공방. 둘 다 서쪽(광장 쪽)을 바라본다
@@ -37,9 +51,35 @@ export const STUMPS = [
 
 // 가루 상인 NPC: face 는 공방 모형의 회전(모형은 +x 쪽이 앞), front 는 손님이 서는 방향, ry 는 루미가 바라보는 방향
 export const NPC = { x: 46, z: 9, ry: -Math.PI / 2, face: Math.PI, front: { x: -1, z: 0 }, name: '루미' };
+// 숨겨진 가루병 (이스터에그): 루미 공방 뒤 선반 너머 바닥. 안내 · 지도에는 나오지 않는다. 기기마다 하루 한 번 ✦ 특별한 가루
+export const EGG = { x: NPC.x + 2.3, z: NPC.z - 1.0, range: 1.6 };
 
 // 장작 창고지기 NPC: 장작 패는 곳 바로 북서쪽(광장 쪽). 창고 오두막을 등지고 남쪽(장작 마당 · 큰길 쪽)을 본다
 export const KEEPER = { x: 38, z: -16.5, ry: 0, name: '보리' };
+
+/** (x, z)가 들어가 있는 텐트 (없으면 null) */
+export function tentAt(x, z) {
+  for (const t of TENTS) if ((x - t.x) ** 2 + (z - t.z) ** 2 < CFG.TENT_INNER ** 2) return t;
+  return null;
+}
+/** 텐트 안 좌표 → 월드 좌표 (텐트 모형의 회전을 따른다. 문은 안쪽 +z) */
+export function tentLocal(t, lx, lz) {
+  const c = Math.cos(t.facing), s = Math.sin(t.facing);
+  return { x: t.x + lx * c + lz * s, z: t.z - lx * s + lz * c };
+}
+// 텐트 안 화로 (v1.15: 가운데 둥근 화로 + 그 위 후드 · 연통이 지붕 꼭대기로 나간다. 불을 피우면 지붕 위로 연기)
+// 화로도 바깥 모닥불처럼 장작 5개를 쌓고 불을 붙여 10분 동안 탄다 (같은 규칙). 둘레에 화로를 바라보는 둥근 소파, 자리 5개
+export const TENT_WH = 2.6, TENT_RH = 3.8; // 텐트 벽 높이 · 지붕 높이 (층고를 높였다)
+export const STOVE_LOCAL = { x: 0, z: 0 };
+export const STOVE_SEAT_R = 2.4; // 화로 가운데에서 소파 자리까지
+export const STOVE_SEAT_DEG = [108, 144, 180, 216, 252]; // 문(+z)에서 잰 각도: 문 쪽은 비워 둔 C자 소파
+export const STOVES = TENTS.map((t) => {
+  const p = tentLocal(t, STOVE_LOCAL.x, STOVE_LOCAL.z);
+  return { id: `f${t.id}`, x: p.x, z: p.z, kind: 'stove', tent: t.id, facing: t.facing, label: `${t.label} 화로` };
+});
+/** 모든 불 피우는 자리: 바깥 화로 + 텐트 안 화로 (서버 · 클라이언트의 pits 는 이것으로 만든다) */
+export const FIRES = [...PITS, ...STOVES];
+export const seatsOf = (def) => (def.kind === 'stove' ? CFG.TENT_CAP : CFG.SEATS_PER_PIT);
 
 export const SPAWN = { x: 0, z: 10.5 };
 
@@ -50,6 +90,12 @@ export const BOARD = { x: 3.4, z: 4.4 };
 export const RANGE = { stump: 2.0, npc: 3.6, keeper: 3.4, pit: 3.2, guestbook: 2.8, board: 2.8 };
 
 export function seatPos(pit, i) {
+  if (pit.kind === 'stove') { // 텐트 화로: 둘레 C자 소파 (문 쪽은 비어 있다)
+    const a = (STOVE_SEAT_DEG[i] * Math.PI) / 180 + pit.facing;
+    const x = pit.x + Math.sin(a) * STOVE_SEAT_R;
+    const z = pit.z + Math.cos(a) * STOVE_SEAT_R;
+    return { x, z, ry: Math.atan2(pit.x - x, pit.z - z) };
+  }
   const a = Math.PI / 4 + i * (Math.PI * 2 / CFG.SEATS_PER_PIT);
   const x = pit.x + Math.cos(a) * CFG.SEAT_RADIUS;
   const z = pit.z + Math.sin(a) * CFG.SEAT_RADIUS;
@@ -122,11 +168,11 @@ export const QUESTS = [
 
 // ✦ 특별한 가루: 루미의 부탁을 들어주면 받는다. 기본 가루에 없는 새 효과
 export const LEGEND_POWDERS = {
-  aurora: { name: '✦ 오로라 가루', color: '#5dffc0', bg: 'linear-gradient(160deg, #5dffc0, #55c8ff 50%, #b26bff)' },
-  fireworks: { name: '✦ 불꽃놀이 가루', color: '#ffd447', bg: 'conic-gradient(#ff4058, #ffd447, #5dff8f, #55c8ff, #ff6fb8, #ff4058)' },
-  petals: { name: '✦ 꽃잎 회오리 가루', color: '#ff8fc8', bg: 'radial-gradient(circle at 35% 30%, #fff, #ffc2dd 40%, #ff6fb8)' },
-  galaxy: { name: '✦ 은하수 가루', color: '#8f9bff', bg: 'radial-gradient(circle at 40% 40%, #fff 0%, #b9c4ff 18%, #5b4bd6 55%, #1b1650)' },
-  butterflies: { name: '✦ 나비 떼 가루', color: '#ffb35c', bg: 'linear-gradient(135deg, #ffd447, #ff8f3a 50%, #ff6fb8)' },
+  aurora: { name: '✦ 오로라 가루', desc: '모닥불 뒤로 오로라 빛의 띠가 물결쳐요', color: '#5dffc0', bg: 'linear-gradient(160deg, #5dffc0, #55c8ff 50%, #b26bff)' },
+  fireworks: { name: '✦ 불꽃놀이 가루', desc: '불꽃을 쏘아 올려 하늘에서 터져요', color: '#ffd447', bg: 'conic-gradient(#ff4058, #ffd447, #5dff8f, #55c8ff, #ff6fb8, #ff4058)' },
+  petals: { name: '✦ 꽃잎 회오리 가루', desc: '분홍 꽃잎이 휘돌며 올라가 흩날려요', color: '#ff8fc8', bg: 'radial-gradient(circle at 35% 30%, #fff, #ffc2dd 40%, #ff6fb8)' },
+  galaxy: { name: '✦ 은하수 가루', desc: '모닥불 위에 별 원반이 천천히 돌아요', color: '#8f9bff', bg: 'radial-gradient(circle at 40% 40%, #fff 0%, #b9c4ff 18%, #5b4bd6 55%, #1b1650)' },
+  butterflies: { name: '✦ 나비 떼 가루', desc: '알록달록한 나비들이 모닥불 주위를 날아요', color: '#ffb35c', bg: 'linear-gradient(135deg, #ffd447, #ff8f3a 50%, #ff6fb8)' },
 };
 export function legendPowder(effect) {
   const L = LEGEND_POWDERS[effect];

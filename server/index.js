@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import {
-  CFG, PITS, STUMPS, NPC, KEEPER, QUESTS, LEGEND_POWDERS, legendPowder, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
+  CFG, FIRES, seatsOf, STUMPS, NPC, KEEPER, QUESTS, LEGEND_POWDERS, legendPowder, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
+  TENTS, tentAt, tentLocal, kstDay, EGG,
 } from '../shared/config.js';
 import * as guestbook from './guestbook.js';
 import { handleAdmin, adminOn } from './admin.js';
@@ -83,11 +84,23 @@ const sockets = new Set();
 const players = new Map(); // id -> player
 let nextId = 1;
 
-const pits = new Map(PITS.map((p) => [p.id, {
+// 바깥 화로 12곳 + 텐트 벽난로 12곳 (벽난로는 텐트 안에 있어야 쓸 수 있다)
+const pits = new Map(FIRES.map((p) => [p.id, {
   id: p.id, state: 'empty', owner: null, litAt: 0, endsAt: 0, music: null,
-  seats: Array(CFG.SEATS_PER_PIT).fill(null),
+  seats: Array(seatsOf(p)).fill(null),
 }]));
-const pitDef = new Map(PITS.map((p) => [p.id, p]));
+const pitDef = new Map(FIRES.map((p) => [p.id, p]));
+/** 이 자리를 쓸 수 있는 곳에 있나 (거리 + 벽난로면 그 텐트 안) */
+const nearFire = (me, def, extra) => dist(me, def.x, def.z) <= RANGE.pit + extra && (def.kind !== 'stove' || me.tent === def.tent);
+// 글램핑 텐트 블루투스 스피커: 텐트마다 음악 한 곡 (텐트 안에 있는 사람만 듣는다). 음악 코드는 모닥불과 같이 쓴다 (room.music)
+const tentRooms = new Map(TENTS.map((t) => [t.id, { id: t.id, tent: true, music: null }]));
+const roomOf = (id) => pits.get(id) || tentRooms.get(id);
+/** 방(모닥불 · 텐트)의 상태를 모두에게 알린다 */
+function syncRoom(room) {
+  if (room.tent) broadcast({ t: 'tentMusic', tent: room.id, music: room.music });
+  else broadcast({ t: 'pit', pit: room });
+}
+const tentMembers = (id) => [...players.values()].filter((q) => q.tent === id && q.ws);
 
 const HEX = /^#[0-9a-f]{6}$/i;
 const pickColor = (v, list) => (typeof v === 'string' && HEX.test(v) ? v : list[0]);
@@ -100,12 +113,25 @@ const SAVE_SECRET = process.env.SAVE_SECRET || crypto.randomBytes(32).toString('
 if (!process.env.SAVE_SECRET && isProd) console.warn('⚠️  SAVE_SECRET 이 없어 서버 재시작 후에는 기기 백업을 복원할 수 없어요.');
 const SAVE_TTL = 14 * 24 * 3600 * 1000;
 const PID = /^[A-Za-z0-9_-]{16,64}$/;
-const saves = new Map(); // pid -> { wood, stored, chops, powders, quest, x, z, at }
+const saves = new Map(); // pid -> { wood, stored, chops, powders, quest, coins, coinDay, shareDay, eggDay, x, z, at }
 const pitOwnerKey = new Map(); // pitId -> pid (공개되지 않음)
 const sign = (pid, data) => crypto.createHmac('sha256', SAVE_SECRET).update(`${pid}|${data}`).digest('base64url');
 
 function snapshotOf(p) {
-  return { wood: p.wood, stored: p.stored, chops: p.chops, powders: p.powders, quest: p.quest };
+  return { wood: p.wood, stored: p.stored, chops: p.chops, powders: p.powders, quest: p.quest, coins: p.coins, coinDay: p.coinDay, shareDay: p.shareDay, eggDay: p.eggDay || '' };
+}
+// 차단용 공개 표식: 기기 식별값(pid)에서 만든 짧은 값. pid 자체는 드러나지 않고, 다시 접속해도 같은 값이라 차단이 이어진다
+const tagOf = (pid) => (pid ? crypto.createHmac('sha256', SAVE_SECRET).update(`tag|${pid}`).digest('base64url').slice(0, 12) : null);
+
+// ---------------------------------------------------------------- 코인
+// 매일 00시(한국 시간)에 30개로 다시 맞춘다. 💌 공유 보너스는 하루 한 번
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+function refreshCoins(p) {
+  const today = kstDay();
+  if (p.coinDay === today) return false;
+  p.coinDay = today;
+  p.coins = CFG.DAILY_COINS;
+  return true;
 }
 function remember(p) {
   if (!p.pid) return;
@@ -119,7 +145,12 @@ function validSnapshot(s) {
   if (!Array.isArray(s.powders) || s.powders.length > CFG.MAX_POWDERS) return null;
   const powders = s.powders.filter((q) => q && HEX.test(q.color) && typeof q.effect === 'string' && typeof q.name === 'string')
     .map((q) => ({ ...q }));
-  return { wood, stored, chops, powders, quest: validQuest(s.quest) };
+  // 코인: 예전 백업에는 없어서 비워 두면 오늘 몫(30개)을 새로 받는다
+  const coins = Math.max(0, Math.min(CFG.MAX_COINS, s.coins | 0));
+  const coinDay = typeof s.coinDay === 'string' && DAY.test(s.coinDay) ? s.coinDay : '';
+  const shareDay = typeof s.shareDay === 'string' && DAY.test(s.shareDay) ? s.shareDay : '';
+  const eggDay = typeof s.eggDay === 'string' && DAY.test(s.eggDay) ? s.eggDay : '';
+  return { wood, stored, chops, powders, quest: validQuest(s.quest), coins, coinDay, shareDay, eggDay };
 }
 // 루미의 부탁 진행 상태: i 몇 번째 부탁, p 진행 수, done 마쳤는지(루미에게 받으러 가기 전), lap 몇 바퀴째, met 루미를 만난 적 있는지
 function validQuest(q) {
@@ -168,7 +199,28 @@ setInterval(() => {
 }, 3600 * 1000);
 
 function publicPlayer(p) {
-  return { id: p.id, name: p.name, look: p.look, x: p.x, z: p.z, ry: p.ry, anim: p.anim, carry: p.wood };
+  return { id: p.id, name: p.name, look: p.look, x: p.x, z: p.z, ry: p.ry, anim: p.anim, carry: p.wood, tag: p.tag };
+}
+
+// ---------------------------------------------------------------- 글램핑 텐트
+// 위치로 「텐트 안」을 판정한다. 한 동에 최대 5명. 텐트 안 채팅은 같은 텐트 안 사람에게만 간다
+const tentCount = (id) => { let n = 0; for (const q of players.values()) if (q.tent === id) n++; return n; };
+function updateTent(p, ws) {
+  const t = tentAt(p.x, p.z);
+  const id = t?.id || null;
+  if (id === p.tent) return;
+  const prev = p.tent && tentRooms.get(p.tent);
+  if (prev?.music?.by === p.id) { clearMusic(prev, 'left'); syncRoom(prev); } // 스피커로 노래를 튼 사람이 나가면 멈춘다
+  if (id && tentCount(id) >= CFG.TENT_CAP) {
+    // 꽉 찬 텐트: 문 밖으로 내보낸다 (보통은 기기에서 먼저 막는다)
+    const out = tentLocal(t, 0, CFG.TENT_R + 1.1);
+    p.x = out.x; p.z = out.z;
+    p.tent = null;
+    send(ws, { t: 'tentFull', x: p.x, z: p.z, cap: CFG.TENT_CAP });
+    return;
+  }
+  p.tent = id;
+  if (id) send(ws, { t: 'tentIn', tent: id, n: tentCount(id) });
 }
 // 「장작 N개」 부탁: 손에 든 장작 수를 그대로 진행으로 쓴다 (부탁을 받기 전에 모아 둔 장작도 인정)
 function syncWoodQuest(p) {
@@ -183,6 +235,7 @@ function syncWoodQuest(p) {
   }
 }
 function inv(p) {
+  refreshCoins(p);
   syncWoodQuest(p);
   remember(p);
   // 품에 안은 장작 더미가 다른 사람에게도 보이도록
@@ -240,7 +293,7 @@ async function lookupVideo(id) {
 function clearMusic(pit, reason) {
   if (!pit.music) return;
   const by = players.get(pit.music.by);
-  if (by?.seat?.pit === pit.id && by.anim === 'guitar') by.anim = 'sit';
+  if (by?.anim === 'guitar' && (by.seat?.pit === pit.id || by.tent === pit.id)) by.anim = 'sit';
   pit.music = null;
   broadcast({ t: 'musicStop', pit: pit.id, reason });
 }
@@ -313,13 +366,17 @@ function handle(ws, ctx, m) {
       x: SPAWN.x + (Math.random() - 0.5) * 6, z: SPAWN.z + (Math.random() - 0.5) * 2, ry: Math.PI,
       anim: 'idle', seat: null,
       wood: saved?.wood ?? 0, stored: saved?.stored ?? 0, chops: saved?.chops ?? 0, powders: saved?.powders ?? [], quest: saved?.quest ?? validQuest(null),
+      coins: saved?.coins ?? 0, coinDay: saved?.coinDay ?? '', shareDay: saved?.shareDay ?? '', eggDay: saved?.eggDay ?? '',
+      tag: tagOf(pid), tent: null,
       lastChop: 0, lastChat: 0,
     };
+    refreshCoins(p);
     // 방금 전까지 있던 자리로 (새로고침)
     if (saved?.fresh && Number.isFinite(saved.x)) {
       p.x = Math.min(BOUNDS.maxX, Math.max(BOUNDS.minX, saved.x));
       p.z = Math.min(BOUNDS.maxZ, Math.max(BOUNDS.minZ, saved.z));
     }
+    if (tentAt(p.x, p.z)) { p.x = SPAWN.x; p.z = SPAWN.z; } // 다시 들어올 때 텐트 안이면 광장에서 (인원 확인을 건너뛰지 않게)
     ctx.me = p;
     p.ws = ws; // 퀘스트 진행을 이 사람에게 바로 알려 주려고 (저장 · 공개되지 않음)
     players.set(p.id, p);
@@ -350,6 +407,10 @@ function handle(ws, ctx, m) {
       me.z = Math.min(BOUNDS.maxZ, Math.max(BOUNDS.minZ, z));
       me.ry = ry;
       me.anim = ['idle', 'walk', 'run'].includes(m.anim) ? m.anim : 'idle';
+      updateTent(me, ws);
+      if ((m.anim === 'sit' || m.anim === 'guitar') && me.tent) { // 텐트 안 의자에 앉기 (보여 주기만). 스피커로 노래를 틀었으면 기타
+        me.anim = m.anim === 'guitar' && tentRooms.get(me.tent)?.music?.by === me.id ? 'guitar' : 'sit';
+      }
       break;
     }
     case 'chop': {
@@ -405,7 +466,7 @@ function handle(ws, ctx, m) {
       const cur = QUESTS[q.i];
       send(ws, {
         t: 'npc', first, basic, reward, rewardBlocked, finished: finished && { title: finished.title },
-        quest: { ...q, title: cur.title, desc: cur.desc, goal: cur.goal, type: cur.type, rewardName: LEGEND_POWDERS[cur.reward].name },
+        quest: { ...q, title: cur.title, desc: cur.desc, goal: cur.goal, type: cur.type, reward: cur.reward, rewardName: LEGEND_POWDERS[cur.reward].name },
         full: me.powders.length >= CFG.MAX_POWDERS,
       });
       send(ws, inv(me));
@@ -416,6 +477,44 @@ function handle(ws, ctx, m) {
       if (!['stargaze', 'share'].includes(m.ev) || now - (me.lastQuestEv || 0) < 2000) return;
       me.lastQuestEv = now;
       bump(me, m.ev);
+      // 💌 공유 보너스: 하루 한 번 +10 코인
+      if (m.ev === 'share') {
+        refreshCoins(me);
+        const today = kstDay();
+        if (me.shareDay !== today) {
+          me.shareDay = today;
+          me.coins = Math.min(CFG.MAX_COINS, me.coins + CFG.SHARE_BONUS);
+          send(ws, { t: 'coinBonus', n: CFG.SHARE_BONUS });
+        } else send(ws, { t: 'coinBonus', n: 0 });
+        send(ws, inv(me));
+      }
+      break;
+    }
+    case 'egg': { // 숨겨진 가루병 (이스터에그): 기기마다 하루 한 번 ✦ 특별한 가루 하나
+      if (dist(me, EGG.x, EGG.z) > EGG.range + 1) return;
+      const today = kstDay();
+      if (me.eggDay === today) { send(ws, { t: 'toast', text: '오늘은 이미 찾았어요. 내일 밤 다시 와 봐요 ✨' }); return; }
+      if (me.powders.length >= CFG.MAX_POWDERS) { send(ws, { t: 'toast', text: '가방이 가루로 꽉 찼어요. 모닥불에 좀 뿌리고 와요' }); return; }
+      const keys = Object.keys(LEGEND_POWDERS);
+      const powder = legendPowder(keys[Math.floor(Math.random() * keys.length)]);
+      me.eggDay = today;
+      me.powders.push(powder);
+      send(ws, { t: 'eggFound', powder });
+      send(ws, inv(me));
+      break;
+    }
+    case 'buy': { // 루미 상점: ✦ 특별한 가루를 코인으로
+      if (dist(me, NPC.x, NPC.z) > RANGE.npc + 2.5) return;
+      if (!LEGEND_POWDERS[m.effect] || now - (me.lastBuy || 0) < 300) return;
+      me.lastBuy = now;
+      refreshCoins(me);
+      if (me.coins < CFG.LEGEND_PRICE) { send(ws, { t: 'buyFail', reason: 'coins' }); return; }
+      if (me.powders.length >= CFG.MAX_POWDERS) { send(ws, { t: 'buyFail', reason: 'full' }); return; }
+      me.coins -= CFG.LEGEND_PRICE;
+      const powder = legendPowder(m.effect);
+      me.powders.push(powder);
+      send(ws, { t: 'bought', powder });
+      send(ws, inv(me));
       break;
     }
     case 'store': { // 장작 창고: op 'put' 맡기기 / 'take' 찾기
@@ -436,7 +535,7 @@ function handle(ws, ctx, m) {
     case 'build': {
       const pit = pits.get(m.pit);
       const def = pitDef.get(m.pit);
-      if (!pit || dist(me, def.x, def.z) > RANGE.pit + 1.5) return;
+      if (!pit || !nearFire(me, def, 1.5)) return;
       if (pit.state !== 'empty') return;
       if (me.wood < CFG.WOOD_PER_FIRE) {
         send(ws, { t: 'toast', text: `장작이 ${CFG.WOOD_PER_FIRE}개 필요해요` });
@@ -453,7 +552,7 @@ function handle(ws, ctx, m) {
     case 'light': {
       const pit = pits.get(m.pit);
       const def = pitDef.get(m.pit);
-      if (!pit || dist(me, def.x, def.z) > RANGE.pit + 1.5) return;
+      if (!pit || !nearFire(me, def, 1.5)) return;
       if (pit.state !== 'stacked') return;
       pit.state = 'lit';
       pit.litAt = now;
@@ -463,10 +562,25 @@ function handle(ws, ctx, m) {
       bump(me, 'light');
       break;
     }
+    case 'feed': { // 타는 불에 장작 1개 더 넣기: 2분 연장 (남은 시간은 30분까지)
+      const pit = pits.get(m.pit);
+      const def = pitDef.get(m.pit);
+      if (!pit || !nearFire(me, def, 2)) return;
+      if (pit.state !== 'lit') return;
+      if (me.wood < 1) { send(ws, { t: 'toast', text: '넣을 장작이 없어요 🪵 (장작 패는 곳 · 창고에서 가져와요)' }); return; }
+      // 언제든 장작 1개 = 2분 (10분 → 12분 → 14분…). 남은 시간은 30분까지
+      if (pit.endsAt - now + CFG.FEED_MS > CFG.FIRE_MAX) { send(ws, { t: 'toast', text: `불이 이미 넉넉하게 타고 있어요 🔥 (남은 시간은 ${CFG.FIRE_MAX / 60000}분까지 늘릴 수 있어요)` }); return; }
+      const ends = pit.endsAt + CFG.FEED_MS;
+      me.wood -= 1;
+      pit.endsAt = ends;
+      broadcast({ t: 'pit', pit, fed: me.id });
+      send(ws, inv(me));
+      break;
+    }
     case 'sit': {
       const pit = pits.get(m.pit);
       const def = pitDef.get(m.pit);
-      if (!pit || dist(me, def.x, def.z) > RANGE.pit + 2) return;
+      if (!pit || !nearFire(me, def, 2)) return;
       // 불이 없어도(빈 화로 · 쌓아 둔 장작) 의자에 앉아 쉴 수 있다. 가루 · 음악은 불이 붙어 있어야 한다
       leaveSeat(me);
       let best = -1;
@@ -485,6 +599,7 @@ function handle(ws, ctx, m) {
       pit.seats[best] = me.id;
       me.seat = { pit: pit.id, idx: best };
       me.x = s.x; me.z = s.z; me.ry = s.ry; me.anim = 'sit';
+      updateTent(me, ws);
       send(ws, { t: 'sat', pit: pit.id, idx: best, x: s.x, z: s.z, ry: s.ry });
       broadcast({ t: 'pit', pit });
       // 함께 불멍: 같은 모닥불에 두 사람 이상이면 앉아 있는 모두에게
@@ -526,9 +641,11 @@ function handle(ws, ctx, m) {
       break;
     }
     case 'music': {
-      const pit = me.seat && pits.get(me.seat.pit);
-      if (!pit || pit.id !== m.pit) { send(ws, { t: 'toast', text: '모닥불에 앉아서 음악을 틀 수 있어요' }); return; }
-      if (pit.state !== 'lit') { send(ws, { t: 'toast', text: '불이 붙어 있어야 음악을 틀 수 있어요' }); return; }
+      // 모닥불: 그 모닥불에 앉아 있어야 / 텐트: 그 텐트 안에 있어야 (블루투스 스피커)
+      const inTent = !!me.tent && m.pit === me.tent;
+      const pit = inTent ? tentRooms.get(me.tent) : me.seat && pits.get(me.seat.pit);
+      if (!pit || pit.id !== m.pit) { send(ws, { t: 'toast', text: '모닥불이나 텐트 의자에 앉아서 음악을 틀 수 있어요' }); return; }
+      if (!inTent && pit.state !== 'lit') { send(ws, { t: 'toast', text: '불이 붙어 있어야 음악을 틀 수 있어요' }); return; }
       if (pit.music) { send(ws, { t: 'toast', text: '지금 곡이 끝나면 다른 곡을 틀 수 있어요 🎵' }); return; }
       if (now - (me.lastMusic || 0) < 3000 || ctx.musicPending) return;
       const vid = parseYouTubeId(m.vid || m.url);
@@ -550,7 +667,8 @@ function handle(ws, ctx, m) {
         ctx.musicPending = false;
         if (!info.ok) { send(ws, { t: 'musicFail', text: info.why }); return; }
         // 확인하는 사이 상황이 바뀌었을 수 있다
-        if (ctx.me !== me || me.seat?.pit !== pit.id || pit.state !== 'lit' || pit.music) return;
+        if (ctx.me !== me || pit.music) return;
+        if (inTent ? me.tent !== pit.id : me.seat?.pit !== pit.id || pit.state !== 'lit') return;
         const startedAt = Date.now() + 1500;
         pit.music = {
           vid, title: info.title, channel: info.channel || '', by: me.id, byName: me.name, startedAt,
@@ -558,15 +676,19 @@ function handle(ws, ctx, m) {
         };
         me.anim = 'guitar';
         if (info.title) addRecent({ vid, title: info.title, channel: info.channel || '', thumb: info.thumb || '', duration: info.duration || 0 });
-        broadcast({ t: 'pit', pit });
-        broadcast({ t: 'sys', text: `🎸 ${me.name}님이 ${info.title ? `「${info.title}」` : '음악'} 연주를 시작했어요` });
-        bump(me, 'music');
+        syncRoom(pit);
+        if (inTent) { // 텐트 안 일은 텐트 안 사람에게만
+          for (const q of tentMembers(pit.id)) send(q.ws, { t: 'sys', text: `🔊 ${me.name}님이 스피커로 ${info.title ? `「${info.title}」` : '노래'}를 틀었어요` });
+        } else {
+          broadcast({ t: 'sys', text: `🎸 ${me.name}님이 ${info.title ? `「${info.title}」` : '음악'} 연주를 시작했어요` });
+          bump(me, 'music');
+        }
         send(ws, { t: 'musicOk' });
       }).catch((e) => { ctx.musicPending = false; console.error(e); });
       break;
     }
     case 'musicInfo': { // 클라이언트가 알려주는 영상 길이 → 끝나는 시각
-      const pit = pits.get(m.pit);
+      const pit = roomOf(m.pit);
       const d = Number(m.duration);
       if (!pit?.music || pit.music.vid !== m.vid || pit.music.endsAt || !Number.isFinite(d)) return;
       if (d < 3 || d > 6 * 3600) return;
@@ -574,7 +696,7 @@ function handle(ws, ctx, m) {
       break;
     }
     case 'musicEnd': { // 영상 끝 / 재생 오류 보고
-      const pit = pits.get(m.pit);
+      const pit = roomOf(m.pit);
       if (!pit?.music || pit.music.vid !== m.vid) return;
       const isDJ = pit.music.by === me.id;
       if (m.reason === 'error' && isDJ) {
@@ -582,10 +704,10 @@ function handle(ws, ctx, m) {
         const text = code === 101 || code === 150 ? '이 영상은 업로더가 외부 재생을 막아 뒀어요 😢' : '이 영상은 재생할 수 없어요';
         send(ws, { t: 'toast', text });
         clearMusic(pit, 'error');
-        broadcast({ t: 'pit', pit });
+        syncRoom(pit);
       } else if (m.reason === 'ended' && (isDJ || (pit.music.endsAt && now >= pit.music.endsAt - 8000))) {
         clearMusic(pit, 'ended');
-        broadcast({ t: 'pit', pit });
+        syncRoom(pit);
       }
       break;
     }
@@ -623,7 +745,12 @@ function handle(ws, ctx, m) {
       const text = String(m.text || '').replace(/\s+/g, ' ').trim().slice(0, 120);
       if (!text || now - me.lastChat < 400) return;
       me.lastChat = now;
-      broadcast({ t: 'chat', id: me.id, name: me.name, text });
+      updateTent(me, ws);
+      if (me.tent) {
+        // 텐트 안 대화: 같은 텐트 안 사람에게만
+        const msg = JSON.stringify({ t: 'chat', id: me.id, name: me.name, text, tag: me.tag, tent: me.tent });
+        for (const q of players.values()) if (q.tent === me.tent && q.ws?.readyState === 1) q.ws.send(msg);
+      } else broadcast({ t: 'chat', id: me.id, name: me.name, text, tag: me.tag });
       break;
     }
     default:
@@ -647,6 +774,7 @@ wss.on('connection', (ws) => {
     t: 'hello',
     now: Date.now(),
     pits: [...pits.values()],
+    tentMusic: [...tentRooms.values()].filter((r) => r.music).map((r) => ({ tent: r.id, music: r.music })),
     players: [...players.values()].map(publicPlayer),
   });
   ws.on('message', (raw) => {
@@ -661,6 +789,8 @@ wss.on('connection', (ws) => {
     if (!me) return;
     remember(me);
     leaveSeat(me);
+    const tr = me.tent && tentRooms.get(me.tent);
+    if (tr?.music?.by === me.id) { clearMusic(tr, 'left'); syncRoom(tr); }
     players.delete(me.id);
     broadcast({ t: 'leave', id: me.id });
     if (!ctx.replaced) broadcast({ t: 'sys', text: `${me.name}님이 캠핑장을 떠났어요` });
@@ -677,9 +807,25 @@ setInterval(() => {
   broadcast({ t: 'snap', now: Date.now(), p: list });
 }, 100);
 
+// 00시(한국 시간): 접속해 있는 사람에게도 코인을 다시 채워 준다
+let coinDayNow = kstDay();
+setInterval(() => {
+  const today = kstDay();
+  if (today === coinDayNow) return;
+  coinDayNow = today;
+  for (const p of players.values()) {
+    if (!refreshCoins(p) || !p.ws) continue;
+    send(p.ws, { t: 'coinReset', n: p.coins });
+    send(p.ws, inv(p));
+  }
+}, 15_000);
+
 // 모닥불 수명 체크
 setInterval(() => {
   const now = Date.now();
+  for (const tr of tentRooms.values()) {
+    if (tr.music?.endsAt && now >= tr.music.endsAt + 5000) { clearMusic(tr, 'ended'); syncRoom(tr); }
+  }
   for (const pit of pits.values()) {
     if (pit.music?.endsAt && now >= pit.music.endsAt + 5000) {
       clearMusic(pit, 'ended');

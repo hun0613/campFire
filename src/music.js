@@ -100,6 +100,7 @@ export class Music {
     if (this.mon !== monitor) { this.mon?.setHole(false); this.mon = monitor; }
     monitor.setHole(!this.tapMode);
     monitor.screenPose(this._p, this._q);
+    this.obj.scale.setScalar((monitor.screenW || SCREEN.w) / IFRAME_W); // 텐트 TV는 모닥불 TV와 크기가 다르다
     this.obj.position.copy(this._p);
     this.obj.quaternion.copy(this._q);
     this.obj.visible = true;

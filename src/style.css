@@ -630,18 +630,13 @@ body.touch.seated #powders {
   position: fixed; left: calc(16px + env(safe-area-inset-left)); bottom: calc(18px + env(safe-area-inset-bottom));
   justify-content: flex-start; max-width: min(46vw, 280px); min-width: 0;
 }
-/* 곡 고르기 · 연주 중: 오른쪽 아래, 일어나기 버튼 위 */
-body.touch.seated #musicBtn {
-  position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(124px + env(safe-area-inset-bottom));
-  max-width: 40vw;
-}
+/* 곡 고르기 · 연주 중 · 장작 더 넣기: 오른쪽 아래, 일어나기 버튼 위 (아래 .seat-btns) */
 /* 세로 화면은 아래 공간이 넉넉해서 가루를 조금 더 위로 */
 @media (orientation: portrait) {
   /* 세로 화면은 위쪽이 좁아서 남은 장작을 상태창 바로 아래 왼쪽에 둔다 */
   body.touch.seated #fireTimer { left: max(10px, env(safe-area-inset-left)); transform: none; top: calc(max(10px, env(safe-area-inset-top)) + 82px); }
   body.touch.seated #musicHint { top: calc(max(10px, env(safe-area-inset-top)) + 122px); }
   body.touch.seated #powders { bottom: calc(26px + env(safe-area-inset-bottom)); max-width: 52vw; }
-  body.touch.seated #musicBtn { bottom: calc(130px + env(safe-area-inset-bottom)); }
 }
 
 /* ---------- 캠핑장 소식 게시판 */
@@ -744,7 +739,7 @@ body:not(.touch) .join-card { scrollbar-width: thin; }
 body.touch #topright .dock-toggle { font-size: 17px; font-weight: 800; }
 /* 접힌 상태: ☰ 버튼과 그 아래 「● N명」(접속자 수)만. 알림 배지처럼 보이지 않게 펼친 상태와 같은 모양으로 */
 body.touch:not(.dock-open) #topright { padding: 5px 4px 6px; gap: 3px; }
-body.touch:not(.dock-open) #topright > :not(.dock-toggle):not(.online-dot):not(#online) { display: none; }
+body.touch:not(.dock-open) #topright > :not(.dock-toggle):not(.online-dot):not(#online):not(#shareBtn) { display: none; } /* 💌 는 접힌 메뉴에서도 꺼내 둔다 (v1.15 공유 보너스) */
 body.touch #topright #online::after { content: '명'; font-size: 10px; margin-left: 1px; color: var(--brown-2); }
 body.touch.dock-open #topright .dock-toggle { background: #ffd9a6; }
 /* 지도는 접힌 메뉴 바로 아래(세로 화면) · 왼쪽(가로 화면)에 */
@@ -863,17 +858,18 @@ body:not(.touch).seated #powders { max-width: max(280px, calc(100vw - 800px)); }
 #viewBtn { display: none !important; }
 .seat-view-btn { display: none; pointer-events: auto; cursor: pointer; font: inherit; font-size: 15px; color: var(--brown); }
 .seat-view-btn kbd { font-size: 12px; margin-left: 4px; }
-body.seated .seat-view-btn { display: inline-flex; align-items: center; gap: 4px; }
+body.seated .seat-view-btn, body.lounging .seat-view-btn { display: inline-flex; align-items: center; gap: 4px; }
 body.touch .seat-view-btn { font-size: 13.5px; padding: 6px 14px; }
 /* 모바일: 곡 고르기 버튼 위, 오른쪽 */
 body.touch.seated #seatViewBtn { position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(172px + env(safe-area-inset-bottom)); }
 @media (orientation: portrait) { body.touch.seated #seatViewBtn { bottom: calc(178px + env(safe-area-inset-bottom)); } }
 @media (max-height: 500px) { body.touch.seated #seatViewBtn { bottom: calc(160px + env(safe-area-inset-bottom)); } }
+body.touch.lounging #seatViewBtn { position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(172px + env(safe-area-inset-bottom)); }
 
 /* ---------- 불멍 몰입: 앉아서 가만히 있으면 UI가 천천히 사라지고, 만지면 바로 돌아온다 ---------- */
 #status, #topright, #mapPanel, #bottom, #chat, .chat-toggle, #touchControls, .beacon, #fireTimer { transition: opacity .25s ease; }
 body.calm #status, body.calm #topright, body.calm #mapPanel, body.calm #bottom, body.calm #chat,
-body.calm .chat-toggle, body.calm #touchControls, body.calm .beacon, body.calm #fireTimer { opacity: .07; transition: opacity 1.8s ease; }
+body.calm .chat-toggle, body.calm #touchControls, body.calm .beacon, body.calm #fireTimer, body.calm .bag-btn { opacity: .07; transition: opacity 1.8s ease; }
 
 /* ---------- 지도 자동 표시: 걸을 때 나타나고, 멈추면 잠시 뒤 사라진다 (모바일 · 좁은 PC 창) ---------- */
 body.touch #mapPanel { display: block; opacity: 0; visibility: hidden; transform: translateY(-6px) scale(.97); transform-origin: top right;
@@ -934,3 +930,102 @@ body:not(.touch).seated #bottom .pill { white-space: nowrap; }
 /* 모바일 안내서: 안내서 안에서 스크롤, 「알겠어요!」는 늘 아래에 보이게 (내용이 길어져 버튼이 화면 밖으로 밀리던 문제) */
 body.touch #help .card { max-height: calc(var(--vvh, 100vh) - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; -webkit-overflow-scrolling: touch; margin: auto; }
 body.touch #helpClose { position: sticky; bottom: 0; z-index: 2; box-shadow: 0 5px 0 #c95c1c, 0 -16px 16px 2px var(--cream), 0 26px 0 14px var(--cream); }
+
+/* ---------- v1.15 🪙 코인 · 루미의 가루 공방 ---------- */
+.coin-num { display: inline-flex; align-items: baseline; gap: 3px; margin-left: 8px; padding: 2px 9px; border-radius: 999px; background: #fff1c9; font-size: 15px; white-space: nowrap; }
+.coin-num b { font-size: 18px; color: #c98a12; font-weight: normal; font-variant-numeric: tabular-nums; }
+.coin-num.bump { animation: storeBump .35s ease; }
+body.touch .coin-num { font-size: 12px; padding: 1px 7px; margin-left: 4px; }
+body.touch .coin-num b { font-size: 14px; }
+
+.shop-card { width: min(460px, calc(100vw - 24px)); }
+.shop-top { display: flex; align-items: center; gap: 10px; }
+.shop-top .store-say { flex: 1; text-align: left; }
+.shop-coins { flex: none; background: #fff1c9; border-radius: 16px; padding: 6px 12px; font-size: 18px; }
+.shop-coins b { color: #c98a12; font-weight: normal; font-size: 22px; font-variant-numeric: tabular-nums; }
+.shop-quest { margin-top: 12px; padding: 10px 12px; border-radius: 16px; background: #f5ecff; font-size: 14px; line-height: 1.45; }
+.shop-quest .sq-head b { color: #8a5cd6; font-weight: normal; }
+.shop-quest .sq-head span { float: right; color: var(--brown-2); font-variant-numeric: tabular-nums; }
+.shop-quest .sq-desc { color: var(--brown-2); font-size: 13px; margin-top: 2px; }
+.shop-quest .sq-bar { display: block; height: 5px; margin-top: 6px; border-radius: 4px; background: linear-gradient(90deg, #b38cff var(--p), #e3d4f6 var(--p)); }
+.shop-quest .sq-reward { font-size: 12.5px; color: #8a5cd6; margin-top: 4px; }
+.shop-label { margin-top: 14px; font-size: 15px; }
+.shop-label small { color: var(--brown-2); margin-left: 4px; }
+.shop-shelf { display: grid; gap: 8px; margin-top: 8px; }
+.shop-item { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 16px; background: var(--cream-2); }
+.shop-bottle { flex: none; width: 34px; height: 34px; border-radius: 40% 40% 48% 48%; position: relative; }
+.shop-bottle::before { content: ''; position: absolute; top: -5px; left: 11px; width: 12px; height: 7px; border-radius: 4px; background: #c99a63; }
+.shop-txt { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.shop-txt b { font-weight: normal; font-size: 15.5px; }
+.shop-txt small { font-size: 12.5px; color: var(--brown-2); line-height: 1.35; }
+.shop-buy { flex: none; border: 0; border-radius: 14px; padding: 8px 12px; font: inherit; font-size: 15px; color: white; background: var(--orange); box-shadow: 0 4px 0 var(--orange-2); cursor: pointer; }
+.shop-buy:disabled { background: #d8c7a8; box-shadow: 0 4px 0 #c2ae8b; cursor: default; }
+.shop-buy:not(:disabled):active { transform: translateY(2px); box-shadow: 0 2px 0 var(--orange-2); }
+.shop-bag { margin-top: 12px; font-size: 13.5px; color: var(--brown-2); text-align: center; }
+.shop-share { margin-top: 10px; font-size: 16px; padding: 11px 0; }
+.shop-note { margin-top: 8px; font-size: 12.5px; color: var(--brown-2); text-align: center; }
+.shop-card .btn.ghost { margin-top: 12px; }
+body.touch .shop-item { padding: 6px 8px; gap: 9px; }
+body.touch .shop-txt small { font-size: 11.5px; }
+
+.coin-card { width: min(420px, calc(100vw - 24px)); text-align: center; }
+.coin-hero { font-size: 54px; line-height: 1; animation: bob 2.2s ease-in-out infinite; }
+.coin-list { text-align: left; margin: 4px 0 0; padding-left: 20px; line-height: 1.75; font-size: 15.5px; }
+.coin-list b { color: var(--orange-2); font-weight: normal; }
+.coin-card .btn.ghost { margin-top: 10px; }
+
+/* 💌 위치 알려 주기 */
+#shareBtn.pulse { animation: sharePulse 1.1s ease-in-out infinite; position: relative; z-index: 1; }
+@keyframes sharePulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 120, 150, .7); transform: scale(1); } 50% { box-shadow: 0 0 0 9px rgba(255, 120, 150, 0); transform: scale(1.15); } }
+
+/* ---------- v1.15 🏕️ 텐트 안 채팅 · 차단 ---------- */
+.msg.tent { background: rgba(60, 40, 20, .62); box-shadow: inset 0 0 0 1px rgba(255, 200, 120, .35); }
+.msg .tent-mark { font-style: normal; margin-right: 4px; }
+.msg .who { cursor: pointer; }
+.msg .who:hover { text-decoration: underline; }
+body.in-tent #chatInput::placeholder { color: #ffcf8a; }
+.block-card { width: min(380px, calc(100vw - 24px)); }
+.block-card .title.small { font-size: 21px; word-break: keep-all; }
+.block-card .btn.ghost { margin-top: 10px; }
+.block-info { margin-top: 12px; font-size: 13.5px; color: var(--brown-2); text-align: center; }
+.block-info .link-btn { display: inline; width: auto; padding: 2px 10px; margin: 0 0 0 6px; font-size: 13px; }
+
+/* 🏕️ 글램핑 텐트: 문 위 인원 표시 */
+.tent-tag { font-size: 12px; padding: 2px 9px; opacity: .85; }
+.tent-tag.busy { background: rgba(120, 60, 20, .82); border-color: #ffc070; color: #fff1d6; }
+.tent-tag.full { background: rgba(140, 40, 40, .85); border-color: #ff9a8a; }
+/* 텐트 안: 바깥 장소 안내 · 팻말 · 별자리 이름이 벽 너머로 보이지 않게 */
+body.in-tent .beacon, body.in-tent .gb-tag, body.in-tent .const-label, body.in-tent .npc-mark { visibility: hidden; }
+/* 🪵 장작 더 넣기 (타는 불 옆) */
+.feed-btn { pointer-events: auto; cursor: pointer; font: inherit; font-size: 15px; color: var(--brown); background: rgba(255, 240, 214, .96); border-color: #e8b26a; }
+.feed-btn small { opacity: .75; margin-left: 2px; }
+.feed-btn kbd { font-size: 12px; margin-left: 4px; }
+.feed-btn:hover { background: #ffe6bf; }
+body.touch .feed-btn { font-size: 14px; padding: 7px 16px; }
+
+/* 앉아 있을 때 버튼 묶음 (장작 더 넣기 · 노래 틀기): PC는 #bottom 흐름 그대로, 모바일은 오른쪽 아래 일어나기 위에 세로로.
+   글이 길어 두 줄이 되어도 서로 밀어내며 쌓여 겹치지 않는다 */
+.seat-btns { display: contents; }
+body.touch.seated .seat-btns {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none;
+  position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(124px + env(safe-area-inset-bottom));
+  max-width: 44vw;
+}
+body.touch.seated .seat-btns #musicBtn, body.touch.seated .seat-btns #feedBtn {
+  position: static; max-width: 100%; white-space: nowrap; font-size: 13px; padding: 6px 13px; border-width: 2px;
+  /* 시점 버튼과 같은 결: 작은 반투명 알약 (불멍 화면을 덜 가리게) */
+  background: rgba(40, 26, 18, .38); border-color: rgba(255, 236, 205, .45); color: #fff6e6;
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); box-shadow: 0 4px 14px rgba(0, 0, 0, .2);
+}
+body.touch.seated .seat-btns #musicBtn.off { color: rgba(255, 246, 230, .8); font-size: 12.5px; }
+body.touch.seated .seat-btns .pill small { opacity: .8; }
+@media (orientation: portrait) {
+  body.touch.seated .seat-btns { bottom: calc(130px + env(safe-area-inset-bottom)); }
+}
+.music-btn.off { cursor: pointer; } /* 누르면 설명 알림 */
+/* 키보드가 떠 있으면 팝업(곡 고르기 · 방명록 등)을 키보드 위 보이는 영역 안에 맞춘다 (닫기 버튼이 키보드에 가리지 않게) */
+body.kb-open .overlay { top: var(--vvt, 0px); bottom: auto; height: var(--vvh, 100%); }
+body.kb-open .mm-rules { display: none; } /* 키보드가 떠 있을 땐 규칙 설명을 접어 닫기 버튼까지 보이게 */
+body.kb-open .mm-list { min-height: 72px; }
+/* 키보드 API가 없는 곳(아이폰 · http 로컬 주소)은 브라우저가 화면을 밀어 올린다 → 밀린 만큼 배경과 위쪽 UI를 되돌려 제자리에 보이게 */
+body.kb-open #app, body.kb-open .tv-layer, body.kb-open .label-layer, body.kb-open #status, body.kb-open #topright { transform: translateY(var(--vvt, 0px)); }

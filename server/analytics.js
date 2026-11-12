@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 const PROPERTY = String(process.env.GA_PROPERTY_ID || '').trim();
 const KEY = parseKey(process.env.GA_SA_KEY || '');
 const API = `https://analyticsdata.googleapis.com/v1beta/properties/${PROPERTY}`;
-const GAME_EVENTS = ['game_join', 'wood_chop', 'wood_store', 'fire_light', 'fire_sit', 'fire_stand', 'powder_use', 'guestbook_write', 'music_play', 'view_toggle', 'stargaze', 'board_open', 'quest_done', 'share'];
+const GAME_EVENTS = ['game_join', 'wood_chop', 'wood_store', 'fire_light', 'fire_sit', 'fire_stand', 'powder_use', 'guestbook_write', 'music_play', 'view_toggle', 'stargaze', 'board_open', 'quest_done', 'share', 'shop_open', 'powder_buy', 'coin_share_bonus', 'tent_enter', 'tent_sit', 'block', 'fire_feed'];
 
 function parseKey(raw) {
   const s = String(raw).trim();
