@@ -77,7 +77,8 @@ function renderStats() {
 document.querySelectorAll('.tab').forEach((b) => {
   b.onclick = () => {
     document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('on', x === b));
-    for (const t of ['gb', 'stats', 'notice', 'gen']) $(`tab-${t}`).classList.toggle('hidden', b.dataset.tab !== t);
+    for (const t of ['gb', 'stats', 'notice', 'theme', 'gen']) $(`tab-${t}`).classList.toggle('hidden', b.dataset.tab !== t);
+    if (b.dataset.tab === 'theme') loadTheme();
     if (b.dataset.tab === 'notice' && !notice$.loaded) loadNotices();
     if (b.dataset.tab === 'stats' && !statsState.loaded) loadStats();
   };
@@ -831,3 +832,24 @@ document.addEventListener('click', async (e) => {
 
 // ---------------------------------------------------------------- 시작
 if (memToken) start().catch(() => showLogin()); else showLogin();
+
+// ---------------------------------------------------------------- 🌦️ 캠핑장 테마 (날씨 자동 · 이벤트용 직접 선택)
+function renderTheme(st) {
+  const w = st.weather || {};
+  const cur = st.themes.find((t) => t.id === st.theme) || {};
+  const when = w.at ? new Date(w.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '-';
+  $('themeNow').innerHTML = `<div class="theme-big">${esc(cur.icon || '')} <b>${esc(cur.name || st.theme)}</b> <span class="hint" style="margin:0">${st.mode === 'auto' ? '자동 (날씨)' : '직접 고름'}</span></div>
+    <div class="hint" style="margin:6px 0 0">${esc(st.place)} 날씨: <b>${esc(w.label || '알 수 없음')}</b>${w.temp != null ? ` · ${Math.round(w.temp)}°C` : ''} · ${when} 확인${w.error ? ` · ⚠️ 확인 실패(${esc(w.error)}), 지난 날씨를 써요` : ''}</div>`;
+  const items = [{ id: 'auto', icon: '🌤️', name: '자동', desc: '서울 날씨를 따라 바뀌어요 (비 → 우중, 눈 → 설산, 그 밖에는 기본)' }, ...st.themes];
+  $('themeList').innerHTML = items.map((t) => `<button class="theme-item${st.mode === t.id ? ' on' : ''}" data-mode="${esc(t.id)}">
+      <span class="ti-icon">${esc(t.icon)}</span><span><b>${esc(t.name)}</b><small>${esc(t.desc)}</small></span></button>`).join('');
+}
+async function loadTheme() {
+  try { renderTheme(await api('theme')); $('themeHint').textContent = ''; } catch (e) { if (e.message !== 'unauthorized') $('themeHint').textContent = `불러오지 못했어요: ${e.message}`; }
+}
+$('themeList').addEventListener('click', async (e) => {
+  const b = e.target.closest('.theme-item');
+  if (!b) return;
+  try { const st = await api('theme', { method: 'POST', body: { mode: b.dataset.mode } }); renderTheme(st); toast(`테마를 「${b.querySelector('b').textContent}」(으)로 바꿨어요`); }
+  catch (err) { if (err.message !== 'unauthorized') toast(err.message); }
+});

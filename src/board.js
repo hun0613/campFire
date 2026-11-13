@@ -78,7 +78,7 @@ export class NoticeBoard {
     const wrap = document.createElement('div');
     const el = document.createElement('div');
     el.className = 'gb-tag board-tag';
-    el.innerHTML = '<span class="gb-tag-icon">📌</span><b>캠핑장 소식</b><small>새 소식을 확인해요</small>';
+    el.innerHTML = '<span class="gb-tag-icon">📌</span><b>캠핑장 소식</b>';
     wrap.appendChild(el);
     this.tagEl = el;
     this.tag = new CSS2DObject(wrap);
@@ -92,7 +92,7 @@ export class NoticeBoard {
   /** @param {{kind:string,title:string,text:string,reply?:string}[]} items */
   setItems(items) {
     this.items = Array.isArray(items) ? items : [];
-    this.tagEl.querySelector('small').textContent = this.items.length ? `새 소식 ${this.items.length}개` : '오늘 밤도 따뜻하게';
+    this.tagEl.querySelector('b').textContent = this.items.length ? `캠핑장 소식 ${this.items.length}` : '캠핑장 소식'; // 작은 알약: 새 소식 수만 붙인다
     this.idx = Math.min(this.idx, Math.max(0, this.items.length - 1));
     this.cardT = 0;
     this.draw();
@@ -210,7 +210,9 @@ export class NoticeBoard {
       this.idx = (this.idx + 1) % this.items.length;
       this.draw();
     }
-    const near = mePos ? Math.hypot(mePos.x - this.pos.x, mePos.z - this.pos.z) < 2.2 : false;
+    const dist = mePos ? Math.hypot(mePos.x - this.pos.x, mePos.z - this.pos.z) : 99;
+    const near = dist < 6;
+    this.tagEl.dataset.d = Math.round(dist);
     if (this._near !== near) { this._near = near; this.tagEl.classList.toggle('near', near); }
     this.halo.material.opacity = 0.4 + Math.sin(this.t * 2.1) * 0.06;
   }

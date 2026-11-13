@@ -4,6 +4,8 @@ export class Sound {
     this.ctx = null;
     this.muted = false;
     this.fireLevel = 0;
+    this.ambience = 'crickets'; // 테마 소리: 'crickets' | 'rain' | 'snow'
+    this.sheltered = false;     // 천막 · 텐트 지붕 아래 (빗방울이 지붕을 두드리는 소리)
   }
 
   /** @param {BaseAudioContext} [ctxIn] 미리 듣기 파일을 만들 때 OfflineAudioContext 를 넘긴다 */
@@ -85,13 +87,95 @@ export class Sound {
     wg.gain.value = 0.025;
     wsrc.connect(wbp).connect(wg).connect(this.master);
     wsrc.start();
+    this.windGain = wg; this.windBp = wbp;
+
+    // ---- 빗소리 (우중캠핑장): 쏴아 하는 분홍 잡음 두 겹 + 이따금 굵은 빗방울
+    this.rainBus = ctx.createGain(); this.rainBus.gain.value = 0;
+    this.rainLp = ctx.createBiquadFilter(); this.rainLp.type = 'lowpass'; this.rainLp.frequency.value = 9000; this.rainLp.Q.value = 0.4;
+    this.rainBus.connect(this.rainLp).connect(this.master); // 지붕 아래면 먹먹하게 (lowpass 를 내린다)
+    // 천막 · 텐트 천 위 빗소리: 아주 짧은 빗방울 「틱」 수백 개를 촘촘히 겹친 6초짜리 소리를 만들어 돌린다
+    // (낮은 울림 없이 사르륵 · 타닥타닥. 큰 방울은 드물게, 작은 방울이 대부분)
+    this.patter = this.#makePatter(6);
+    const pt = ctx.createBufferSource(); pt.buffer = this.patter; pt.loop = true;
+    const pHp = ctx.createBiquadFilter(); pHp.type = 'highpass'; pHp.frequency.value = 900; pHp.Q.value = 0.5;
+    const pLp = ctx.createBiquadFilter(); pLp.type = 'lowpass'; pLp.frequency.value = 7800; pLp.Q.value = 0.4;
+    const pPeak = ctx.createBiquadFilter(); pPeak.type = 'peaking'; pPeak.frequency.value = 3200; pPeak.Q.value = 0.8; pPeak.gain.value = 0;
+    this.patterGain = ctx.createGain(); this.patterGain.gain.value = 0;
+    pt.connect(pHp).connect(pLp).connect(pPeak).connect(this.patterGain).connect(this.master);
+    pt.start();
+    // 바깥: 주변 땅 · 풀잎에 떨어지는 빗방울 결 (같은 빗방울 소리를 더 밝고 작게, 지붕 아래가 아닐 때만)
+    const op = ctx.createBufferSource(); op.buffer = this.patter; op.loop = true; op.playbackRate.value = 1.12;
+    const oBp = ctx.createBiquadFilter(); oBp.type = 'bandpass'; oBp.frequency.value = 3600; oBp.Q.value = 0.55;
+    this.outPatterGain = ctx.createGain(); this.outPatterGain.gain.value = 0;
+    op.connect(oBp).connect(this.outPatterGain).connect(this.master);
+    op.start(0, 2.3);
+    this.gustT = 0;
+    // 실제로 녹음한 천 위 빗소리 (CC0, public/sounds/rain_canvas.m4a). 불러오면 위의 합성 소리 대신 쓴다
+    this.canvasGain = ctx.createGain(); this.canvasGain.gain.value = 0;
+    this.canvasGain.connect(this.master);
+    this.canvasSample = false;
+    this.#loadCanvasSample();
+    // 좌우로 넓게: 같은 결을 왼쪽 · 오른쪽에 조금 다르게 깔아 가운데서만 들리지 않게
+    for (const [rate, f, q, gain] of [[1.0, 2600, 0.35, 0.16], [0.6, 700, 0.5, 0.1]]) {
+      for (const pan of [-0.7, 0.7]) {
+        const src = ctx.createBufferSource(); src.buffer = this.pink; src.loop = true; src.playbackRate.value = rate * (pan < 0 ? 1 : 1.07);
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f * (pan < 0 ? 0.94 : 1.06); bp.Q.value = q;
+        const g = ctx.createGain(); g.gain.value = gain * 0.75;
+        let out = src.connect(bp).connect(g);
+        if (ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = pan; out = out.connect(p); }
+        out.connect(this.rainBus);
+        src.start(0, Math.random() * 1.8);
+      }
+    }
+    this.rainLevel = 0;
 
     // 귀뚜라미
     const cricket = () => {
-      if (!this.muted) this.#cricket();
+      if (!this.muted && this.ambience === 'crickets') this.#cricket();
       setTimeout(cricket, 700 + Math.random() * 2200);
     };
     setTimeout(cricket, 1500);
+  }
+
+  /** 테마 소리 바꾸기 */
+  setAmbience(kind) { this.ambience = kind || 'crickets'; }
+
+  /** 발소리 한 걸음: 'crunch'(눈 밟는 뽀득) | 'splash'(젖은 땅 찰박) */
+  step(kind, vol = 1) {
+    if (!this.ctx || this.muted || !kind) return;
+    if (kind === 'crunch') {
+      // 뽀득: 짧은 중고음 잡음 몇 겹 + 잘게 부서지는 알갱이
+      this.#burst({ dur: 0.09, freq: 1900 + Math.random() * 500, q: 0.9, gain: 0.16 * vol });
+      this.#burst({ dur: 0.06, freq: 850 + Math.random() * 250, q: 1.2, gain: 0.1 * vol, when: 0.012 });
+      for (let i = 0; i < 4; i++) this.#burst({ dur: 0.014, freq: 3200 + Math.random() * 1800, q: 4, gain: 0.05 * vol, when: 0.01 + i * 0.018 });
+    } else if (kind === 'splash') {
+      this.#burst({ dur: 0.12, freq: 1300 + Math.random() * 400, q: 0.7, gain: 0.07 * vol });
+      this.#burst({ dur: 0.05, freq: 3000, q: 2, gain: 0.03 * vol, when: 0.03 });
+    }
+  }
+
+  /** 천 위 빗소리 버퍼: 작은 빗방울 틱(2~6ms)을 1초에 약 160개, 가끔 조금 큰 방울. 끝과 처음을 겹쳐 이음매 없이 돈다 */
+  #makePatter(sec) {
+    const ctx = this.ctx, sr = ctx.sampleRate, n = Math.floor(sr * sec);
+    const buf = ctx.createBuffer(2, n, sr);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      let t = 0;
+      while (t < n) {
+        t += Math.floor(sr * (-Math.log(1 - Math.random()) / 160)); // 고르지 않은 간격 (포아송)
+        const big = Math.random() < 0.07;
+        const amp = big ? 0.5 + Math.random() * 0.4 : 0.06 + Math.random() ** 2 * 0.3;
+        const len = Math.floor(sr * (big ? 0.008 + Math.random() * 0.006 : 0.002 + Math.random() * 0.004));
+        let lp = 0;
+        const smooth = big ? 0.45 : 0.15; // 큰 방울은 조금 둥글게
+        for (let i = 0; i < len; i++) {
+          const k = (t + i) % n;
+          lp += (Math.random() * 2 - 1 - lp) * (1 - smooth);
+          d[k] += lp * amp * Math.exp((-5 * i) / len);
+        }
+      }
+    }
+    return buf;
   }
 
   toggle() {
@@ -181,6 +265,22 @@ export class Sound {
   }
 
   // 녹음 파일: 앞뒤에 0.12초씩 이어지는 소리를 붙여 둬서 그 사이(27.76초)를 끊김 없이 반복한다
+  async #loadCanvasSample() {
+    try {
+      const res = await fetch('/sounds/rain_canvas.m4a');
+      if (!res.ok) throw new Error(res.status);
+      const buf = await this.ctx.decodeAudioData(await res.arrayBuffer());
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf; src.loop = true;
+      // AAC 앞뒤의 빈 틈을 피해 반복 구간을 정한다 (24초짜리 이음매 없는 반복으로 만들어 둔 녹음)
+      const PAD = 0.05;
+      src.loopStart = PAD; src.loopEnd = Math.min(buf.duration, PAD + 24);
+      src.connect(this.canvasGain);
+      src.start(0, PAD);
+      this.canvasSample = true;
+    } catch { this.canvasSample = false; } // 못 불러오면 합성 소리로
+  }
+
   async #loadFireSample() {
     try {
       const res = await fetch('/sounds/fire.m4a');
@@ -213,7 +313,7 @@ export class Sound {
   }
 
   // 나무가 '톡' 하고 터지는 소리 하나: 나무 울림(대역 통과)이 있는 아주 짧은 잡음 + 좌우 위치
-  #tick(when, { freq, q, gain, dur, pan }) {
+  #tick(when, { freq, q, gain, dur, pan, bus }) {
     const ctx = this.ctx;
     const t = this.#now() + when;
     const src = ctx.createBufferSource();
@@ -226,7 +326,7 @@ export class Sound {
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     let out = src.connect(f).connect(g);
     if (ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = pan; out = out.connect(p); }
-    out.connect(this.fireBus);
+    out.connect(bus || this.fireBus);
     src.start(t, Math.random() * 1.5, dur + 0.05);
   }
 
@@ -260,6 +360,26 @@ export class Sound {
   /** 매 프레임: 가까운 모닥불 세기(0~1)에 따라 불 소리 */
   update(dt, level) {
     if (!this.ctx) return;
+    // 빗소리: 지붕 아래면 쏴아 소리는 줄고, 지붕을 두드리는 톡톡 소리가 커진다
+    const rainT = this.ambience === 'rain' ? 1 : 0;
+    this.rainLevel += (rainT - this.rainLevel) * Math.min(1, dt * 0.5);
+    // 바람결처럼 빗소리 크기가 천천히 오르내린다 (밋밋하지 않게)
+    this.gustT += dt;
+    const gust = 0.82 + 0.12 * Math.sin(this.gustT * 0.13) + 0.07 * Math.sin(this.gustT * 0.41 + 1.7) + 0.04 * Math.sin(this.gustT * 1.3);
+    this.rainBus.gain.value = this.rainLevel * gust * (1 - 0.72 * (this.shelterK || 0)); // 지붕 아래면 바깥 쏴아 소리는 작고 먹먹하게
+    if (this.outPatterGain) this.outPatterGain.gain.value = 0.32 * this.rainLevel * (1 - (this.shelterK || 0)) * (0.8 + 0.3 * (gust - 0.82) / 0.23);
+    this.shelterK = (this.shelterK || 0) + ((this.sheltered ? 1 : 0) - (this.shelterK || 0)) * Math.min(1, dt * 3);
+    this.rainLp.frequency.value = 9000 - 8100 * this.shelterK;
+    // 천막 · 텐트 천에 떨어지는 빗소리 (지붕 아래에서만, 비가 그치면 함께 잦아든다)
+    const roof = this.shelterK * this.rainLevel;
+    this.patterGain.gain.value = this.canvasSample ? 0 : 0.75 * roof;
+    this.canvasGain.gain.value = this.canvasSample ? 0.7 * roof : 0;
+    if (this.rainLevel > 0.05 && !this.muted) {
+      if (this.shelterK < 0.3 && Math.random() < dt * 6 * this.rainLevel) this.#tick(0, { freq: 2400 + Math.random() * 2600, q: 3, gain: 0.02 + Math.random() * 0.025, dur: 0.012, pan: (Math.random() - 0.5) * 1.8, bus: this.master });
+    }
+    // 바람: 눈 오는 밤은 조금 더 서늘하게
+    const wantWind = this.ambience === 'snow' ? 0.05 : this.ambience === 'rain' ? (this.sheltered ? 0.004 : 0.012) : 0.025;
+    this.windGain.gain.value += (wantWind - this.windGain.gain.value) * Math.min(1, dt * 0.5);
     this.fireLevel += (level - this.fireLevel) * Math.min(1, dt * 2);
     const L = this.fireLevel;
     this.fireT += dt;

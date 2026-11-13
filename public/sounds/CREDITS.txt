@@ -5,3 +5,10 @@ fire.m4a
   주소: https://opengameart.org/content/fireplace-sound-loop
   라이선스: CC0 (퍼블릭 도메인, 출처 표시 의무 없음)
   가공: 끝과 처음을 1.5초 겹쳐 끊김 없는 27.8초 반복 소리로 만들고 AAC 128kbps로 줄임
+
+rain_canvas.m4a
+  원본: "Rain on canvas 01.wav" — mikala_oidua (Freesound)
+  주소: https://freesound.org/people/mikala_oidua/sounds/348024/
+  라이선스: CC0 (퍼블릭 도메인, 출처 표시 의무 없음)
+  가공: 7.2초 녹음(Freesound 고음질 미리 듣기 mp3)에서 2~3초 조각을 무작위로 골라 0.6초씩 겹쳐 이은 24초 반복 소리로 만들고(끝과 처음도 겹침), AAC 128kbps로 줄임
+  쓰는 곳: 우중캠핑장에서 천막 아래 · 텐트 안에 있을 때 들리는 천 위 빗소리

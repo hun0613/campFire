@@ -34,6 +34,23 @@ const G = {
   gNeck: new THREE.BoxGeometry(0.42, 0.05, 0.03),
   gHead: new THREE.BoxGeometry(0.09, 0.07, 0.035),
   gString: new THREE.BoxGeometry(0.62, 0.004, 0.004),
+  // 테마 옷: 우비 · 패딩
+  coat: new THREE.CylinderGeometry(0.235, 0.32, 0.58, 18),
+  coatBtn: new THREE.SphereGeometry(0.022, 8, 6),
+  // 모자(후드): 얼굴 쪽(+z)을 비워 둔 반구
+  hood: new THREE.SphereGeometry(0.5, 26, 14, Math.PI / 2 + 0.95, Math.PI * 2 - 1.9, 0, Math.PI * 0.6),
+  hoodRim: new THREE.TorusGeometry(0.43, 0.04, 6, 24, Math.PI * 1.05),
+  sleeve: new THREE.CapsuleGeometry(0.085, 0.2, 4, 10),
+  boot: new THREE.CylinderGeometry(0.1, 0.105, 0.2, 12),
+  puffBand: new THREE.SphereGeometry(1, 20, 12),
+  puffCore: new THREE.CylinderGeometry(0.25, 0.29, 0.5, 16),
+  puffCollar: new THREE.TorusGeometry(0.17, 0.065, 8, 20),
+  puffSleeve: new THREE.CapsuleGeometry(0.1, 0.18, 4, 10),
+  scarf: new THREE.TorusGeometry(0.165, 0.05, 8, 20),
+  scarfTail: new THREE.BoxGeometry(0.09, 0.22, 0.04),
+  santaCone: new THREE.ConeGeometry(0.38, 0.62, 20),
+  santaBrim: new THREE.TorusGeometry(0.39, 0.09, 8, 24),
+  santaPom: new THREE.SphereGeometry(0.11, 10, 8),
 };
 
 const easeOut = (t) => 1 - (1 - t) ** 3;
@@ -218,7 +235,11 @@ export class Character {
     mouth.rotation.z = Math.PI;
     this.head.add(mouth);
 
+    const nHead = this.head.children.length;
     this.#hat(look.hat);
+    this.hatParts = this.head.children.slice(nHead); // 우비 후드를 쓰면 숨긴다
+    this.outfit = null;
+    this.outfits = {};
 
     // 라벨 (이름표 + 말풍선)
     this.labelEl = document.createElement('div');
@@ -504,6 +525,76 @@ export class Character {
     const blink = this.blinkT < 0.12;
     for (const e of this.eyes) e.scale.y = blink ? 0.15 : 1.15;
     if (this.blinkT < 0) this.blinkT = 2 + Math.random() * 4;
+  }
+
+  /** 테마 옷 입기: 'raincoat'(우비) | 'puffer'(패딩) | null(평상복). 처음 입을 때 만들어 두고 켜고 끈다 */
+  setOutfit(kind) {
+    kind = kind || null;
+    if (this.outfit === kind) return;
+    for (const [k, parts] of Object.entries(this.outfits)) for (const p of parts) p.visible = k === kind;
+    if (kind && !this.outfits[kind]) this.outfits[kind] = kind === 'raincoat' ? this.#raincoat() : kind === 'santa' ? [...this.#puffer(), ...this.#santaHat()] : this.#puffer();
+    for (const p of this.hatParts) p.visible = kind !== 'raincoat' && kind !== 'santa'; // 후드 · 산타 모자를 쓰면 원래 모자는 벗는다
+    this.outfit = kind;
+  }
+
+  /** 옷 색: 셔츠 색을 바탕으로 (흰 · 검정처럼 색이 없는 셔츠면 노란 우비 · 남색 패딩) */
+  #outfitColor(kind) {
+    const c = new THREE.Color(this.look.shirt);
+    const hsl = {}; c.getHSL(hsl);
+    if (hsl.s < 0.18) return new THREE.Color(kind === 'raincoat' ? '#f2c230' : '#3b4a78');
+    return kind === 'raincoat' ? new THREE.Color().setHSL(hsl.h, 0.72, 0.6) : new THREE.Color().setHSL(hsl.h, 0.5, 0.45);
+  }
+
+  #raincoat() {
+    const col = this.#outfitColor('raincoat');
+    const m = toon(col, { emissive: col.clone().multiplyScalar(0.12), emissiveIntensity: 1 });
+    const dark = toon(col.clone().offsetHSL(0, -0.1, -0.22));
+    const parts = [];
+    const coat = new THREE.Mesh(G.coat, m); coat.position.y = 0.6; coat.castShadow = true;
+    this.body.add(coat); parts.push(coat);
+    for (let i = 0; i < 3; i++) { const b = new THREE.Mesh(G.coatBtn, dark); b.position.set(0, 0.76 - i * 0.14, 0.27 + i * 0.012); this.body.add(b); parts.push(b); }
+    const hood = new THREE.Mesh(G.hood, toon(col, { side: THREE.DoubleSide }));
+    hood.position.set(0, 0.04, -0.03); hood.rotation.x = -0.25; hood.castShadow = true;
+    const rim = new THREE.Mesh(G.hoodRim, m);
+    rim.position.set(0, 0.04, 0.1); rim.rotation.set(-0.25, 0, -0.025 * Math.PI);
+    this.head.add(hood, rim); parts.push(hood, rim);
+    for (const pivot of this.arms) { const s = new THREE.Mesh(G.sleeve, m); s.position.y = -0.13; s.castShadow = true; pivot.add(s); parts.push(s); }
+    for (const pivot of this.legs) { const b = new THREE.Mesh(G.boot, dark); b.position.y = -0.24; pivot.add(b); parts.push(b); }
+    return parts;
+  }
+
+  /** 산타 모자: 빨간 고깔이 뒤로 살짝 접히고, 하얀 털 테두리와 방울 */
+  #santaHat() {
+    const red = toon('#d8283b'), white = toon('#f7f3ec');
+    const g = new THREE.Group();
+    g.position.set(0, 0.3, -0.03); g.rotation.x = -0.18;
+    const cone = new THREE.Mesh(G.santaCone, red); cone.position.set(0, 0.3, -0.05); cone.rotation.x = -0.45; cone.castShadow = true;
+    const brim = new THREE.Mesh(G.santaBrim, white); brim.rotation.x = Math.PI / 2;
+    const pom = new THREE.Mesh(G.santaPom, white); pom.position.set(0, 0.5, -0.32);
+    g.add(cone, brim, pom);
+    this.head.add(g);
+    return [g];
+  }
+
+  #puffer() {
+    const col = this.#outfitColor('puffer');
+    const m = toon(col), shade = toon(col.clone().offsetHSL(0, 0, -0.07));
+    const parts = [];
+    const core = new THREE.Mesh(G.puffCore, shade); core.position.y = 0.6; core.castShadow = true;
+    this.body.add(core); parts.push(core);
+    [[0.42, 0.31], [0.58, 0.32], [0.74, 0.29]].forEach(([y, r]) => { // 볼록한 패딩 줄
+      const band = new THREE.Mesh(G.puffBand, m); band.scale.set(r, 0.11, r * 0.95); band.position.y = y; band.castShadow = true;
+      this.body.add(band); parts.push(band);
+    });
+    const collar = new THREE.Mesh(G.puffCollar, m); collar.rotation.x = Math.PI / 2; collar.position.y = 0.86;
+    this.body.add(collar); parts.push(collar);
+    const scarfCol = new THREE.Color(col).offsetHSL(0.5, 0.15, 0.12);
+    const sm = toon(scarfCol);
+    const scarf = new THREE.Mesh(G.scarf, sm); scarf.rotation.x = Math.PI / 2; scarf.position.y = 0.93;
+    const tail = new THREE.Mesh(G.scarfTail, sm); tail.position.set(0.1, 0.8, 0.27); tail.rotation.z = 0.15;
+    this.body.add(scarf, tail); parts.push(scarf, tail);
+    for (const pivot of this.arms) { const s = new THREE.Mesh(G.puffSleeve, m); s.position.y = -0.13; s.castShadow = true; pivot.add(s); parts.push(s); }
+    return parts;
   }
 
   dispose() {

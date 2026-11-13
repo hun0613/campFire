@@ -13,6 +13,8 @@ import { Effects } from './effects.js';
 import { Net } from './net.js';
 import { UI } from './ui.js';
 import { Sound } from './audio.js';
+import { Precip } from './precip.js';
+import { themeOf } from '../shared/themes.js';
 import { Guide, pickTarget } from './guide.js';
 import { Preview } from './preview.js';
 import { isTouch, TouchControls } from './touch.js';
@@ -136,6 +138,30 @@ for (let i = 0; i < (isTouch ? 3 : 4); i++) {
 const tentRoom = new TentInterior(scene, world.tents);
 
 // NPC 루미
+// ---------------------------------------------------------------- 🌦️ 캠핑장 테마 (서버가 알려 준다: 서울 날씨 · 관리자 선택)
+const precip = new Precip(scene, shared, { lowSpec: isTouch });
+const fogTarget = { color: new THREE.Color(scene.fog.color), near: scene.fog.near, far: scene.fog.far };
+let themeLight = { hemi: 1, ambient: 1, moon: 1 };
+function applyTheme(id, { announce = true } = {}) {
+  const th = themeOf(id);
+  const changed = state.theme !== th.id;
+  state.theme = th.id;
+  world.setTheme(th);
+  world.sky.setTheme(th);
+  tentRoom.setTheme(th);
+  fogTarget.color.set(th.fog.color); fogTarget.near = th.fog.near; fogTarget.far = th.fog.far;
+  themeLight = th.light;
+  precip.set(th.precip);
+  // 비 · 눈이 들어오지 않는 지붕: 텐트 (늘) + 바깥 모닥불 천막 (천막이 있는 테마만)
+  const shel = TENTS.map((t) => ({ x: t.x, z: t.z, r: CFG.TENT_R + 0.3, h: 6.8 }));
+  if (th.tarps) for (const p of world.tarpSpots) shel.push({ x: p.x, z: p.z, r: 3.9, h: 5.8 }); // 천막 (높이 4.1m + 이중 지붕)
+  precip.setShelters(shel);
+  sound.setAmbience(th.ambience);
+  for (const ch of [npc, keeper, me?.char, ...[...remotes.values()].map((r) => r.ch)]) ch?.setOutfit(th.outfit);
+  document.body.dataset.theme = th.id;
+  if (announce && changed && th.toast && me) UI.toast(th.toast, 5200);
+}
+
 const npc = new Character({ skin: '#ffe0c7', hair: '#c9a2ff', shirt: '#6a4bb5', pants: '#3a2f5a', hat: 'wizard' }, { name: '✨ 루미 · 가루 상인', kind: 'npc' });
 npc.root.position.set(NPC.x, 0, NPC.z);
 npc.root.rotation.y = NPC.ry;
@@ -159,6 +185,7 @@ const state = {
   sendT: 0,
   shake: 0,
 };
+state.theme = 'clear';
 let me = null; // { char, x, z, ry }
 const remotes = new Map();
 const keys = new Set();
@@ -329,6 +356,7 @@ $('soundBtn').onclick = (e) => {
 
 // ---------------------------------------------------------------- 네트워크
 const net = new Net();
+net.on('theme', (m) => applyTheme(m.theme)); // 🌦️ 날씨 · 이벤트로 테마가 바뀌었다
 
 // 공개 서버일 때만 '친구에게 주소 공유' 안내를 띄운다
 fetch('/api/info').then((r) => r.json()).then(({ urls, public: isPublic }) => {
@@ -408,6 +436,8 @@ net.on('hello', (m) => {
   state.tentMusic.clear();
   for (const r of m.tentMusic || []) state.tentMusic.set(r.tent, r.music);
   for (const p of m.players) addRemote(p);
+  state.pendingTheme = m.theme || 'clear';
+  applyTheme(state.pendingTheme, { announce: false });
   updateOnline();
 });
 
@@ -417,6 +447,8 @@ net.on('welcome', (m) => {
   char.root.position.set(m.me.x, 0, m.me.z);
   scene.add(char.root);
   me = { char, x: m.me.x, z: m.me.z, ry: m.me.ry, name: m.me.name, tag: m.me.tag };
+  char.setOutfit(themeOf(state.theme).outfit);
+  if (themeOf(state.theme).toast) setTimeout(() => UI.toast(themeOf(state.theme).toast, 5200), 2600); // 들어오자마자 오늘의 캠핑장 안내
   cam.yaw = 0;
   $('join').classList.add('hidden');
   preview.dispose();
@@ -843,6 +875,7 @@ function splitLog(idx, ch) {
 function addRemote(p) {
   if (p.id === state.myId || remotes.has(p.id)) return;
   const ch = new Character(p.look, { name: p.name });
+  ch.setOutfit(themeOf(state.theme).outfit);
   ch.root.position.set(p.x, world.heightAt(p.x, p.z), p.z);
   ch.root.rotation.y = p.ry;
   scene.add(ch.root);
@@ -1444,6 +1477,22 @@ function updateTentState() {
   }
 }
 
+// 걸을 때 발소리 (설산: 뽀득뽀득 · 우중: 찰박). 걸은 거리로 박자를 맞춘다
+let stepDist = 0, stepPrev = null;
+function stepSounds() {
+  if (!me) return;
+  const kind = themeOf(state.theme).step;
+  const p = { x: me.x, z: me.z };
+  if (stepPrev && kind && !state.sitting && !state.tent) {
+    const d = Math.hypot(p.x - stepPrev.x, p.z - stepPrev.z);
+    if (d < 1) { // 순간이동은 빼고
+      stepDist += d;
+      if (stepDist > 0.72) { stepDist = 0; sound.step(kind, 0.9 + Math.random() * 0.2); }
+    }
+  }
+  stepPrev = p;
+}
+
 function faceTo(x, z) { me.ry = Math.atan2(x - me.x, z - me.z); }
 
 function tryChop(it) {
@@ -1729,6 +1778,7 @@ canvas.addEventListener('wheel', (e) => {
 // ---------------------------------------------------------------- 업데이트
 function collide(p, r = 0.35) {
   for (const c of colliders) {
+    if (c.theme && c.theme !== state.theme) continue; // 테마에서만 있는 것 (크리스마스 트리 등)
     const dx = p.x - c.x, dz = p.z - c.z;
     const min = c.r + r;
     const d2 = dx * dx + dz * dz;
@@ -1742,6 +1792,7 @@ function collide(p, r = 0.35) {
   collideTents(p);
   if (state.tent) {
     for (const o of TENT_PROPS) {
+      if (o.theme && o.theme !== state.theme) continue; // 테마에서만 있는 것 (크리스마스 트리)
       const c = tentLocal(state.tent, o.x, o.z);
       const dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz), min = o.r + r;
       if (d < min && d > 1e-6) { p.x = c.x + (dx / d) * min; p.z = c.z + (dz / d) * min; }
@@ -2153,6 +2204,29 @@ function feedFire() {
 }
 $('feedBtn').onclick = (e) => { e.currentTarget.blur(); feedFire(); };
 
+// 팻말끼리 화면에서 겹치면: 지금 가야 할 곳 · 가까운 팻말만 또렷하게, 뒤쪽은 옅게 (0.25초마다)
+let declutterT = 0;
+function declutterLabels(dt) {
+  declutterT -= dt;
+  if (declutterT > 0) return;
+  declutterT = 0.25;
+  // NPC 이름표(루미 · 보리)도 같은 장소 팻말과 겹치면 정리한다 (캠퍼 이름표 · 말풍선은 건드리지 않는다)
+  const els = [...document.querySelectorAll('.beacon, .gb-tag, .nametag.npc')].filter((el) => !el.classList.contains('here') && !el.classList.contains('near'));
+  const items = [];
+  for (const el of els) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || r.bottom < 0 || r.top > innerHeight) { el.classList.remove('label-dim'); continue; }
+    items.push({ el, r, on: el.classList.contains('on'), npc: el.classList.contains('npc'), d: Number(el.dataset.d || 999) });
+  }
+  items.sort((a, b) => (b.on - a.on) || (a.npc - b.npc) || (a.d - b.d)); // 목적지 → 장소 팻말 → NPC 이름표, 같은 종류면 가까운 것부터
+  const kept = [];
+  for (const it of items) {
+    const hit = kept.some((k) => it.r.left < k.right + 4 && it.r.right > k.left - 4 && it.r.top < k.bottom + 4 && it.r.bottom > k.top - 4);
+    it.el.classList.toggle('label-dim', hit);
+    if (!hit) kept.push(it.r);
+  }
+}
+
 function updateLabels() {
   const all = [npc, ...[...remotes.values()].map((r) => r.ch), ...(me ? [me.char] : [])];
   for (const ch of all) {
@@ -2220,7 +2294,12 @@ function frame(now = performance.now()) {
   {
     const k = state.tent ? 0.4 : 1;
     skyDim += (k - skyDim) * Math.min(1, dt * 4);
-    world.hemi.intensity = 0.45 * skyDim; world.ambient.intensity = 0.18 * skyDim; world.moonLight.intensity = 0.45 * skyDim;
+    world.hemi.intensity = 0.45 * skyDim * themeLight.hemi; world.ambient.intensity = 0.18 * skyDim * themeLight.ambient; world.moonLight.intensity = 0.45 * skyDim * themeLight.moon;
+    // 테마 안개 (천천히)
+    const fk = Math.min(1, dt * 0.6);
+    scene.fog.color.lerp(fogTarget.color, fk);
+    scene.fog.near += (fogTarget.near - scene.fog.near) * fk;
+    scene.fog.far += (fogTarget.far - scene.fog.far) * fk;
   }
   updateTentTags(dt);
   tentRoom.update(dt, !!(state.tent && state.tentMusic.get(state.tent.id)), camera.position);
@@ -2233,6 +2312,10 @@ function frame(now = performance.now()) {
   shared.uScale.value = state.tent && !view.fp ? renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) : baseUScale;
   updateOccluders();
   world.update(t, dt, camera, focus, shared);
+  precip.update(dt, t, camera.position);
+  // 지붕 아래(텐트 안 · 천막 아래 모닥불)면 빗방울이 지붕을 두드리는 소리
+  if (me) sound.sheltered = !!state.tent || (themeOf(state.theme).tarps && world.tarpSpots.some((p) => Math.hypot(me.x - p.x, me.z - p.z) < 3.9));
+  stepSounds(dt);
   updateStargaze(t, dt);
   updateFires(t, dt);
   updateMusicFx(dt);
@@ -2246,6 +2329,7 @@ function frame(now = performance.now()) {
   updateHud();
   updateCalm(now);
   updateLabels();
+  declutterLabels(dt);
   guide.update(dt, {
     me, target: state.target, pits: pitList, camYaw: cam.yaw,
     remotes: [...remotes.values()].map((r) => r.ch.root.position),

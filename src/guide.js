@@ -34,7 +34,8 @@ function makeBeacon(scene, { x, z, color, icon, title, sub }) {
   const el = document.createElement('div');
   el.className = 'beacon';
   el.style.setProperty('--c', color);
-  el.innerHTML = `<div class="b-icon">${icon}</div><div class="b-title">${title}</div><div class="b-sub">${sub}</div><div class="b-dist"></div>`;
+  // 한 줄 알약: 아이콘 · 이름 · 거리. 긴 설명은 지금 가야 할 곳(.on)일 때만
+  el.innerHTML = `<div class="b-row"><span class="b-icon">${icon}</span><span class="b-title">${title}</span><span class="b-dist"></span></div><div class="b-sub">${sub}</div>`;
   wrap.appendChild(el);
   const label = new CSS2DObject(wrap);
   label.position.set(x, 3.8, z);
@@ -73,7 +74,13 @@ export class Guide {
       b.el.classList.toggle('on', !!on);
       if (me) {
         const d = Math.round(Math.hypot(me.x - b.x, me.z - b.z));
-        if (b._d !== d) { b._d = d; b.distEl.textContent = `${d}m`; }
+        if (b._d !== d) {
+          b._d = d; b.distEl.textContent = `${d}m`;
+          b.el.dataset.d = d;
+          // 멀수록 작게 (12m 안 1배 → 60m 밖 0.7배), 도착하면(8m 안) 숨긴다 — 실제 장소가 보이니까
+          b.el.style.setProperty('--s', (d <= 12 ? 1 : Math.max(0.7, 1 - ((d - 12) / 48) * 0.3)).toFixed(2));
+          b.el.classList.toggle('here', d < 8);
+        }
       }
     }
 

@@ -56,7 +56,27 @@ async function accessToken() {
   return token.value;
 }
 
+// GA4 데이터 API는 한 속성에 「동시에」 보낼 수 있는 요청 수가 정해져 있다 (넘으면 Exhausted concurrent requests quota).
+// → 한 번에 2개씩만 보내고, 그래도 한도에 걸리면 잠깐 쉬었다가 다시 보낸다
+const MAX_INFLIGHT = 2;
+let inflight = 0;
+const waiters = [];
+async function slot() {
+  if (inflight < MAX_INFLIGHT) { inflight++; return; }
+  await new Promise((r) => waiters.push(r));
+  inflight++;
+}
+function release() { inflight--; waiters.shift()?.(); }
 async function call(method, body) {
+  for (let attempt = 0; ; attempt++) {
+    await slot();
+    try { return await callOnce(method, body); } catch (e) {
+      if (attempt < 3 && /concurrent|quota|RESOURCE_EXHAUSTED|429/i.test(e.message)) { await new Promise((r) => setTimeout(r, 800 * (attempt + 1))); continue; }
+      throw e;
+    } finally { release(); }
+  }
+}
+async function callOnce(method, body) {
   const r = await fetch(`${API}:${method}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${await accessToken()}`, 'Content-Type': 'application/json' },
@@ -87,12 +107,21 @@ const inList = (field, values) => ({ filter: { fieldName: field, inListFilter: {
 const RANGES = { today: 'today', '7d': '6daysAgo', '28d': '27daysAgo' };
 
 const cache = new Map(); // key -> { at, data }
+const pending = new Map(); // key -> 진행 중인 조회 (관리 화면을 여러 번 열어도 같은 조회를 한 번만 보낸다)
 async function cached(key, ttl, fn) {
   const c = cache.get(key);
   if (c && Date.now() - c.at < ttl) return c.data;
-  const data = await fn();
-  cache.set(key, { at: Date.now(), data });
-  return data;
+  if (pending.has(key)) return pending.get(key);
+  const p = (async () => {
+    try {
+      const data = await fn();
+      // 일부 조회가 실패한 결과는 30초만 기억한다 (곧 다시 열면 빈칸이 채워지게)
+      cache.set(key, { at: data?.partial ? Date.now() - ttl + 30_000 : Date.now(), data });
+      return data;
+    } finally { pending.delete(key); }
+  })();
+  pending.set(key, p);
+  return p;
 }
 
 /** 기간 통계 (today | 7d | 28d) */
@@ -226,6 +255,7 @@ export function report(range = '7d') {
       timeZone,
       hourError: h.error || null,
       customError: c.error || null,
+      partial: !!(h.error || c.error || d.error),
     };
   });
 }

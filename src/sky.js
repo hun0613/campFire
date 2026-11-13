@@ -28,6 +28,9 @@ export function createSky(scene, { lowSpec = false } = {}) {
   scene.add(group);
   const uGaze = { value: 0 };
   const uTime = { value: 0 };
+  // 테마(날씨): 별 · 은하수 · 달 밝기 (0~1, 구름이 끼면 줄어든다)
+  const uStars = { value: 1 }, uMilky = { value: 1 }, uMoonK = { value: 1 };
+  const target = { stars: 1, milky: 1, moon: 1 };
 
   // ---------- 하늘 + 은하수
   const sky = new THREE.Mesh(
@@ -40,11 +43,11 @@ export function createSky(scene, { lowSpec = false } = {}) {
         bottom: { value: new THREE.Color('#3b2f63') },
         moonDir: { value: MOON_DIR },
         mwN: { value: MW_N },
-        uGaze,
+        uGaze, uMilky, uMoonK,
       },
       vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
       defines: { OCT: lowSpec ? 3 : 5 },
-      fragmentShader: `uniform vec3 top, mid, bottom, moonDir, mwN; uniform float uGaze; varying vec3 vP;
+      fragmentShader: `uniform vec3 top, mid, bottom, moonDir, mwN; uniform float uGaze, uMilky, uMoonK; varying vec3 vP;
         ${NOISE}
         void main(){
           vec3 d = normalize(vP);
@@ -52,20 +55,20 @@ export function createSky(scene, { lowSpec = false } = {}) {
           vec3 c = mix(bottom, mid, smoothstep(-0.02, 0.25, h));
           c = mix(c, top, smoothstep(0.25, 0.9, h));
           float m = max(dot(d, moonDir), 0.0);
-          c += vec3(0.25, 0.27, 0.45) * pow(m, 18.0) * 0.35;
+          c += vec3(0.25, 0.27, 0.45) * pow(m, 18.0) * 0.35 * uMoonK;
           // 은하수: 큰 원을 따라 흐르는 뿌연 빛 + 가운데 어두운 먼지 띠
           float k = dot(d, mwN);
           float band = exp(-k * k / 0.022);
           float lift = smoothstep(0.02, 0.35, h) * (1.0 - pow(m, 6.0));
           // 은하수가 없는 곳은 무늬 계산을 건너뛴다 (하늘 대부분 — GPU 부담을 크게 줄임)
-          if (band * lift < 0.004) { gl_FragColor = vec4(c, 1.0); return; }
+          if (band * lift * uMilky < 0.004) { gl_FragColor = vec4(c, 1.0); return; }
           float cloud = fbm(d * 5.0 + 3.1);
           float fine = fbm(d * 16.0 - 1.7);
           float glow = band * (0.35 + 0.9 * cloud) * (0.55 + 0.6 * fine);
           float dust = exp(-pow(k - 0.025, 2.0) / 0.0016) * smoothstep(0.35, 0.75, fbm(d * 9.0 + 7.0));
           glow *= 1.0 - 0.75 * dust;
           vec3 mw = mix(vec3(0.42, 0.44, 0.78), vec3(0.95, 0.82, 0.78), cloud * fine);
-          c += mw * glow * lift * (0.16 + 0.12 * uGaze);
+          c += mw * glow * lift * (0.16 + 0.12 * uGaze) * uMilky;
           gl_FragColor = vec4(c, 1.0);
         }`,
     }),
@@ -103,7 +106,7 @@ export function createSky(scene, { lowSpec = false } = {}) {
     addStar(v, 0.7 + rand() * 0.9);
   }
   const starMat = new THREE.ShaderMaterial({
-    uniforms: { uTime, uGaze, uPR: { value: Math.min(devicePixelRatio, 2) } },
+    uniforms: { uTime, uGaze, uStars, uPR: { value: Math.min(devicePixelRatio, 2) } },
     transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending,
     vertexShader: `attribute float aPhase; attribute float aSize; attribute vec3 aColor; uniform float uTime; uniform float uPR; uniform float uGaze;
       varying float vA; varying vec3 vC;
@@ -113,8 +116,8 @@ export function createSky(scene, { lowSpec = false } = {}) {
         vC = aColor;
         gl_PointSize = aSize * uPR * (1.0 + 0.25 * uGaze);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: `varying float vA; varying vec3 vC; void main(){ float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard;
-        gl_FragColor = vec4(vC * 1.6, smoothstep(0.5, 0.0, d) * vA); }`,
+    fragmentShader: `uniform float uStars; varying float vA; varying vec3 vC; void main(){ float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard;
+        gl_FragColor = vec4(vC * 1.6, smoothstep(0.5, 0.0, d) * vA * uStars); }`,
   });
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -246,19 +249,37 @@ export function createSky(scene, { lowSpec = false } = {}) {
 
   let nextShoot = 6 + Math.random() * 10;
   const look = new THREE.Vector3();
+  const skyU = sky.material.uniforms;
+  const skyTarget = { top: skyU.top.value.clone(), mid: skyU.mid.value.clone(), bottom: skyU.bottom.value.clone() };
+  const moonBase = moon.material.color.clone();
   return {
     group,
+    /** 테마 템플릿의 하늘 (색 · 별 · 은하수 · 달). 몇 초에 걸쳐 바뀐다 */
+    setTheme(th) {
+      const s = th.sky;
+      skyTarget.top.set(s.top); skyTarget.mid.set(s.mid); skyTarget.bottom.set(s.bottom);
+      target.stars = s.stars; target.milky = s.milky; target.moon = s.moon;
+    },
     /** @returns {boolean} 이번 프레임에 '올려다보는 중' 별똥별이 떨어졌는지 */
     update(t, dt, camera, gaze) {
       group.position.copy(camera.position);
       uTime.value = t;
+      const k = Math.min(1, dt * 0.6);
+      skyU.top.value.lerp(skyTarget.top, k); skyU.mid.value.lerp(skyTarget.mid, k); skyU.bottom.value.lerp(skyTarget.bottom, k);
+      uStars.value += (target.stars - uStars.value) * k;
+      uMilky.value += (target.milky - uMilky.value) * k;
+      uMoonK.value += (target.moon - uMoonK.value) * k;
+      moon.visible = uMoonK.value > 0.02;
+      moon.material.color.copy(moonBase).multiplyScalar(0.25 + 0.75 * uMoonK.value);
+      halo.material.opacity = 0.1 * uMoonK.value;
       uGaze.value += (gaze - uGaze.value) * Math.min(1, dt * 3);
       const gz = uGaze.value;
-      lineMat.opacity = Math.max(0, gz - 0.35) * 0.45;
-      const showLab = gz > 0.55;
+      lineMat.opacity = Math.max(0, gz - 0.35) * 0.45 * uStars.value;
+      const showLab = gz > 0.55 && uStars.value > 0.5;
       for (const el of labels) el.classList.toggle('on', showLab);
       updateShoots(dt);
       nextShoot -= dt;
+      if (nextShoot <= 0 && uStars.value < 0.5) nextShoot = 20; // 구름 낀 밤엔 별똥별도 쉰다
       if (nextShoot <= 0) {
         // 올려다보고 있으면 자주, 시야 안쪽에서 떨어진다
         nextShoot = gz > 0.4 ? 5 + Math.random() * 8 : 18 + Math.random() * 25;

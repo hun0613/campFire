@@ -8,6 +8,7 @@ import * as guestbook from './guestbook.js';
 import * as ga from './analytics.js';
 import * as board from './board.js';
 import { releaseNotes } from './releases.js';
+import * as weather from './weather.js';
 
 const PASSWORD = process.env.ADMIN_PASSWORD || '';
 const SECRET = crypto.createHash('sha256').update(`admin:${PASSWORD}:${process.env.SAVE_SECRET || ''}`).digest();
@@ -114,6 +115,13 @@ export async function handleAdmin(req, res, getStats, hooks = {}) {
       return true;
     }
     // 캠핑장 소식 (게임 속 게시판 공지)
+    if (route === 'theme' && req.method === 'GET') { send(res, 200, weather.status()); return true; }
+    if (route === 'theme' && req.method === 'POST') {
+      const { mode } = await readJson(req);
+      if (!weather.setMode(mode)) { send(res, 400, { error: '알 수 없는 테마예요.' }); return true; }
+      send(res, 200, weather.status());
+      return true;
+    }
     if (route === 'notices' && req.method === 'GET') { send(res, 200, { items: await board.listAll() }); return true; }
     if (route === 'notices' && req.method === 'POST') {
       const item = await board.create(await readJson(req));

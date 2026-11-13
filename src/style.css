@@ -1029,3 +1029,26 @@ body.kb-open .mm-rules { display: none; } /* 키보드가 떠 있을 땐 규칙 
 body.kb-open .mm-list { min-height: 72px; }
 /* 키보드 API가 없는 곳(아이폰 · http 로컬 주소)은 브라우저가 화면을 밀어 올린다 → 밀린 만큼 배경과 위쪽 UI를 되돌려 제자리에 보이게 */
 body.kb-open #app, body.kb-open .tv-layer, body.kb-open .label-layer, body.kb-open #status, body.kb-open #topright { transform: translateY(var(--vvt, 0px)); }
+
+/* ---------- 팻말 정리: 작은 한 줄 알약 · 멀수록 작게 · 도착하면 숨김 · 겹치면 뒤쪽을 옅게 (오브제를 가리지 않게) */
+.beacon { flex-direction: column; gap: 2px; padding: 3px 10px 4px; border-width: 2px; border-radius: 999px; box-shadow: 0 0 10px var(--c), 0 3px 0 rgba(0,0,0,.18);
+  scale: var(--s, 1); transform-origin: bottom center; opacity: .82; transition: opacity .4s, scale .3s; }
+.beacon .b-row { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.beacon .b-icon { font-size: 15px; }
+.beacon .b-title { font-size: 13px; }
+.beacon .b-dist { font-size: 11px; padding: 0 6px; margin-top: 0; }
+.beacon .b-sub { display: none; font-size: 11px; }
+.beacon.on { opacity: 1; border-radius: 14px; animation: beaconBob2 1.2s ease-in-out infinite; }
+.beacon.on .b-sub { display: block; }
+@keyframes beaconBob2 { 0%, 100% { translate: 0 0; } 50% { translate: 0 -5px; } }
+.beacon.here { opacity: 0 !important; }
+body.touch .beacon { transform: none; padding: 2px 8px 3px; }
+body.touch .beacon .b-title { font-size: 12px; }
+body.touch .beacon .b-icon { font-size: 14px; }
+body.touch .beacon.on .b-sub { display: none; }
+.gb-tag { flex-direction: row; gap: 5px; padding: 3px 10px; border-radius: 999px; box-shadow: 0 0 10px rgba(255, 180, 90, .45); }
+.gb-tag b { font-size: 13px; }
+.gb-tag-icon { font-size: 15px; }
+.gb-tag small { display: none; }
+.label-dim { opacity: .14 !important; }
+.nametag.npc { transition: opacity .3s; }

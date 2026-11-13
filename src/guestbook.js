@@ -119,7 +119,7 @@ export class GuestbookStand {
     const wrap = document.createElement('div');
     const el = document.createElement('div');
     el.className = 'gb-tag';
-    el.innerHTML = '<span class="gb-tag-icon">📖</span><b>방명록</b><small>한마디 남기고 가요</small>';
+    el.innerHTML = '<span class="gb-tag-icon">📖</span><b>방명록</b>';
     wrap.appendChild(el);
     this.tagEl = el;
     this.tag = new CSS2DObject(wrap);
@@ -137,7 +137,9 @@ export class GuestbookStand {
   update(dt, mePos) {
     this.t += dt;
     this.pulse = Math.max(0, this.pulse - dt * 0.6);
-    const near = mePos ? Math.hypot(mePos.x - this.pos.x, mePos.z - this.pos.z) < 1.9 : false;
+    const dist = mePos ? Math.hypot(mePos.x - this.pos.x, mePos.z - this.pos.z) : 99;
+    const near = dist < 6; // 가까우면 진짜 방명록이 보이니 떠 있는 표시는 숨긴다
+    this.tagEl.dataset.d = Math.round(dist);
     if (this._near !== near) { this._near = near; this.tagEl.classList.toggle('near', near); }
     this.pool.material.opacity = 0.3 + this.pulse * 0.3;
     this.halo.material.opacity = 0.42 + Math.sin(this.t * 2.3) * 0.06 + this.pulse * 0.5;

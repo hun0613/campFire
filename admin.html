@@ -38,6 +38,7 @@
       <button role="tab" class="tab on" data-tab="stats">📊 통계</button>
       <button role="tab" class="tab" data-tab="gb">📖 방명록 <i class="tab-badge hidden" id="gbBadge"></i></button>
       <button role="tab" class="tab" data-tab="notice">📌 소식</button>
+      <button role="tab" class="tab" data-tab="theme">🌦️ 테마</button>
       <button role="tab" class="tab" data-tab="gen">🔗 안내 문구 만들기</button>
     </nav>
 
@@ -87,6 +88,17 @@
           <p class="hint">게임에는 「게시」 중인 최신 공지 5개까지 보여요. 노션 「캠핑장 소식」에서도 고칠 수 있어요.</p>
           <div id="noticeList" class="gb-list"></div>
         </div>
+      </div>
+    </section>
+
+    <!-- 캠핑장 테마 (날씨 · 이벤트) -->
+    <section id="tab-theme" class="panel hidden">
+      <div class="card theme-card">
+        <h2 style="margin-top:0">캠핑장 테마</h2>
+        <p class="hint">「자동」이면 서울 날씨를 15분마다 확인해서 비가 오면 우중캠핑장, 눈이 오면 설산캠핑장으로 바뀌어요. 테마를 직접 고르면 「자동」으로 돌려놓을 때까지 그 테마가 유지돼요(이벤트용). 바꾸면 접속 중인 모든 캠퍼 화면이 바로 바뀌어요.</p>
+        <div id="themeNow" class="theme-now"></div>
+        <div id="themeList" class="theme-list"></div>
+        <p class="hint" id="themeHint"></p>
       </div>
     </section>
 

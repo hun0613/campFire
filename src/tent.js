@@ -28,6 +28,9 @@ export const TENT_PROPS = [
   ...TREES.map((p) => ({ ...p, r: 0.42 })),
 ];
 for (let d = SOFA.d0 + 2; d <= SOFA.d1 - 2; d += 12) TENT_PROPS.push({ ...at(d, 2.6), r: 0.6 });
+// 크리스마스 테마일 때만: 창문 사이 벽가의 트리
+const XTREE = { ...at(268, R - 1.25) };
+TENT_PROPS.push({ ...XTREE, r: 0.75, theme: 'christmas' });
 // 문 안쪽 (텐트 안 좌표): 들어오면 여기 선다
 export const TENT_ENTRY = { x: 0, z: R - 3.0 };
 const SCREEN = { w: 1.24, h: 0.7 };
@@ -400,6 +403,42 @@ export class TentInterior {
       TENT_PROPS.push({ x: p.x, z: p.z, r: 0.3 });
     }
 
+    // ---- 🎄 크리스마스 트리 (크리스마스 테마일 때만)
+    {
+      const xg = new THREE.Group();
+      xg.position.set(XTREE.x, FLOOR, XTREE.z);
+      xg.visible = false;
+      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.34, 0.38, 14), toon('#9c3b2e')); pot.position.y = 0.19;
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.3, 8), toon('#6b4428')); trunk.position.y = 0.5;
+      xg.add(pot, trunk);
+      const layers = [[0.82, 0.85, 0.95], [0.64, 0.75, 1.5], [0.44, 0.65, 2.0]];
+      layers.forEach(([r, h, y], i) => { const c = new THREE.Mesh(new THREE.ConeGeometry(r, h, 14), toon(i % 2 ? '#28704a' : '#1f5a3a')); c.position.y = y; c.castShadow = true; xg.add(c); });
+      const ornMats = ['#d8283b', '#e8b53a', '#d9dde6', '#2f6fd8'].map((c) => toon(c, { emissive: new THREE.Color(c), emissiveIntensity: 0.3 }));
+      const og = new THREE.SphereGeometry(0.06, 8, 6);
+      layers.forEach(([r, h, y], li) => { for (let k = 0; k < 7; k++) { const a = (k / 7) * Math.PI * 2 + li, f = 0.2 + ((k * 37) % 10) / 20, rr = r * (1 - f) + 0.03; const o = new THREE.Mesh(og, ornMats[k % 4]); o.position.set(Math.cos(a) * rr, y - h / 2 + f * h, Math.sin(a) * rr); xg.add(o); } });
+      this.xLights = [];
+      const XC = ['#ff3b3b', '#ffd23b', '#3bff6e', '#3bb8ff', '#ff7ad9', '#ffa53b'];
+      const lg = new THREE.SphereGeometry(0.035, 6, 5);
+      for (let k = 0; k < 34; k++) {
+        const u = k / 34, y = 0.62 + u * 1.65, r = 0.84 * (1 - u) + 0.06, a = u * Math.PI * 2 * 4.5;
+        const m = new THREE.MeshBasicMaterial({ color: new THREE.Color(XC[k % XC.length]).multiplyScalar(2.4) });
+        const b = new THREE.Mesh(lg, m); b.position.set(Math.cos(a) * r, y, Math.sin(a) * r); xg.add(b);
+        this.xLights.push({ m, base: m.color.clone() });
+      }
+      const st = new THREE.Shape();
+      for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2 + Math.PI / 2, r = i % 2 ? 0.07 : 0.17; i ? st.lineTo(Math.cos(a) * r, Math.sin(a) * r) : st.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+      const star = new THREE.Mesh(new THREE.ExtrudeGeometry(st, { depth: 0.05, bevelEnabled: false }), glow('#ffd35c', 2.4));
+      star.position.set(0, 2.42, -0.025); xg.add(star);
+      // 선물 상자 두 개
+      [[0.55, 0.35, '#d8283b', '#ffd23b', 0.32], [-0.5, 0.45, '#2f6fd8', '#ffffff', 0.26]].forEach(([x, z, c, rb, s], i) => {
+        const box = new THREE.Mesh(new THREE.BoxGeometry(s, s * 0.85, s), toon(c)); box.position.set(x, s * 0.425, z); box.rotation.y = i * 0.8;
+        const r1 = new THREE.Mesh(new THREE.BoxGeometry(s * 1.03, s * 0.87, s * 0.18), toon(rb)); r1.position.copy(box.position); r1.rotation.y = box.rotation.y;
+        xg.add(box, r1);
+      });
+      g.add(xg);
+      this.xtree = xg;
+    }
+
     // ---- 은은한 실내등 (화로가 꺼져 있어도 어둡지 않게)
     this.light = new THREE.PointLight('#ffb36a', 0, 11, 1.6);
     this.light.position.set(0, FLOOR + 2.9, 1.2);
@@ -436,6 +475,9 @@ export class TentInterior {
     this.g.rotation.y = t.facing;
     this.g.visible = true;
   }
+
+  /** 테마 꾸밈 (크리스마스면 트리) */
+  setTheme(th) { this.xtree.visible = th.decor === 'christmas'; }
 
   /** 텐트마다 창문 불빛: 안에 사람이 있으면 더 따뜻하게 */
   setOccupancy(id, n) {
@@ -504,6 +546,7 @@ export class TentInterior {
     this.tvMat.color.copy(TV_OFF).lerp(RING, this.playing * 0.12);
     this.exitMat.color.set('#ffd27a').multiplyScalar(1.1 + 0.25 * Math.sin(t * 2));
     this.light.intensity += (1.0 - this.light.intensity) * Math.min(1, dt * 3); // 은은하게: 실내는 화로 · 무드등 · 줄전구 불빛으로
+    if (this.xtree.visible) for (let k = 0; k < 3; k++) { const L = this.xLights[Math.floor(Math.random() * this.xLights.length)]; L.m.color.copy(L.base).multiplyScalar(0.35 + Math.random() * 0.8); } // 반짝반짝
     for (const L of this.moodLights) L.intensity += (2.6 - L.intensity) * Math.min(1, dt * 3);
   }
 }

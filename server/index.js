@@ -10,6 +10,7 @@ import {
   TENTS, tentAt, tentLocal, kstDay, EGG,
 } from '../shared/config.js';
 import * as guestbook from './guestbook.js';
+import * as weather from './weather.js';
 import { handleAdmin, adminOn } from './admin.js';
 import * as board from './board.js';
 import { search, searchesLeft, nextReset, videoInfo, known, addRecent, recentList, hasKey, quotaState, restoreQuota } from './youtube.js';
@@ -43,7 +44,7 @@ server.on('request', (req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     // 클라우드(Render 등)에서는 내부 IP 대신 공개 주소를 알려준다
     const urls = PUBLIC_URL ? [PUBLIC_URL] : lanAddresses();
-    res.end(JSON.stringify({ urls, public: !!PUBLIC_URL, players: players.size }));
+    res.end(JSON.stringify({ urls, public: !!PUBLIC_URL, players: players.size, theme: weather.currentTheme() }));
   }
 });
 // 관리자 페이지: /admin → admin.html, /api/admin/* → 관리자 API
@@ -775,6 +776,7 @@ wss.on('connection', (ws) => {
     now: Date.now(),
     pits: [...pits.values()],
     tentMusic: [...tentRooms.values()].filter((r) => r.music).map((r) => ({ tent: r.id, music: r.music })),
+    theme: weather.currentTheme(),
     players: [...players.values()].map(publicPlayer),
   });
   ws.on('message', (raw) => {
@@ -856,3 +858,6 @@ server.listen(PORT, HOST, () => {
     console.log('   (네트워크 연결을 찾지 못했어요. 와이파이를 확인하세요)\n');
   }
 });
+
+// ---------------------------------------------------------------- 캠핑장 테마 (서울 날씨 · 관리자 선택)
+weather.start((theme) => broadcast({ t: 'theme', theme }));

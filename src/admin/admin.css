@@ -278,3 +278,15 @@ label.check input { width: auto; margin: 0; accent-color: var(--fire); }
 .quest-funnel li { display: grid; grid-template-columns: 22px minmax(90px, 34%) 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
 .qf-no { width: 20px; height: 20px; border-radius: 50%; background: var(--bg); color: var(--sub); font-size: 11px; font-weight: 800; display: grid; place-items: center; }
 .quest-funnel .bar-fill { background: #9b72e0; }
+
+/* 🌦️ 캠핑장 테마 */
+.theme-card { max-width: 720px; }
+.theme-now { padding: 12px 14px; border-radius: 14px; background: rgba(255, 255, 255, .04); border: 1.5px solid var(--line); margin-bottom: 14px; }
+.theme-big { font-size: 20px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.theme-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.theme-item { display: flex; gap: 10px; align-items: flex-start; text-align: left; padding: 12px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--card); color: inherit; font: inherit; cursor: pointer; }
+.theme-item:hover { border-color: var(--fire); }
+.theme-item.on { border-color: var(--fire); background: rgba(255, 140, 60, .12); }
+.theme-item .ti-icon { font-size: 26px; line-height: 1; }
+.theme-item b { display: block; font-size: 15px; }
+.theme-item small { display: block; color: var(--sub); font-size: 12.5px; margin-top: 3px; line-height: 1.4; }
