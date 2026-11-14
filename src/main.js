@@ -565,11 +565,25 @@ function openStore() {
   $('storeSay').textContent = STORE_SAY.hello[Math.floor(Math.random() * STORE_SAY.hello.length)];
   renderStore();
   $('storeModal').classList.remove('hidden');
-  state.storeOpenedAt = performance.now();
 }
 function closeStore() { $('storeModal').classList.add('hidden'); }
 $('storeClose').onclick = closeStore;
-$('storeModal').addEventListener('click', (e) => { if (e.target.id === 'storeModal' && performance.now() - (state.storeOpenedAt || 0) > 600) closeStore(); });
+/**
+ * 창 바깥(어두운 배경)을 누르면 닫기. 누르기 시작한 곳과 뗀 곳이 모두 배경일 때만 닫는다.
+ * 행동 버튼(📌 소식 등)을 누르는 순간 창이 열리면, 손을 뗄 때 생기는 클릭이 방금 열린 창의 배경에 떨어져
+ * 열리자마자 닫히곤 했다(깜빡임). 예전에는 「열고 0.6초 동안은 무시」로 막았는데, 길게 누르거나 반응이 늦으면 그대로 닫혔다.
+ */
+function closeOnBackdrop(el, close) {
+  let downOnBackdrop = false;
+  el.addEventListener('pointerdown', (e) => { downOnBackdrop = e.target === el; });
+  el.addEventListener('pointercancel', () => { downOnBackdrop = false; });
+  el.addEventListener('click', (e) => {
+    const ok = downOnBackdrop && e.target === el;
+    downOnBackdrop = false;
+    if (ok) close();
+  });
+}
+closeOnBackdrop($('storeModal'), () => closeStore());
 for (const b of $('storeModal').querySelectorAll('[data-op]')) {
   b.onclick = () => {
     const op = b.dataset.op;
@@ -682,12 +696,11 @@ function openShop(say) {
   $('shopSay').textContent = say || SHOP_SAY[0];
   renderShop();
   $('shopModal').classList.remove('hidden');
-  state.shopOpenedAt = performance.now();
   track('shop_open', { coins: state.inv.coins });
 }
 function closeShop() { $('shopModal').classList.add('hidden'); }
 $('shopClose').onclick = closeShop;
-$('shopModal').addEventListener('click', (e) => { if (e.target.id === 'shopModal' && performance.now() - (state.shopOpenedAt || 0) > 600) closeShop(); });
+closeOnBackdrop($('shopModal'), () => closeShop());
 $('shopShare').onclick = () => shareInvite();
 net.on('bought', (m) => {
   $('shopSay').textContent = `${m.powder.name} 여기 있어! 타오르는 모닥불에 뿌려 봐 ✨`;
@@ -1011,7 +1024,7 @@ net.on('musicStop', (m) => {
 });
 
 // ---------------------------------------------------------------- 방명록
-const gb$ = { items: [], page: 0, busy: false, mineIds: new Set(), newId: null, openedAt: 0 };
+const gb$ = { items: [], page: 0, busy: false, mineIds: new Set(), newId: null };
 const GB_PER_PAGE = 5;
 const gbOpen = () => !$('gbModal').classList.contains('hidden');
 function fmtDay(at) {
@@ -1021,7 +1034,6 @@ function fmtDay(at) {
 function openGuestbook() {
   $('gbErr').classList.add('hidden');
   $('gbModal').classList.remove('hidden');
-  gb$.openedAt = performance.now();
   if (!gb$.items.length) $('gbBook').innerHTML = '<div class="gb-empty">방명록을 펼치는 중…</div>';
   gb$.page = 0;
   renderGuestbook();
@@ -1059,10 +1071,7 @@ $('gbText').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeGu
 $('gbPrev').addEventListener('click', () => { gb$.page--; renderGuestbook(); });
 $('gbNext').addEventListener('click', () => { gb$.page++; renderGuestbook(); });
 $('gbClose').addEventListener('click', closeGuestbook);
-// 바깥(어두운 배경)을 누르면 닫기. 단, 모바일 버튼으로 연 직후 손을 떼며 생기는 클릭은 무시한다
-$('gbModal').addEventListener('click', (e) => {
-  if (e.target === $('gbModal') && performance.now() - gb$.openedAt > 600) closeGuestbook();
-});
+closeOnBackdrop($('gbModal'), () => closeGuestbook());
 $('gbForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const text = $('gbText').value.trim();
@@ -1099,13 +1108,12 @@ function renderBoard() {
 function openBoard() {
   renderBoard();
   $('boardModal').classList.remove('hidden');
-  board$.openedAt = performance.now();
   net.send({ t: 'boardGet' });
   track('board_open', { items: board$.items.length });
 }
 function closeBoard() { $('boardModal').classList.add('hidden'); }
 $('boardClose').onclick = closeBoard;
-$('boardModal').addEventListener('click', (e) => { if (e.target.id === 'boardModal' && performance.now() - (board$.openedAt || 0) > 600) closeBoard(); });
+closeOnBackdrop($('boardModal'), () => closeBoard());
 
 net.on('gbList', (m) => {
   gb$.items = m.items || [];
