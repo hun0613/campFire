@@ -44,6 +44,15 @@ export class Music {
     const slot = document.createElement('div');
     this.box.appendChild(slot);
     this.slot = slot;
+    // 멈춰 있는 유튜브 화면의 위(제목 · 채널)와 아래(「YouTube에서 보기」 · 공유)는 모두 youtube.com 링크라서,
+    // 폰(특히 아이폰)에서 거기를 누르면 유튜브 앱으로 넘어가 버린다. 그 띠를 투명한 막으로 덮어 가운데(▶)만 눌리게 한다
+    for (const side of ['top', 'bottom']) {
+      const sh = document.createElement('div');
+      sh.className = `tv-shield ${side}`;
+      sh.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.#nudge(); });
+      sh.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); });
+      this.box.appendChild(sh);
+    }
     this.obj = new CSS3DObject(this.box);
     this.obj.scale.setScalar(SCREEN.w / IFRAME_W);
     this.obj.visible = false;
@@ -134,6 +143,12 @@ export class Music {
       const dur = this.player.getDuration?.() || 0;
       if (at > 0 && (!dur || at < dur - 1) && Math.abs(this.player.getCurrentTime() - at) > 2.5) this.player.seekTo(at, true);
     }
+  }
+
+  /** 가운데가 아닌 곳을 눌렀을 때: 안내를 살짝 흔들어 가운데를 누르라고 알려 준다 */
+  #nudge() {
+    const h = this.hint;
+    h.classList.remove('nudge'); void h.offsetWidth; h.classList.add('nudge');
   }
 
   #load() {

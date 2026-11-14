@@ -839,7 +839,7 @@ function renderTheme(st) {
   const cur = st.themes.find((t) => t.id === st.theme) || {};
   const when = w.at ? new Date(w.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '-';
   $('themeNow').innerHTML = `<div class="theme-big">${esc(cur.icon || '')} <b>${esc(cur.name || st.theme)}</b> <span class="hint" style="margin:0">${st.mode === 'auto' ? '자동 (날씨)' : '직접 고름'}</span></div>
-    <div class="hint" style="margin:6px 0 0">${esc(st.place)} 날씨: <b>${esc(w.label || '알 수 없음')}</b>${w.temp != null ? ` · ${Math.round(w.temp)}°C` : ''} · ${when} 확인${w.error ? ` · ⚠️ 확인 실패(${esc(w.error)}), 지난 날씨를 써요` : ''}</div>`;
+    <div class="hint" style="margin:6px 0 0">${esc(st.place)} 날씨: <b>${esc(w.label || '알 수 없음')}</b>${w.temp != null ? ` · ${Math.round(w.temp)}°C` : ''} · ${when} 확인${w.source ? ` (${esc(w.source)})` : ''}${w.error ? ` · ⚠️ 확인 실패(${esc(w.error)}), 지난 날씨를 써요` : ''}</div>`;
   const items = [{ id: 'auto', icon: '🌤️', name: '자동', desc: '서울 날씨를 따라 바뀌어요 (비 → 우중, 눈 → 설산, 그 밖에는 기본)' }, ...st.themes];
   $('themeList').innerHTML = items.map((t) => `<button class="theme-item${st.mode === t.id ? ' on' : ''}" data-mode="${esc(t.id)}">
       <span class="ti-icon">${esc(t.icon)}</span><span><b>${esc(t.name)}</b><small>${esc(t.desc)}</small></span></button>`).join('');

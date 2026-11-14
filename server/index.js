@@ -638,7 +638,7 @@ function handle(ws, ctx, m) {
         if (!r.cached) broadcast(quotaMsg()); // 사용량이 바뀌었으니 모두에게 새 기록을 맡긴다
         if (r.ok) send(ws, { t: 'searchResult', q: m.q, items: r.items, left: r.left, cached: r.cached });
         else send(ws, { t: 'searchFail', text: r.text, exhausted: !!r.exhausted, resetAt: r.resetAt, left: searchesLeft() });
-      });
+      }).catch((e) => { console.error('[search]', e.message); send(ws, { t: 'searchFail', text: '검색하지 못했어요. 잠시 후 다시 시도해 주세요', left: searchesLeft() }); });
       break;
     }
     case 'music': {
@@ -719,7 +719,9 @@ function handle(ws, ctx, m) {
       break;
     }
     case 'gbOpen': { // 방명록 펼치기
-      guestbook.list().then((items) => send(ws, { t: 'gbList', items: items.slice(0, 300), saved: guestbook.notionOn() }));
+      guestbook.list()
+        .then((items) => send(ws, { t: 'gbList', items: items.slice(0, 300), saved: guestbook.notionOn() }))
+        .catch((e) => console.error('[guestbook]', e.message));
       break;
     }
     case 'gbWrite': {
@@ -771,6 +773,9 @@ wss.on('connection', (ws) => {
   sockets.add(ws);
   const ctx = { me: null };
   ctxs.set(ws, ctx);
+  // 한 사람의 연결 오류(너무 큰 메시지, 깨진 프레임, 이상한 종료 코드 등)가 서버 전체를 죽이지 않게.
+  // 'error' 처리기가 없으면 Node가 프로세스를 끝내 버려서, 접속한 모두가 끊기고 광장에서 다시 시작했다 (v1.16.1)
+  ws.on('error', (e) => console.warn('[ws] 연결 오류:', e.code || e.message));
   send(ws, {
     t: 'hello',
     now: Date.now(),
@@ -861,3 +866,7 @@ server.listen(PORT, HOST, () => {
 
 // ---------------------------------------------------------------- 캠핑장 테마 (서울 날씨 · 관리자 선택)
 weather.start((theme) => broadcast({ t: 'theme', theme }));
+
+// 마지막 안전망: 어디선가 놓친 오류가 있어도 서버(= 모두의 모닥불 · 자리)가 통째로 내려가지 않게 기록만 남긴다
+process.on('uncaughtException', (e) => console.error('[uncaught]', e));
+process.on('unhandledRejection', (e) => console.error('[unhandled]', e));
