@@ -12,6 +12,7 @@ import {
 import * as guestbook from './guestbook.js';
 import * as weather from './weather.js';
 import * as daily from './daily.js';
+import * as dailyReport from './dailyReport.js';
 import { handleAdmin, adminOn } from './admin.js';
 import * as board from './board.js';
 import { search, searchesLeft, nextReset, videoInfo, known, addRecent, recentList, hasKey, quotaState, restoreQuota } from './youtube.js';
@@ -871,6 +872,7 @@ server.listen(PORT, HOST, () => {
 // ---------------------------------------------------------------- 캠핑장 테마 (서울 날씨 · 관리자 선택)
 weather.start((theme) => broadcast({ t: 'theme', theme }));
 daily.start({ secret: SAVE_SECRET });
+dailyReport.start(); // 매일 00:05 전날 숫자 확정 · 일일 리포트 (12:00 재집계)
 // 배포 · 재시작으로 서버가 꺼질 때 오늘 숫자를 노션에 남기고 끈다 (Render는 SIGTERM을 보낸다)
 for (const sig of ['SIGTERM', 'SIGINT']) {
   process.once(sig, () => {

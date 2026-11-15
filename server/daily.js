@@ -13,7 +13,9 @@ const VERSION = '2022-06-28';
 const FLUSH_MS = 10 * 60_000;
 const P = { day: '날짜', joins: '입장', visitors: '방문자', peak: '최대 동시 접속', stay: '머문 시간(분)', lights: '불 붙이기', tags: '표식' };
 
-export const dailyOn = () => !!(TOKEN && DB);
+// 실서버에서만 켠다. 로컬 개발 서버가 .env 키로 실서버와 같은 노션 DB에 시험 접속을 섞지 않게 (시험할 때는 DAILY_STATS=1)
+const ENABLED = process.env.NODE_ENV === 'production' || process.env.DAILY_STATS === '1';
+export const dailyOn = () => !!(TOKEN && DB && ENABLED);
 
 const dayKST = (t = Date.now()) => new Date(t + 9 * 3600_000).toISOString().slice(0, 10);
 
@@ -45,9 +47,18 @@ function fromPage(pg) {
   return {
     id: pg.id,
     day: plain(pr[P.day]?.title),
+    hasServer: typeof pr[P.joins]?.number === 'number', // 서버 기록을 시작하기 전 날은 false (리포트만 있는 줄)
     joins: num(pr[P.joins]), visitors: num(pr[P.visitors]), peak: num(pr[P.peak]),
     stayMin: num(pr[P.stay]), lights: num(pr[P.lights]),
     tags: plain(pr[P.tags]?.rich_text).split(',').filter(Boolean),
+    // 일일 리포트(00:05 확정)가 채우는 칸 — 아직 없으면 null
+    ga: typeof pr['GA 방문자']?.number === 'number' ? {
+      users: pr['GA 방문자'].number, newUsers: num(pr['GA 신규']), sessions: num(pr['GA 세션']), views: num(pr['GA 조회수']),
+      events: num(pr['GA 이벤트']), engagementMin: num(pr['GA 1인당 머문 시간(분)']),
+    } : null,
+    guestbook: typeof pr['방명록']?.number === 'number' ? pr['방명록'].number : null,
+    stamp: plain(pr['집계 시각']?.rich_text),
+    url: pg.url || `https://www.notion.so/${String(pg.id).replace(/-/g, '')}`,
   };
 }
 
@@ -111,9 +122,21 @@ function roll() {
   const old = state;
   state = fresh(today);
   load(state);
-  write(old, { final: true }).catch((e) => console.warn('[daily] 어제 기록 마무리 실패:', e.message));
+  lastFinal = write(old, { final: true }).catch((e) => console.warn('[daily] 어제 기록 마무리 실패:', e.message));
   return state;
 }
+let lastFinal = Promise.resolve();
+
+/** 날짜를 넘겼으면 어제 줄 마무리(노션 쓰기)가 끝날 때까지 기다린다 — 일일 리포트가 어제 숫자를 읽기 전에 */
+export async function settle() { roll(); await lastFinal; }
+
+/** 그날 줄(노션 페이지)을 찾는다. 없으면 null */
+export async function findDay(day) {
+  if (!dailyOn()) return null;
+  const j = await notion(`databases/${DB}/query`, { page_size: 1, filter: { property: P.day, title: { equals: day } } });
+  return j.results?.[0] || null;
+}
+export { notion, DB, fromPage, dayKST };
 
 export async function flush() {
   const s = roll();

@@ -5,7 +5,6 @@
 //     GA_SA_KEY      : 서비스 계정 키 JSON (그대로 또는 base64)
 // - 같은 조회는 잠시 저장해 두고 다시 쓴다 (기간별 5분, 실시간 1분) → API 한도 · 속도 보호
 import crypto from 'node:crypto';
-import { applyCorrections } from './ga-corrections.js';
 
 const PROPERTY = String(process.env.GA_PROPERTY_ID || '').trim();
 const KEY = parseKey(process.env.GA_SA_KEY || '');
@@ -127,9 +126,6 @@ async function cached(key, ttl, fn) {
 
 /** 기간 통계 (today | 7d | 28d) */
 export function report(range = '7d') {
-  return reportRaw(range).then((r) => applyCorrections(range, r)); // GA4가 잃어버린 날의 복원값을 더한다 (ga-corrections.js)
-}
-function reportRaw(range) {
   const start = RANGES[range] || RANGES['7d'];
   return cached(`r:${range}`, 5 * 60_000, async () => {
     const dateRanges = [{ startDate: start, endDate: 'today' }];
@@ -279,4 +275,43 @@ export function realtime() {
       events: rows(ev).map((r) => ({ name: r.eventName, count: r.eventCount })).sort((x, y) => y.count - x.count),
     };
   });
+}
+
+/**
+ * 특정 하루(YYYY-MM-DD, 속성 시간대 기준)의 GA4 숫자 — 일일 리포트용 (server/dailyReport.js)
+ * 캐시하지 않는다. 실패하면 throw.
+ */
+export async function dayReport(date) {
+  const dateRanges = [{ startDate: date, endDate: date }];
+  const [a, b] = await Promise.all([
+    call('batchRunReports', {
+      requests: [
+        { dateRanges, metrics: ['activeUsers', 'newUsers', 'sessions', 'screenPageViews', 'eventCount', 'userEngagementDuration', 'engagedSessions'].map((name) => ({ name })) },
+        { dateRanges, dimensions: [{ name: 'eventName' }], metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }], dimensionFilter: inList('eventName', GAME_EVENTS) },
+        { dateRanges, dimensions: [{ name: 'sessionSource' }, { name: 'sessionMedium' }], metrics: [{ name: 'sessions' }, { name: 'activeUsers' }], orderBys: [{ metric: { metricName: 'sessions' }, desc: true }], limit: 8 },
+        { dateRanges, dimensions: [{ name: 'deviceCategory' }], metrics: [{ name: 'activeUsers' }] },
+        { dateRanges, dimensions: [{ name: 'hour' }], metrics: [{ name: 'activeUsers' }] },
+      ],
+    }),
+    call('batchRunReports', {
+      requests: [
+        { dateRanges, dimensions: [{ name: 'customEvent:quest' }], metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }], dimensionFilter: inList('eventName', ['quest_done']) },
+      ],
+    }).catch(() => ({ reports: [{}] })),
+  ]);
+  const [sum = {}] = rows(a.reports[0]);
+  const users = sum.activeUsers || 0;
+  return {
+    date,
+    summary: {
+      users, newUsers: sum.newUsers || 0, sessions: sum.sessions || 0, views: sum.screenPageViews || 0, events: sum.eventCount || 0,
+      engagementMin: users ? Math.round((sum.userEngagementDuration || 0) / users / 6) / 10 : 0, // 1인당 머문 시간(분, 소수 1자리)
+      engagedRate: sum.sessions ? (sum.engagedSessions || 0) / sum.sessions : 0,
+    },
+    events: rows(a.reports[1]).map((r) => ({ name: r.eventName, count: r.eventCount, users: r.totalUsers })).sort((x, y) => y.count - x.count),
+    sources: rows(a.reports[2]).map((r) => ({ source: `${r.sessionSource} / ${r.sessionMedium}`, sessions: r.sessions, users: r.activeUsers })),
+    devices: rows(a.reports[3]).map((r) => ({ name: r.deviceCategory, users: r.activeUsers })),
+    hours: rows(a.reports[4]).map((r) => ({ hour: Number(r.hour), users: r.activeUsers })).sort((x, y) => y.users - x.users),
+    quests: rows(b.reports[0] || {}).filter((r) => r['customEvent:quest'] && r['customEvent:quest'] !== '(not set)').map((r) => ({ name: r['customEvent:quest'], count: r.eventCount, users: r.totalUsers })),
+  };
 }
