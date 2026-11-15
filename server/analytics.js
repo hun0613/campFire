@@ -5,6 +5,7 @@
 //     GA_SA_KEY      : 서비스 계정 키 JSON (그대로 또는 base64)
 // - 같은 조회는 잠시 저장해 두고 다시 쓴다 (기간별 5분, 실시간 1분) → API 한도 · 속도 보호
 import crypto from 'node:crypto';
+import { applyCorrections } from './ga-corrections.js';
 
 const PROPERTY = String(process.env.GA_PROPERTY_ID || '').trim();
 const KEY = parseKey(process.env.GA_SA_KEY || '');
@@ -126,6 +127,9 @@ async function cached(key, ttl, fn) {
 
 /** 기간 통계 (today | 7d | 28d) */
 export function report(range = '7d') {
+  return reportRaw(range).then((r) => applyCorrections(range, r)); // GA4가 잃어버린 날의 복원값을 더한다 (ga-corrections.js)
+}
+function reportRaw(range) {
   const start = RANGES[range] || RANGES['7d'];
   return cached(`r:${range}`, 5 * 60_000, async () => {
     const dateRanges = [{ startDate: start, endDate: 'today' }];

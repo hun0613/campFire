@@ -11,6 +11,7 @@ import {
 } from '../shared/config.js';
 import * as guestbook from './guestbook.js';
 import * as weather from './weather.js';
+import * as daily from './daily.js';
 import { handleAdmin, adminOn } from './admin.js';
 import * as board from './board.js';
 import { search, searchesLeft, nextReset, videoInfo, known, addRecent, recentList, hasKey, quotaState, restoreQuota } from './youtube.js';
@@ -369,7 +370,7 @@ function handle(ws, ctx, m) {
       wood: saved?.wood ?? 0, stored: saved?.stored ?? 0, chops: saved?.chops ?? 0, powders: saved?.powders ?? [], quest: saved?.quest ?? validQuest(null),
       coins: saved?.coins ?? 0, coinDay: saved?.coinDay ?? '', shareDay: saved?.shareDay ?? '', eggDay: saved?.eggDay ?? '',
       tag: tagOf(pid), tent: null,
-      lastChop: 0, lastChat: 0,
+      lastChop: 0, lastChat: 0, joinedAt: Date.now(),
     };
     refreshCoins(p);
     // 방금 전까지 있던 자리로 (새로고침)
@@ -381,6 +382,7 @@ function handle(ws, ctx, m) {
     ctx.me = p;
     p.ws = ws; // 퀘스트 진행을 이 사람에게 바로 알려 주려고 (저장 · 공개되지 않음)
     players.set(p.id, p);
+    daily.join(pid, players.size);
     // 내가 쌓아둔 장작더미는 다시 내 것으로
     if (pid) {
       for (const [pitId, key] of pitOwnerKey) {
@@ -558,6 +560,7 @@ function handle(ws, ctx, m) {
       pit.state = 'lit';
       pit.litAt = now;
       pit.endsAt = now + CFG.FIRE_DURATION;
+      daily.light();
       broadcast({ t: 'pit', pit });
       broadcast({ t: 'act', id: me.id, a: 'light', pit: pit.id }, ws);
       bump(me, 'light');
@@ -795,6 +798,7 @@ wss.on('connection', (ws) => {
     const me = ctx.me;
     if (!me) return;
     remember(me);
+    daily.leave(Date.now() - me.joinedAt);
     leaveSeat(me);
     const tr = me.tent && tentRooms.get(me.tent);
     if (tr?.music?.by === me.id) { clearMusic(tr, 'left'); syncRoom(tr); }
@@ -866,6 +870,14 @@ server.listen(PORT, HOST, () => {
 
 // ---------------------------------------------------------------- 캠핑장 테마 (서울 날씨 · 관리자 선택)
 weather.start((theme) => broadcast({ t: 'theme', theme }));
+daily.start({ secret: SAVE_SECRET });
+// 배포 · 재시작으로 서버가 꺼질 때 오늘 숫자를 노션에 남기고 끈다 (Render는 SIGTERM을 보낸다)
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.once(sig, () => {
+    const t = setTimeout(() => process.exit(0), 5000);
+    daily.flush().finally(() => { clearTimeout(t); process.exit(0); });
+  });
+}
 
 // 마지막 안전망: 어디선가 놓친 오류가 있어도 서버(= 모두의 모닥불 · 자리)가 통째로 내려가지 않게 기록만 남긴다
 process.on('uncaughtException', (e) => console.error('[uncaught]', e));

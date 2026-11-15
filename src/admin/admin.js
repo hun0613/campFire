@@ -268,8 +268,29 @@ const dur = (sec) => {
   return m < 60 ? `${m}분${s ? ` ${s}초` : ''}` : `${Math.floor(m / 60)}시간 ${m % 60}분`;
 };
 
+// 서버가 직접 센 일별 기록 (노션 「일별 이용 기록」). GA와 따로라 GA가 빠지거나 실패해도 보인다
+async function loadDaily() {
+  try {
+    const d = await api('daily');
+    if (!d.on) { $('dailyBody').innerHTML = ''; return; }
+    const rows = d.rows || [];
+    const avg = (r) => (r.joins ? dur(Math.round((r.stayMin * 60) / r.joins)) : '–');
+    const dayLabel = (s) => { const [, m, dd] = s.split('-'); const w = '일월화수목금토'[new Date(`${s}T00:00:00+09:00`).getUTCDay()]; return `${Number(m)}/${Number(dd)} (${w})`; };
+    $('dailyBody').innerHTML = `<div class="card">
+      <h2>🗒️ 서버 기록 <small>최근 14일 · 한국 날짜</small>${help('게임 서버가 직접 센 숫자예요. GA4와 따로 세기 때문에 광고 차단 앱을 쓰는 사람도 빠지지 않고, GA4가 하루를 놓쳐도 남아요. 노션 「일별 이용 기록」에 10분마다 저장돼요. 방문자는 같은 기기를 하루 1명으로, 입장은 새로 고침 · 재접속까지 모두 세요. 이 기록은 v1.16.3부터 쌓여요.')}</h2>
+      ${rows.length ? `<div class="daily-wrap"><table class="daily">
+        <thead><tr><th>날짜</th><th>방문자</th><th>입장</th><th>최대 동시</th><th>1회 머문 시간</th><th>불 붙이기</th></tr></thead>
+        <tbody>${rows.map((r, i) => `<tr${i === 0 ? ' class="today"' : ''}><td>${esc(dayLabel(r.day))}${i === 0 ? ' <small>오늘</small>' : ''}</td><td>${num(r.visitors)}명</td><td>${num(r.joins)}번</td><td>${num(r.peak)}명</td><td>${avg(r)}</td><td>${num(r.lights)}번</td></tr>`).join('')}</tbody>
+      </table></div>` : '<p class="hint">아직 쌓인 기록이 없어요.</p>'}
+    </div>`;
+  } catch (e) {
+    if (e.message !== 'unauthorized') $('dailyBody').innerHTML = `<div class="card err">서버 기록을 불러오지 못했어요: ${esc(e.message)}</div>`;
+  }
+}
+
 async function loadStats() {
   statsState.loaded = true;
+  loadDaily();
   $('statsBody').innerHTML = '<div class="empty">GA4에서 불러오는 중…</div>';
   try {
     const [d, st] = await Promise.all([api(`analytics?range=${statsState.range}`), api('stats').catch(() => null)]);
@@ -446,7 +467,10 @@ function renderStats$(d) {
   const joins = r.events.find((e) => e.name === 'game_join');
   const joinRate = s.users ? Math.min(1, (joins?.users || 0) / s.users) : 0;
 
-  $('statsBody').innerHTML = `
+  // GA4가 잃어버린 날을 다른 기록으로 복원해 더했을 때 알린다 (server/ga-corrections.js)
+  const fix = (r.corrections || []).map((c) => `<div class="ga-fix">🩹 ${esc(c.note)}</div>`).join('');
+
+  $('statsBody').innerHTML = `${fix}
     <div class="stats-grid">
       <div class="card live">
         <h2><span class="pulse"></span>지금</h2>

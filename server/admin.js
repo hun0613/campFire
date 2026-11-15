@@ -9,6 +9,7 @@ import * as ga from './analytics.js';
 import * as board from './board.js';
 import { releaseNotes } from './releases.js';
 import * as weather from './weather.js';
+import * as daily from './daily.js';
 
 const PASSWORD = process.env.ADMIN_PASSWORD || '';
 const SECRET = crypto.createHash('sha256').update(`admin:${PASSWORD}:${process.env.SAVE_SECRET || ''}`).digest();
@@ -115,6 +116,7 @@ export async function handleAdmin(req, res, getStats, hooks = {}) {
       return true;
     }
     // 캠핑장 소식 (게임 속 게시판 공지)
+    if (route === 'daily' && req.method === 'GET') { send(res, 200, await daily.recent(14)); return true; }
     if (route === 'theme' && req.method === 'GET') { send(res, 200, weather.status()); return true; }
     if (route === 'theme' && req.method === 'POST') {
       const { mode } = await readJson(req);
