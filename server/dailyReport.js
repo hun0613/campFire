@@ -1,5 +1,5 @@
 // 일일 리포트: 매일 00:05(한국 시간)에 전날 숫자를 확정해 노션 「일별 이용 기록 · 일일 리포트」의 그날 줄에 저장하고,
-// 그 줄(페이지) 본문에 하루 리포트를 쓴다. 12:00에 GA4를 한 번 더 집계하되 숫자가 줄었으면 덮어쓰지 않는다
+// 그 줄(페이지) 본문에 리포트 데이터(JSON)를 넣는다. 사람이 보는 리포트는 관리실에서 HTML로 그린다 (reportHtml.js). 12:00에 GA4를 한 번 더 집계하되 숫자가 줄었으면 덮어쓰지 않는다
 // (GA4가 나중에 하루치를 잃어도 — 2026-11-12처럼 — 먼저 찍어 둔 값이 남게).
 // - 서버 숫자: daily.js 가 센 방문자 · 입장 · 최대 동시 접속 · 머문 시간 · 불 붙이기
 // - GA4 숫자: 방문자 · 신규 · 세션 · 조회수 · 이벤트 · 1인당 머문 시간, 게임 행동 · 유입 경로 · 기기 · 시간대 · 루미의 부탁
@@ -9,36 +9,40 @@ import * as daily from './daily.js';
 import * as ga from './analytics.js';
 import * as guestbook from './guestbook.js';
 
-const LABEL = {
-  game_join: '🏕️ 입장', wood_chop: '🪓 장작 패기', wood_store: '📦 장작 창고', fire_light: '🔥 불 붙이기', fire_sit: '🪵 모닥불 앉기', fire_stand: '🚶 일어나기',
-  powder_use: '✨ 마법 가루', guestbook_write: '📖 방명록', music_play: '🎶 노래 틀기', view_toggle: '👁️ 시점 전환', stargaze: '🌌 하늘 보기', board_open: '📌 게시판 열기', quest_done: '💜 루미의 부탁', share: '💌 친구 초대',
-  shop_open: '✨ 루미 공방 열기', powder_buy: '🪙 가루 사기', coin_share_bonus: '🪙 공유 보너스', tent_enter: '🏕️ 텐트 들어가기', tent_sit: '🛋️ 텐트 소파', block: '🚫 차단', fire_feed: '🪵 장작 더 넣기',
-};
-const DEVICE = { mobile: '모바일', desktop: 'PC', tablet: '태블릿' };
-const WEEK = '일월화수목금토';
 const FIRST_AT = { h: 0, m: 5 };  // 확정
 const SECOND_AT = { h: 12, m: 0 }; // 재집계
 
 const kstNow = () => new Date(Date.now() + 9 * 3600_000); // getUTC* 로 한국 시각을 읽는다
 const dayOf = (t) => new Date(t + 9 * 3600_000).toISOString().slice(0, 10);
-const label = (day) => { const [y, m, d] = day.split('-').map(Number); return `${m}/${d} (${WEEK[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]})`; };
 const stampNow = () => { const k = kstNow(); return `${k.getUTCMonth() + 1}/${k.getUTCDate()} ${String(k.getUTCHours()).padStart(2, '0')}:${String(k.getUTCMinutes()).padStart(2, '0')}`; };
-const fmt = (n) => Number(n || 0).toLocaleString('ko-KR');
-const diff = (a, b) => (b == null || a == null ? '' : a === b ? ' (전날과 같음)' : ` (전날 대비 ${a > b ? '+' : ''}${fmt(a - b)})`);
 
-// ---------------------------------------------------------------- 노션 블록 만들기
-const txt = (content, bold = false) => ({ type: 'text', text: { content: String(content) }, annotations: bold ? { bold: true } : undefined });
-const h2 = (t) => ({ object: 'block', type: 'heading_2', heading_2: { rich_text: [txt(t)] } });
-const para = (...parts) => ({ object: 'block', type: 'paragraph', paragraph: { rich_text: parts.map((p) => (typeof p === 'string' ? txt(p) : p)) } });
-const bullet = (...parts) => ({ object: 'block', type: 'bulleted_list_item', bulleted_list_item: { rich_text: parts.map((p) => (typeof p === 'string' ? txt(p) : p)) } });
-const callout = (emoji, t) => ({ object: 'block', type: 'callout', callout: { icon: { type: 'emoji', emoji }, rich_text: [txt(t)] } });
-const table = (head, body) => ({
-  object: 'block', type: 'table',
-  table: {
-    table_width: head.length, has_column_header: true, has_row_header: false,
-    children: [head, ...body].map((cells) => ({ type: 'table_row', table_row: { cells: cells.map((c) => [txt(c)]) } })),
-  },
-});
+// 날짜별 특이사항 (리포트 맨 위 안내)
+const NOTES = {
+  '2026-11-12': 'GA4 일시 소실 후 복구된 날이에요. 당일 집계된 하루치가 Google의 일일 처리 과정에서 11/13~11/15 동안 0으로 보였다가, 11/15에 GA4가 되살렸어요 (Google 커뮤니티에 신고함). 서버 기록은 v1.16.3 이전이라 없어요.',
+};
+
+// ---------------------------------------------------------------- 노션: 리포트 데이터(JSON)를 그날 줄 본문에 코드 블록으로 보관
+// (Render 무료 서버는 디스크가 재시작 때마다 지워져 파일로 남길 수 없다. HTML은 관리실에서 열 때 이 데이터로 그린다)
+const DATA_CAPTION = 'report-data';
+function dataBlocks(snap) {
+  const json = JSON.stringify(snap);
+  const chunks = [];
+  for (let i = 0; i < json.length && chunks.length < 100; i += 1900) chunks.push({ type: 'text', text: { content: json.slice(i, i + 1900) } });
+  return [
+    { object: 'block', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: '📅 하루 리포트는 관리실 → 통계 → 🗒️ 서버 기록 → 「보기」에서 HTML로 열려요. 아래는 리포트 데이터예요 (지우지 마세요).' } }] } },
+    { object: 'block', type: 'code', code: { language: 'json', caption: [{ type: 'text', text: { content: DATA_CAPTION } }], rich_text: chunks } },
+  ];
+}
+
+/** 그날 리포트 데이터(스냅숏)를 노션에서 읽는다. 없으면 null */
+export async function getSnapshot(day) {
+  const page = await daily.findDay(day);
+  if (!page) return null;
+  const kids = await daily.notion(`blocks/${page.id}/children?page_size=100`, null, 'GET');
+  const code = (kids.results || []).find((b) => b.type === 'code' && (b.code.caption || []).some((c) => c.plain_text === DATA_CAPTION));
+  if (!code) return null;
+  try { return JSON.parse(code.code.rich_text.map((t) => t.plain_text).join('')); } catch { return null; }
+}
 
 // ---------------------------------------------------------------- 모으기
 async function guestbookCount(day) {
@@ -54,43 +58,6 @@ async function collect(day) {
   const prevPage = await daily.findDay(prevDay).catch(() => null);
   const prev = prevPage ? daily.fromPage(prevPage) : null;
   return { day, page, server, ga: gaData, gaError, guestbook: await guestbookCount(day), prev };
-}
-
-function buildBlocks(r, stamp) {
-  const s = r.server, g = r.ga, p = r.prev;
-  const out = [callout('🔥', `${label(r.day)} 불멍 캠핑장 하루 리포트 · ${stamp}`)];
-
-  out.push(h2('한눈에 보기'));
-  if (s && (s.joins || s.visitors)) {
-    out.push(bullet(txt('방문자 ', true), `${fmt(s.visitors)}명${diff(s.visitors, p?.visitors)} · 입장 ${fmt(s.joins)}번 · 최대 동시 접속 ${fmt(s.peak)}명`));
-    out.push(bullet(txt('머문 시간 ', true), `1회 평균 ${s.joins ? Math.round(s.stayMin / s.joins) : 0}분 (합계 ${fmt(s.stayMin)}분) · 불 붙이기 ${fmt(s.lights)}번`));
-  } else out.push(bullet('서버 기록: 그날 입장이 없거나, 서버 기록을 시작하기 전(v1.16.3 이전)이에요.'));
-  if (g) {
-    out.push(bullet(txt('GA4 ', true), `방문자 ${fmt(g.summary.users)}명 (신규 ${fmt(g.summary.newUsers)})${diff(g.summary.users, p?.ga?.users)} · 세션 ${fmt(g.summary.sessions)} · 조회수 ${fmt(g.summary.views)} · 이벤트 ${fmt(g.summary.events)}`));
-    out.push(bullet(txt('참여 ', true), `1인당 머문 시간 ${g.summary.engagementMin}분 · 몰입 세션 ${Math.round(g.summary.engagedRate * 100)}%`));
-  } else out.push(bullet(`GA4: ${r.gaError ? `조회 실패 (${r.gaError})` : '연결 안 됨'}`));
-  if (r.guestbook != null) out.push(bullet(txt('방명록 ', true), `${fmt(r.guestbook)}개`));
-
-  if (g?.events?.length) {
-    out.push(h2('게임 행동'));
-    out.push(table(['행동', '횟수', '사람'], g.events.filter((e) => e.count).map((e) => [LABEL[e.name] || e.name, fmt(e.count), `${fmt(e.users)}명`])));
-  }
-  if (g?.quests?.length) {
-    out.push(h2('루미의 부탁'));
-    out.push(table(['부탁', '해낸 사람'], g.quests.map((q) => [q.name, `${fmt(q.users)}명`])));
-  }
-  if (g?.sources?.length) {
-    out.push(h2('유입 경로'));
-    out.push(table(['경로', '세션', '사람'], g.sources.map((x) => [x.source, fmt(x.sessions), `${fmt(x.users)}명`])));
-  }
-  if (g) {
-    out.push(h2('기기 · 시간대'));
-    if (g.devices.length) out.push(bullet(g.devices.map((d) => `${DEVICE[d.name] || d.name} ${fmt(d.users)}명`).join(' · ')));
-    const top = g.hours.filter((h) => h.users).slice(0, 3);
-    if (top.length) out.push(bullet(`많이 온 시간: ${top.map((h) => `${h.hour}시 (${fmt(h.users)}명)`).join(' · ')}`));
-  }
-  out.push(para(txt('서버 숫자는 게임 서버가 직접 센 값이라 광고 차단 사용자도 포함돼요. GA4 숫자는 자정 직후 집계라 늦게 반영되는 기록이 빠질 수 있어 12:00에 한 번 더 집계하고, 숫자가 줄면 먼저 찍어 둔 값을 유지해요.')));
-  return out;
 }
 
 // ---------------------------------------------------------------- 저장
@@ -123,7 +90,12 @@ export async function build(day, stage = '확정') {
   let pageId = r.page?.id;
   if (pageId) await daily.notion(`pages/${pageId}`, { properties }, 'PATCH');
   else pageId = (await daily.notion('pages', { parent: { database_id: daily.DB }, properties })).id;
-  if (!kept) await replaceBody(pageId, buildBlocks(r, stamp));
+  if (!kept) {
+    const sv = r.server && r.server.hasServer !== false ? { hasServer: true, visitors: r.server.visitors, joins: r.server.joins, peak: r.server.peak, stayMin: r.server.stayMin, lights: r.server.lights } : null;
+    const snap = { v: 1, day, stamp, note: NOTES[day] || null, server: sv, ga: r.ga, gaError: r.gaError, guestbook: r.guestbook,
+      prev: { visitors: r.prev?.hasServer ? r.prev.visitors : null, gaUsers: r.prev?.ga ? r.prev.ga.users : null } };
+    await replaceBody(pageId, dataBlocks(snap));
+  }
   console.log(`[report] ${day} ${stage}${kept ? ' (GA 감소, 이전 값 유지)' : ''}`);
   return { day, stage, kept, ga: !!r.ga, server: !!r.server };
 }

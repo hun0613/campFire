@@ -299,4 +299,5 @@ table.daily th:first-child, table.daily td:first-child { text-align: left; }
 table.daily th { font-weight: 600; opacity: 0.7; font-size: 12px; }
 table.daily tr.today td { font-weight: 700; }
 table.daily small { opacity: 0.6; font-weight: 400; }
-table.daily a { color: #ffb36b; font-weight: 600; text-decoration: none; }
+table.daily .rep-open { background: none; border: 1px solid rgba(255,179,107,.5); color: #ffb36b; font: 600 12px inherit; border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+table.daily .rep-open:hover { background: rgba(255,179,107,.12); }

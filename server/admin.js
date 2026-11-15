@@ -11,6 +11,7 @@ import { releaseNotes } from './releases.js';
 import * as weather from './weather.js';
 import * as daily from './daily.js';
 import * as dailyReport from './dailyReport.js';
+import { renderReport } from './reportHtml.js';
 
 const PASSWORD = process.env.ADMIN_PASSWORD || '';
 const SECRET = crypto.createHash('sha256').update(`admin:${PASSWORD}:${process.env.SAVE_SECRET || ''}`).digest();
@@ -118,6 +119,14 @@ export async function handleAdmin(req, res, getStats, hooks = {}) {
     }
     // 캠핑장 소식 (게임 속 게시판 공지)
     if (route === 'daily' && req.method === 'GET') { send(res, 200, await daily.recent(14)); return true; }
+    if (route === 'report-html' && req.method === 'GET') { // 일일 리포트 HTML (?day=YYYY-MM-DD)
+      const day = url.searchParams.get('day') || '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) { send(res, 400, { error: '잘못된 날짜' }); return true; }
+      const snap = await dailyReport.getSnapshot(day);
+      if (!snap) { send(res, 404, { error: '그날 리포트가 아직 없어요' }); return true; }
+      send(res, 200, { day, html: renderReport(snap) });
+      return true;
+    }
     if (route === 'report' && req.method === 'POST') { // 일일 리포트를 지금 다시 만들기 (?day=YYYY-MM-DD)
       const day = url.searchParams.get('day') || '';
       if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) { send(res, 400, { error: '잘못된 날짜' }); return true; }
