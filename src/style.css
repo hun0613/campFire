@@ -848,6 +848,8 @@ body.seated #powders { flex-wrap: nowrap; overflow-x: auto; overflow-y: visible;
 body.seated #powders::-webkit-scrollbar { display: none; }
 body.seated #powders .powder { flex: none; }
 body.touch.seated #powders { max-width: min(62vw, 360px); }
+/* 가루 줄이 오른쪽 아래 시점 버튼(일어나기 왼쪽, right 116px · 40px) 앞에서 멈추게. 넘치는 가루는 옆으로 넘겨 본다 (예전엔 가루가 많으면 시점 버튼 밑까지 깔려 시점을 바꾸려다 가루를 뿌렸다) */
+body.touch.seated #powders { max-width: min(62vw, 360px, calc(100vw - 192px - env(safe-area-inset-left) - env(safe-area-inset-right))); }
 /* 넘치면 오른쪽 끝을 흐리게 해서 옆에 더 있다는 걸 알린다 */
 /* 넘치면 더 있는 쪽 끝을 부드럽게 흐린다 (왼쪽은 밀어서 지나간 뒤에만) */
 body.seated #powders { --fl: 0px; --fr: 0px; padding: 10px 10px 12px; margin: 0 -10px -12px; scroll-behavior: smooth; }
