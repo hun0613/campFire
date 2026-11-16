@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import {
-  CFG, FIRES, seatsOf, STUMPS, NPC, KEEPER, QUESTS, LEGEND_POWDERS, legendPowder, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
+  CFG, FIRES, seatsOf, STUMPS, EMOTES, NPC, KEEPER, QUESTS, LEGEND_POWDERS, legendPowder, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
   TENTS, tentAt, tentLocal, kstDay, EGG,
 } from '../shared/config.js';
 import * as guestbook from './guestbook.js';
@@ -753,6 +753,18 @@ function handle(ws, ctx, m) {
           send(ws, { t: 'gbFail', text: '방명록을 저장하지 못했어요. 잠시 후 다시 시도해 주세요' });
         })
         .finally(() => { me.gbPending = false; });
+      break;
+    }
+    case 'emote': { // 감정 표현: 채팅처럼 텐트 안이면 그 텐트 안에만. 1.2초에 한 번
+      const e = EMOTES.find((x) => x.id === m.e);
+      if (!e || now - (me.lastEmote || 0) < 1200) return;
+      me.lastEmote = now;
+      updateTent(me, ws);
+      const msg = { t: 'emote', id: me.id, e: e.id };
+      if (me.tent) {
+        const data = JSON.stringify(msg);
+        for (const q of players.values()) if (q !== me && q.tent === me.tent && q.ws?.readyState === 1) q.ws.send(data);
+      } else broadcast(msg, ws);
       break;
     }
     case 'chat': {

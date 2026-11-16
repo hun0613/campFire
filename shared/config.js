@@ -178,3 +178,15 @@ export function legendPowder(effect) {
   const L = LEGEND_POWDERS[effect];
   return { id: Math.random().toString(36).slice(2, 10), color: L.color, effect, name: L.name, legend: true };
 }
+
+// 감정 표현: 머리 위 이모지 + 몸짓 (서버는 id 만 확인해 전달한다)
+export const EMOTES = [
+  { id: 'wave', e: '👋', label: '인사' },
+  { id: 'happy', e: '😊', label: '좋아요' },
+  { id: 'laugh', e: '😂', label: '웃겨요' },
+  { id: 'love', e: '🥰', label: '사랑해요' },
+  { id: 'clap', e: '👏', label: '박수' },
+  { id: 'wow', e: '😮', label: '놀라워요' },
+  { id: 'sad', e: '😢', label: '슬퍼요' },
+  { id: 'sleepy', e: '😴', label: '졸려요' },
+];

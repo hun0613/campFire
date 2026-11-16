@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 const PROPERTY = String(process.env.GA_PROPERTY_ID || '').trim();
 const KEY = parseKey(process.env.GA_SA_KEY || '');
 const API = `https://analyticsdata.googleapis.com/v1beta/properties/${PROPERTY}`;
-const GAME_EVENTS = ['game_join', 'wood_chop', 'wood_store', 'fire_light', 'fire_sit', 'fire_stand', 'powder_use', 'guestbook_write', 'music_play', 'view_toggle', 'stargaze', 'board_open', 'quest_done', 'share', 'shop_open', 'powder_buy', 'coin_share_bonus', 'tent_enter', 'tent_sit', 'block', 'fire_feed'];
+const GAME_EVENTS = ['game_join', 'wood_chop', 'wood_store', 'fire_light', 'fire_sit', 'fire_stand', 'powder_use', 'guestbook_write', 'music_play', 'view_toggle', 'stargaze', 'board_open', 'quest_done', 'share', 'shop_open', 'powder_buy', 'coin_share_bonus', 'tent_enter', 'tent_sit', 'block', 'fire_feed', 'emote'];
 
 function parseKey(raw) {
   const s = String(raw).trim();
@@ -130,7 +130,7 @@ export function report(range = '7d') {
   return cached(`r:${range}`, 5 * 60_000, async () => {
     const dateRanges = [{ startDate: start, endDate: 'today' }];
     const trendRange = [{ startDate: '13daysAgo', endDate: 'today' }];
-    const [a, b, c, h, d] = await Promise.all([
+    const [a, b, c, h, d, em] = await Promise.all([
       call('batchRunReports', {
         requests: [
           // 0 요약
@@ -180,6 +180,12 @@ export function report(range = '7d') {
           { dateRanges, dimensions: [{ name: 'customEvent:method' }], metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }], dimensionFilter: inList('eventName', ['share']) },
         ],
       }).catch((e) => ({ error: e.message })),
+      // 😊 감정별 (v1.18 맞춤 측정기준 emote. 등록 직후엔 실패할 수 있어 부탁 세부와 따로 조회)
+      call('batchRunReports', {
+        requests: [
+          { dateRanges, dimensions: [{ name: 'customEvent:emote' }], metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }], dimensionFilter: inList('eventName', ['emote']) },
+        ],
+      }).catch((e) => ({ error: e.message })),
     ]);
 
     // 부탁별 완료 · 창고 동작 · 공유 방식 ('(not set)'은 맞춤 측정기준 등록 전 데이터)
@@ -189,6 +195,8 @@ export function report(range = '7d') {
       store: pick(d.reports[1], 'customEvent:op'),
       share: pick(d.reports[2], 'customEvent:method'),
     };
+    extras.emotes = em.error ? null : pick(em.reports[0], 'customEvent:emote');
+    if (em.error) extras.emoteError = em.error;
 
     // 0~23시를 빈 시간까지 채운다. 요일은 0=일요일
     let hours = null, weekdays = null, timeZone = null;

@@ -1,5 +1,5 @@
 // 캠핑장 관리실: 방명록 답글 · 삭제, UTM 링크와 채널별 안내 문구 만들기
-import { QUESTS } from '../../shared/config.js';
+import { QUESTS, EMOTES } from '../../shared/config.js';
 const $ = (id) => document.getElementById(id);
 const BASE = 'https://campfire-game.onrender.com/';
 const TOKEN_KEY = 'campfire-admin-token';
@@ -254,7 +254,7 @@ const statsState = { range: '7d', loaded: false, timer: null };
 const EVENT_LABEL = {
   game_join: '🏕️ 입장', wood_chop: '🪓 장작 패기', wood_store: '📦 장작 창고', fire_light: '🔥 불 붙이기', fire_sit: '🪵 모닥불 앉기', fire_stand: '🚶 일어나기',
   powder_use: '✨ 마법 가루', guestbook_write: '📖 방명록', music_play: '🎶 노래 틀기', view_toggle: '👁️ 시점 전환', stargaze: '🌌 하늘 보기', board_open: '📌 게시판 열기', quest_done: '💜 루미의 부탁', share: '💌 친구 초대',
-  shop_open: '✨ 루미 공방 열기', powder_buy: '🪙 가루 사기', coin_share_bonus: '🪙 공유 보너스', tent_enter: '🏕️ 텐트 들어가기', tent_sit: '🛋️ 텐트 소파', block: '🚫 차단', fire_feed: '🪵 장작 더 넣기',
+  shop_open: '✨ 루미 공방 열기', powder_buy: '🪙 가루 사기', coin_share_bonus: '🪙 공유 보너스', tent_enter: '🏕️ 텐트 들어가기', tent_sit: '🛋️ 텐트 소파', block: '🚫 차단', fire_feed: '🪵 장작 더 넣기', emote: '😊 감정 표현',
 };
 const DEVICE_LABEL = { mobile: '📱 모바일', desktop: '💻 PC', tablet: '📟 태블릿' };
 const NVR_LABEL = { new: '🌱 처음 온 사람', returning: '🔁 다시 온 사람' };
@@ -436,9 +436,10 @@ function hourSection(r) {
 }
 
 // 💜 루미의 부탁: 부탁 10개를 순서대로, 각각 몇 명이 해냈는지 (어디서 멈추는지 보이게)
+const EMOTE_LABEL = Object.fromEntries(EMOTES.map((e) => [e.id, `${e.e} ${e.label}`]));
 function questSection(r) {
   const ev = (n) => r.events.find((e) => e.name === n) || { count: 0, users: 0 };
-  const done = ev('quest_done'), store = ev('wood_store'), share = ev('share');
+  const done = ev('quest_done'), store = ev('wood_store'), share = ev('share'), emo = ev('emote');
   const x = r.extras || {};
   const waiting = '<p class="hint">⏳ 세부 정보는 GA4에 맞춤 측정기준을 등록한 뒤 들어온 데이터부터 보여요. 하루쯤 지나면 채워져요.</p>';
   let body;
@@ -467,6 +468,8 @@ function questSection(r) {
           ${mini(x.error ? [] : x.store, STORE, x.error ? '–' : store.count ? '⏳ 데이터가 쌓이는 중이에요' : '아직 창고를 쓴 사람이 없어요')}
           <p class="hint" style="margin:14px 0 0">💌 친구 초대 방식${help('💌 버튼을 눌러 휴대폰 공유 창으로 보냈는지, PC에서 링크를 복사했는지예요. 실제로 들어온 친구 수는 「유입 경로」의 friend / share 에서 봐요.')}</p>
           ${mini(x.error ? [] : x.share, SHARE, x.error ? '–' : share.count ? '⏳ 데이터가 쌓이는 중이에요' : '아직 초대 링크를 보낸 사람이 없어요')}
+          <p class="hint" style="margin:14px 0 0">😊 감정 표현 <b>${num(emo.count)}번</b> · ${num(emo.users)}명${help('캠퍼들이 어떤 감정 표현을 많이 썼는지예요. 맞춤 측정기준(emote)을 등록한 날부터 쌓여요.')}</p>
+          ${mini(x.emotes || [], EMOTE_LABEL, x.emoteError ? '⏳ GA4에 방금 등록한 측정기준이라 하루쯤 지나면 보여요' : emo.count ? '⏳ 데이터가 쌓이는 중이에요' : '아직 감정 표현을 쓴 사람이 없어요')}
         </div>
       </div>
     </div>`;

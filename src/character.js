@@ -58,6 +58,8 @@ const easeIn = (t) => t * t * t;
 const lerp = (a, b, t) => a + (b - a) * t;
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 // 고개 돌리기: 상체와 머리가 함께 돌아 정면에서 좌우 LOOK_MAX 까지 (머리 75% · 상체 25%)
+const EMOTE_ACTS = new Set(['wave', 'hop', 'laugh', 'love', 'clap', 'wow', 'sad', 'sleepy']);
+const WORK_ACTS = new Set(['chop', 'place', 'gather', 'throw', 'light']); // 하던 일을 보는 동작
 const LOOK_MAX = 1.4; // 약 80°
 const LOOK_SWITCH = Math.PI - 0.4; // 바로 뒤(±180°) 근처에서는 고른 어깨를 유지하다가, 이만큼 넘어가면 반대쪽 어깨로
 
@@ -251,6 +253,9 @@ export class Character {
     this.labelEl.className = 'char-label';
     this.bubbleWrap = document.createElement('div');
     this.labelEl.appendChild(this.bubbleWrap);
+    this.emoteEl = document.createElement('div'); // 감정 표현 이모지 (라벨 맨 위에 떠오른다)
+    this.emoteEl.className = 'emote-pop';
+    this.labelEl.appendChild(this.emoteEl);
     if (kind === 'npc') {
       this.markEl = document.createElement('div');
       this.markEl.className = 'npc-mark';
@@ -350,12 +355,25 @@ export class Character {
 
   /** 'chop' | 'throw' | 'wave' 같은 단발 동작 */
   play(name, opts = {}) {
-    const dur = { chop: 0.62, throw: 0.55, wave: 1.2, light: 0.7, place: 1.0, gather: 0.6 }[name] || 0.5;
+    const dur = { chop: 0.62, throw: 0.55, wave: 1.2, light: 0.7, place: 1.0, gather: 0.6, hop: 0.9, laugh: 1.5, love: 1.6, clap: 1.4, wow: 1.0, sad: 2.0, sleepy: 2.2 }[name] || 0.5;
     this.action = { name, t: 0, dur, impact: opts.onImpact, done: opts.onDone, hit: false };
     if (name === 'chop') this.axe.visible = true;
   }
 
   setAnim(a) { this.anim = a; }
+
+  /** 감정 표현: 머리 위 이모지 + 몸짓 (장작 패기처럼 일하는 중이면 이모지만) */
+  emote(id, emoji) {
+    const el = this.emoteEl;
+    el.textContent = emoji;
+    el.classList.remove('on');
+    void el.offsetWidth; // 같은 감정을 연달아 눌러도 처음부터 다시
+    el.classList.add('on');
+    clearTimeout(this._emoteT);
+    this._emoteT = setTimeout(() => el.classList.remove('on'), 2700);
+    const anim = { wave: 'wave', happy: 'hop', laugh: 'laugh', love: 'love', clap: 'clap', wow: 'wow', sad: 'sad', sleepy: 'sleepy' }[id];
+    if (anim && (!this.action || EMOTE_ACTS.has(this.action.name))) this.play(anim);
+  }
 
   /** 보는 방향: yaw 는 월드 기준(캐릭터 ry 와 같은 기준), pitch 는 위(+) · 아래(-). null 이면 정면 */
   setLook(yaw, pitch = 0) { this.lookYaw = yaw; this.lookPitch = pitch; }
@@ -423,6 +441,7 @@ export class Character {
     let bodyY = 0;
     let lean = 0;
     let headTilt = 0;
+    let nod = 0; // 고개 끄덕임 (+ 아래 · - 위). 감정 표현에서 쓴다
 
     // 기본 포즈
     let aL = 0, aR = 0, lL = 0, lR = 0, zL = -0.18, zR = 0.18;
@@ -507,6 +526,40 @@ export class Character {
         }
         zL = 0.32; zR = -0.32;
         if (!A.hit && p >= 0.8) { A.hit = true; A.impact?.(); }
+      } else if (EMOTE_ACTS.has(A.name) && A.name !== 'wave') {
+        const seat = this.anim === 'sit' || this.anim === 'guitar'; // 앉아 있으면 뛰지 않고 상체로만
+        const T = A.t;
+        if (A.name === 'hop') { // 좋아요: 깡충깡충 두 번, 팔을 살짝 벌리고
+          bodyY += Math.abs(Math.sin(p * Math.PI * 2)) * (seat ? 0.05 : 0.18);
+          zL = -0.55; zR = 0.55; aL = aR = -0.35;
+        } else if (A.name === 'laugh') { // 웃겨요: 배를 잡고 뒤로 젖히며 들썩
+          aL = aR = -0.55; zL = 0.45; zR = -0.45;
+          lean = -0.14 + Math.sin(T * 26) * 0.035;
+          bodyY += Math.abs(Math.sin(T * 26)) * 0.025;
+          headTilt = Math.sin(T * 9) * 0.1;
+          nod = -0.25;
+        } else if (A.name === 'love') { // 사랑해요: 두 손을 가슴에 모으고 좌우로 살랑
+          aL = aR = -1.25; zL = 0.95; zR = -0.95;
+          headTilt = Math.sin(p * Math.PI * 2) * 0.18;
+          bodyY += Math.sin(p * Math.PI) * 0.03;
+        } else if (A.name === 'clap') { // 박수: 앞으로 모은 손을 짝짝
+          const c = 0.5 + 0.5 * Math.sin(T * 24);
+          aL = aR = -1.3; zL = 0.12 + 0.42 * c; zR = -zL;
+          bodyY += c * 0.012;
+        } else if (A.name === 'wow') { // 놀라워요: 깜짝 뛰며 두 팔을 번쩍
+          const up = Math.sin(Math.min(1, p / 0.55) * Math.PI);
+          bodyY += up * (seat ? 0.05 : 0.26);
+          const arms = p < 0.75 ? easeOut(Math.min(1, p / 0.2)) : 1 - (p - 0.75) / 0.25;
+          aL = aR = -2.5 * arms; zL = -0.35 * arms - 0.18; zR = -zL;
+          lean = -0.08 * arms; nod = -0.2 * arms;
+        } else if (A.name === 'sad') { // 슬퍼요: 어깨가 축 처지고 고개를 숙인다
+          const d = Math.sin(Math.min(1, p / 0.25) * Math.PI / 2) * (p > 0.85 ? (1 - p) / 0.15 : 1);
+          aL = aR = 0.12 * d; zL = -0.04; zR = 0.04;
+          lean = 0.16 * d; bodyY -= 0.03 * d; nod = 0.45 * d;
+        } else if (A.name === 'sleepy') { // 졸려요: 꾸벅… 하다가 번쩍
+          const q = p < 0.45 ? easeIn(p / 0.45) : p < 0.55 ? 1 : p < 0.8 ? 1 - easeOut((p - 0.55) / 0.25) * 0.4 : 0.6 * (1 - (p - 0.8) / 0.2);
+          nod = 0.5 * q; headTilt = 0.22 * q; lean = 0.06 * q;
+        }
       } else if (A.name === 'gather') {
         // 허리 숙여 쪼갠 장작 줍기
         const e = Math.sin(p * Math.PI);
@@ -543,13 +596,13 @@ export class Character {
     this.body.rotation.x = lerp(this.body.rotation.x, lean, k);
     this.head.rotation.z = lerp(this.head.rotation.z, headTilt, k * 0.5);
     // 고개 · 상체를 보는 방향으로 (일하는 동작 중에는 하던 일을 본다)
-    const busyLook = !!A && A.name !== 'wave';
+    const busyLook = !!A && WORK_ACTS.has(A.name);
     const want = this.#lookTarget(busyLook);
     this.turn = lerp(this.turn, want, Math.min(1, dt * 6));
     this.body.rotation.y = this.turn * 0.25;
     this.head.rotation.y = this.turn * 0.75;
     const pitch = busyLook || this.lookYaw == null ? 0 : Math.max(-0.3, Math.min(0.5, this.lookPitch));
-    this.head.rotation.x = lerp(this.head.rotation.x, -pitch * 0.8, Math.min(1, dt * 6));
+    this.head.rotation.x = lerp(this.head.rotation.x, -pitch * 0.8 + nod, Math.min(1, dt * (nod ? 12 : 6)));
 
     // 눈 깜빡임
     this.blinkT -= dt;

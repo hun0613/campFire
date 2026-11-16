@@ -165,7 +165,7 @@ html, body {
 .help-card .keys { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 14px; font-size: 14px; color: var(--brown-2); }
 
 /* ---------- 3D 라벨 ---------- */
-.char-label { display: flex; flex-direction: column; align-items: center; transform: translateY(-6px); pointer-events: none; }
+.char-label { display: flex; flex-direction: column; align-items: center; transform: translateY(-6px); pointer-events: none; position: relative; }
 .nametag {
   background: rgba(255, 248, 232, .9); color: var(--brown); padding: 2px 10px; border-radius: 999px; font-size: 13px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, .3); white-space: nowrap;
@@ -1062,3 +1062,41 @@ body.touch .beacon.on .b-sub { display: none; }
 .gb-tag small { display: none; }
 .label-dim { opacity: .14 !important; }
 .nametag.npc { transition: opacity .3s; }
+
+/* ---------- 😊 감정 표현 ---------- */
+/* 머리 위 이모지: 라벨(말풍선 · 이름표) 맨 위에 자리를 차지하지 않고 떠오른다 */
+.emote-pop { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 2px; font-size: 32px; line-height: 1; opacity: 0; pointer-events: none; white-space: nowrap; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); }
+.emote-pop.on { animation: emotePop 2.6s ease-out forwards; }
+body.touch .emote-pop { font-size: 26px; }
+@keyframes emotePop {
+  0% { opacity: 0; transform: translate(-50%, 10px) scale(.3); }
+  12% { opacity: 1; transform: translate(-50%, -4px) scale(1.2); }
+  20% { transform: translate(-50%, 0) scale(1); }
+  80% { opacity: 1; transform: translate(-50%, -6px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -16px) scale(.9); }
+}
+/* 1인칭이면 내 캐릭터가 안 보이니 화면 가운데 아래에 */
+.self-emote { position: fixed; left: 50%; bottom: 30%; transform: translateX(-50%); font-size: 46px; line-height: 1; opacity: 0; pointer-events: none; z-index: 6; filter: drop-shadow(0 3px 6px rgba(0, 0, 0, .4)); }
+.self-emote.on { animation: emotePop 2.6s ease-out forwards; }
+/* PC: 채팅 입력창 왼쪽 😊 버튼 → 위로 열리는 패널 */
+.emote-btn { flex: none; width: 42px; border-radius: 14px; border: 2px solid rgba(241, 223, 186, .5); background: rgba(255, 248, 232, .18); font-size: 19px; line-height: 1; cursor: pointer; backdrop-filter: blur(4px); }
+.emote-btn:hover, .emote-btn.on { background: rgba(255, 248, 232, .45); }
+.emote-panel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 8px; margin-bottom: 8px; background: rgba(255, 248, 232, .95); border-radius: 18px; box-shadow: var(--shadow); pointer-events: auto; }
+.emote-panel.hidden { display: none; }
+.emote-item { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 2px 6px; border: 0; border-radius: 12px; background: transparent; color: var(--brown); font: inherit; cursor: pointer; }
+.emote-item span { font-size: 25px; line-height: 1; }
+.emote-item small { font-size: 11.5px; color: var(--brown-2); }
+.emote-item:hover { background: #ffe9c8; }
+.emote-item:active { transform: scale(.92); }
+/* 휴대폰: 버튼 없이, 💬를 열면 입력창 위에 이모지 줄이 늘 보인다 */
+body.touch .emote-btn { display: none; }
+body.touch .emote-panel { display: none; }
+body.touch.chat-open .emote-panel {
+  display: flex; gap: 2px; padding: 4px 2px; margin: 8px 0 0; overflow-x: auto; scrollbar-width: none;
+  background: transparent; box-shadow: none; border-radius: 0;
+}
+body.touch.chat-open .emote-panel::-webkit-scrollbar { display: none; }
+body.touch.chat-open .emote-item { flex: 1 0 auto; min-width: 42px; padding: 5px 4px 4px; color: #fff3dc; }
+body.touch.chat-open .emote-item span { font-size: 23px; }
+body.touch.chat-open .emote-item small { font-size: 10px; color: rgba(255, 243, 220, .75); }
+body.touch.chat-open .emote-item:active { background: rgba(255, 248, 232, .18); }

@@ -28,7 +28,7 @@ import { NoticeBoard } from './board.js';
 import { LightPool } from './lightpool.js';
 import { TentInterior, TENT_PROPS, TENT_ENTRY, collideTents, roofY } from './tent.js';
 import {
-  CFG, PITS, STUMPS, NPC, KEEPER, BOUNDS, RANGE, LOOKS, GUESTBOOK, BOARD, QUESTS, LEGEND_POWDERS, TENTS, FIRES, tentAt, tentLocal, EGG, kstDay,
+  CFG, PITS, STUMPS, NPC, KEEPER, BOUNDS, RANGE, LOOKS, GUESTBOOK, BOARD, QUESTS, LEGEND_POWDERS, TENTS, FIRES, tentAt, tentLocal, EGG, kstDay, EMOTES,
 } from '../shared/config.js';
 
 const $ = (id) => document.getElementById(id);
@@ -1601,6 +1601,7 @@ function sendChat() {
 if (isTouch) $('chatInput').placeholder = '메시지를 입력하세요…';
 function openChat() {
   document.body.classList.add('chat-open');
+  if (isTouch) setEmotePanel(true); // 휴대폰: 입력창 위에 이모지 줄
   $('chatInput').focus();
   chatToBottom();
 }
@@ -1617,7 +1618,49 @@ new ResizeObserver(() => { if (chatting()) chatToBottom(); }).observe($('chatLog
 function closeChat() {
   $('chatInput').blur();
   document.body.classList.remove('chat-open');
+  if (isTouch) setEmotePanel(false);
 }
+// ---------------------------------------------------------------- 😊 감정 표현
+const emotePanel = $('emotePanel');
+emotePanel.replaceChildren(...EMOTES.map((x) => {
+  const b = document.createElement('button');
+  b.className = 'emote-item';
+  b.dataset.id = x.id;
+  b.title = x.label;
+  b.innerHTML = `<span>${x.e}</span><small>${x.label}</small>`;
+  return b;
+}));
+emotePanel.addEventListener('pointerdown', (e) => e.preventDefault()); // 휴대폰: 눌러도 키보드가 먼저 내려가며 깜빡이지 않게
+emotePanel.addEventListener('click', (e) => { const b = e.target.closest('.emote-item'); if (b) doEmote(b.dataset.id); });
+function setEmotePanel(on) {
+  emotePanel.classList.toggle('hidden', !on);
+  $('emoteBtn').classList.toggle('on', on);
+}
+$('emoteBtn').addEventListener('click', (e) => { e.currentTarget.blur(); setEmotePanel(emotePanel.classList.contains('hidden')); });
+let lastEmoteAt = 0;
+function doEmote(id) {
+  const x = EMOTES.find((q) => q.id === id);
+  if (!me || !x) return;
+  const now = performance.now();
+  if (now - lastEmoteAt < 1200) return; // 서버와 같은 간격 (연타 방지)
+  lastEmoteAt = now;
+  me.char.emote(x.id, x.e);
+  if (view.fp) { // 1인칭: 내 캐릭터가 안 보이니 화면 가운데 아래에
+    const el = $('selfEmote');
+    el.textContent = x.e;
+    el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
+  }
+  net.send({ t: 'emote', e: x.id });
+  track('emote', { emote: x.id });
+  setEmotePanel(false);
+  if (isTouch) closeChat(); // 휴대폰: 채팅 시트를 닫아 내 캐릭터가 보이게
+}
+net.on('emote', (m) => {
+  const x = EMOTES.find((q) => q.id === m.e);
+  const r = remotes.get(m.id);
+  if (x && r) r.ch.emote(x.id, x.e);
+});
+
 $('chatSend').addEventListener('pointerdown', (e) => e.preventDefault()); // 전송 눌러도 키보드 유지
 $('chatSend').addEventListener('click', sendChat);
 $('chatClose').addEventListener('click', closeChat);
@@ -1725,6 +1768,8 @@ addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'Enter') { e.preventDefault(); chatInput.focus(); return; }
+  if (e.code === 'KeyT' && !e.repeat && !isTouch) { setEmotePanel(emotePanel.classList.contains('hidden')); return; }
+  if (e.code === 'Escape' && !emotePanel.classList.contains('hidden')) { setEmotePanel(false); return; }
   keys.add(e.code);
   if (e.code === 'KeyM' && !e.repeat && state.sitting) { e.preventDefault(); openMusicModal(); return; }
   if (e.code === 'KeyF' && !e.repeat && feedPit()) { feedFire(); return; }
@@ -1750,6 +1795,7 @@ canvas.addEventListener('pointerdown', (e) => {
   if (ptrs.size === 1) { cam.dragging = true; lastPX = e.clientX; lastPY = e.clientY; }
   if (ptrs.size === 2) { cam.dragging = false; pinchD = pinchDist(); }
   if (!isTouch && document.activeElement === chatInput) closeChat(); // PC: 화면을 누르면 게임으로
+  if (!isTouch) setEmotePanel(false);
   chatTap = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() };
 });
 let chatTap = null;

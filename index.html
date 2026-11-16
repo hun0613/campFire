@@ -95,13 +95,16 @@
 
     <div id="chat">
       <div id="chatLog"></div>
+      <div id="emotePanel" class="emote-panel hidden" aria-label="감정 표현"></div>
       <div class="chat-row">
+        <button id="emoteBtn" class="emote-btn" title="감정 표현 (T)">😊</button>
         <textarea id="chatInput" rows="1" maxlength="120" placeholder="Enter 를 눌러 채팅…" autocomplete="off" autocorrect="off" enterkeyhint="send" spellcheck="false"></textarea>
         <button id="chatSend" class="chat-send">전송</button>
         <button id="chatClose" class="chat-close" title="닫기">✕</button>
       </div>
     </div>
     <button id="chatToggle" class="chat-toggle">💬</button>
+    <div id="selfEmote" class="self-emote" aria-hidden="true"></div>
 
     <!-- 🎒 가방: 서 있을 때는 가루 칸 대신 이 버튼으로 가진 가루를 본다 (앉으면 가루 칸이 다시 나온다) -->
     <button id="bagBtn" class="bag-btn" title="내 가방">🎒<b id="bagCount">0</b></button>
@@ -134,6 +137,7 @@
           <li><b>🏕️ 글램핑 텐트</b>는 문 앞에서 <b>들어가기</b>를 누르면 들어가요 (한 동에 5명까지, 문 위 ⛺ 표시가 지금 인원). 가운데 <b>화로</b>에 장작 5개를 넣어 불을 피우면 지붕 연통에서 연기가 올라가요. 둘레 소파에 앉으면 TV장 스피커로 노래도 틀 수 있어요. 나올 때는 문 앞에서 <b>🚪 나가기</b>. 텐트 안에서 한 말은 <b>텐트 안 사람에게만</b> 보여요. 채팅에서 이름을 누르면 그 캠퍼를 차단할 수 있어요</li>
           <li>캠핑장은 <b>서울 날씨</b>를 따라 바뀌어요. 비가 오면 <b>☔ 우중캠핑장</b>(모닥불 천막 · 우비 · 빗소리, 천막 아래선 토독토독), 눈이 오면 <b>❄️ 설산캠핑장</b>(쌓인 눈 · 패딩)이 돼요</li>
           <li>걸을 때는 3인칭, <b>모닥불에 앉으면 1인칭</b>으로 바뀌어요. 앉아 있을 때 오른쪽 아래 작은 <b>🎥 / 👁️ 버튼</b>(PC는 <kbd>V</kbd>)으로 바꿀 수 있어요</li>
+          <li><b>😊 감정 표현</b>: PC는 채팅창 옆 😊(<kbd>T</kbd>), 휴대폰은 💬를 열면 입력창 위에 나와요. 인사 · 좋아요 · 웃겨요 · 사랑해요 · 박수 · 놀라워요 · 슬퍼요 · 졸려요를 머리 위 이모지와 몸짓으로 보여 줘요</li>
           <li>화면을 위로 끌어 올리면 <b>밤하늘</b>을 올려다볼 수 있어요. 은하수와 별자리, 가끔 떨어지는 별똥별 🌠</li>
         </ol>
         <div id="lanHelp" class="lan hidden"></div>
