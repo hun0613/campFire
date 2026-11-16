@@ -56,6 +56,10 @@ const G = {
 const easeOut = (t) => 1 - (1 - t) ** 3;
 const easeIn = (t) => t * t * t;
 const lerp = (a, b, t) => a + (b - a) * t;
+const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+// 고개 돌리기: 상체와 머리가 함께 돌아 정면에서 좌우 LOOK_MAX 까지 (머리 75% · 상체 25%)
+const LOOK_MAX = 1.4; // 약 80°
+const LOOK_SWITCH = Math.PI - 0.4; // 바로 뒤(±180°) 근처에서는 고른 어깨를 유지하다가, 이만큼 넘어가면 반대쪽 어깨로
 
 let shadowTex = null;
 function blobShadowMat() {
@@ -198,6 +202,7 @@ export class Character {
     // 머리
     this.head = new THREE.Group();
     this.head.position.y = 1.18;
+    this.head.rotation.order = 'YXZ'; // 고개를 돌린 채로도 위아래 · 갸웃이 머리 기준으로
     this.body.add(this.head);
     const skull = cast(new THREE.Mesh(G.head, skin));
     skull.scale.set(1, 0.94, 0.95);
@@ -266,6 +271,7 @@ export class Character {
     this.time = Math.random() * 10;
     this.action = null;
     this.blinkT = 2 + Math.random() * 3;
+    this.lookYaw = null; this.lookPitch = 0; this.lookSide = 0; this.turn = 0; // 보는 방향(월드 기준)과 지금 고개 · 상체를 돌린 정도
     this.eyes = this.head.children.filter((c) => c.geometry === G.eye);
   }
 
@@ -350,6 +356,23 @@ export class Character {
   }
 
   setAnim(a) { this.anim = a; }
+
+  /** 보는 방향: yaw 는 월드 기준(캐릭터 ry 와 같은 기준), pitch 는 위(+) · 아래(-). null 이면 정면 */
+  setLook(yaw, pitch = 0) { this.lookYaw = yaw; this.lookPitch = pitch; }
+
+  /** 보는 방향에 맞춘 고개 각도 (캐릭터 정면 기준). 자연스러운 범위를 넘으면 어깨 너머로 보고, 뒤를 지나면 반대쪽 어깨로 넘어간다 */
+  #lookTarget(busy) {
+    if (this.lookYaw == null || busy) { this.lookSide = 0; return 0; }
+    const rel = wrapAngle(this.lookYaw - this.root.rotation.y);
+    if (this.anim === 'walk' || this.anim === 'run') { // 걸을 때는 가는 쪽을 주로 보고, 옆으로만 살짝
+      this.lookSide = 0;
+      return Math.abs(rel) < 1.7 ? Math.max(-0.6, Math.min(0.6, rel)) : 0;
+    }
+    if (Math.abs(rel) <= LOOK_MAX) { this.lookSide = 0; return rel; }
+    const side = Math.sign(rel);
+    if (!this.lookSide || (side !== this.lookSide && Math.abs(rel) < LOOK_SWITCH)) this.lookSide = side;
+    return this.lookSide * LOOK_MAX;
+  }
 
   /** 가진 장작 수 → 품의 더미 (날아오는 중인 조각은 도착하면 보인다) */
   setCarry(n) {
@@ -519,6 +542,14 @@ export class Character {
     this.body.position.y = lerp(this.body.position.y, bodyY, k);
     this.body.rotation.x = lerp(this.body.rotation.x, lean, k);
     this.head.rotation.z = lerp(this.head.rotation.z, headTilt, k * 0.5);
+    // 고개 · 상체를 보는 방향으로 (일하는 동작 중에는 하던 일을 본다)
+    const busyLook = !!A && A.name !== 'wave';
+    const want = this.#lookTarget(busyLook);
+    this.turn = lerp(this.turn, want, Math.min(1, dt * 6));
+    this.body.rotation.y = this.turn * 0.25;
+    this.head.rotation.y = this.turn * 0.75;
+    const pitch = busyLook || this.lookYaw == null ? 0 : Math.max(-0.3, Math.min(0.5, this.lookPitch));
+    this.head.rotation.x = lerp(this.head.rotation.x, -pitch * 0.8, Math.min(1, dt * 6));
 
     // 눈 깜빡임
     this.blinkT -= dt;

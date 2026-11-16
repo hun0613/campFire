@@ -180,7 +180,8 @@ html, body {
 .bubble::after { content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%) rotate(45deg); width: 12px; height: 12px; background: white; }
 .bubble.out { animation: fadeOut .4s forwards; }
 .npc-mark { font-size: 22px; margin-bottom: 4px; animation: bob 1s ease-in-out infinite; filter: drop-shadow(0 0 6px #ffd76b); }
-.floater { font-size: 17px; color: #ffe2a8; text-shadow: 0 2px 0 #7a4a20, 0 0 10px rgba(255, 160, 60, .8); animation: floatUp 1.3s ease-out forwards; white-space: nowrap; }
+.floater { display: block; font-size: 15px; font-weight: 800; line-height: 1; color: #ffe2a8; text-shadow: 0 1px 0 #7a4a20, 0 0 6px rgba(255, 160, 60, .7); animation: floatUp 1s ease-out forwards; white-space: nowrap; }
+body.touch .floater { font-size: 13px; }
 .sign-hint { font-size: 12px; }
 
 @keyframes pop { from { transform: scale(.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
@@ -191,7 +192,7 @@ html, body {
 @keyframes toastIn { from { transform: translateY(-14px) scale(.9); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes toastOut { to { transform: translateY(-10px); opacity: 0; } }
 @keyframes fadeOut { to { opacity: 0; transform: translateY(-6px); } }
-@keyframes floatUp { 0% { transform: translateY(0) scale(.8); opacity: 0; } 15% { opacity: 1; transform: translateY(-10px) scale(1.1); } 100% { transform: translateY(-60px) scale(1); opacity: 0; } }
+@keyframes floatUp { 0% { transform: translateY(4px) scale(.85); opacity: 0; } 18% { opacity: 1; transform: translateY(-4px) scale(1.05); } 70% { opacity: 1; } 100% { transform: translateY(-26px) scale(1); opacity: 0; } }
 
 @media (max-width: 640px) {
   #status { min-width: 0; padding: 8px 12px; }
@@ -876,6 +877,7 @@ body.touch.lounging #seatViewBtn { position: fixed; right: calc(16px + env(safe-
 #status, #topright, #mapPanel, #bottom, #chat, .chat-toggle, #touchControls, .beacon, #fireTimer { transition: opacity .25s ease; }
 body.calm #status, body.calm #topright, body.calm #mapPanel, body.calm #bottom, body.calm #chat,
 body.calm .chat-toggle, body.calm #touchControls, body.calm .beacon, body.calm #fireTimer, body.calm .bag-btn { opacity: .07; transition: opacity 1.8s ease; }
+body.calm.chat-peek #chat { opacity: 1; transition: opacity .3s ease; } /* 불멍 중 새 채팅은 채팅창만 잠깐 또렷하게 */
 
 /* ---------- 지도 자동 표시: 걸을 때 나타나고, 멈추면 잠시 뒤 사라진다 (모바일 · 좁은 PC 창) ---------- */
 body.touch #mapPanel { display: block; opacity: 0; visibility: hidden; transform: translateY(-6px) scale(.97); transform-origin: top right;

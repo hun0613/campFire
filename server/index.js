@@ -367,7 +367,7 @@ function handle(ws, ctx, m) {
     const p = {
       id: nextId++, pid, name, look,
       x: SPAWN.x + (Math.random() - 0.5) * 6, z: SPAWN.z + (Math.random() - 0.5) * 2, ry: Math.PI,
-      anim: 'idle', seat: null,
+      anim: 'idle', seat: null, ly: null, lp: 0, // ly · lp: 보는 방향(월드 기준 좌우 · 위아래). 다른 사람 화면에서 고개를 돌리는 데 쓴다
       wood: saved?.wood ?? 0, stored: saved?.stored ?? 0, chops: saved?.chops ?? 0, powders: saved?.powders ?? [], quest: saved?.quest ?? validQuest(null),
       coins: saved?.coins ?? 0, coinDay: saved?.coinDay ?? '', shareDay: saved?.shareDay ?? '', eggDay: saved?.eggDay ?? '',
       tag: tagOf(pid), tent: null,
@@ -415,6 +415,13 @@ function handle(ws, ctx, m) {
       if ((m.anim === 'sit' || m.anim === 'guitar') && me.tent) { // 텐트 안 의자에 앉기 (보여 주기만). 스피커로 노래를 틀었으면 기타
         me.anim = m.anim === 'guitar' && tentRooms.get(me.tent)?.music?.by === me.id ? 'guitar' : 'sit';
       }
+      break;
+    }
+    case 'look': { // 보는 방향 (앉아 있어도 받는다)
+      const y = Number(m.y), lp = Number(m.p);
+      if (!Number.isFinite(y) || !Number.isFinite(lp)) return;
+      me.ly = Math.atan2(Math.sin(y), Math.cos(y));
+      me.lp = Math.min(0.6, Math.max(-0.6, lp));
       break;
     }
     case 'chop': {
@@ -814,7 +821,8 @@ setInterval(() => {
   if (!players.size) return;
   const list = [];
   for (const p of players.values()) {
-    list.push([p.id, Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100, Math.round(p.ry * 100) / 100, p.anim]);
+    list.push([p.id, Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100, Math.round(p.ry * 100) / 100, p.anim,
+      p.ly == null ? null : Math.round(p.ly * 100) / 100, Math.round(p.lp * 100) / 100]);
   }
   broadcast({ t: 'snap', now: Date.now(), p: list });
 }, 100);

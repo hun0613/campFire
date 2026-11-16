@@ -182,6 +182,7 @@ const state = {
   tentMusic: new Map(), // 텐트 id -> 블루투스 스피커로 트는 곡
   clockOffset: 0,
   lastSent: { x: 0, z: 0, ry: 0, anim: '' },
+  lookT: 0, lastLook: { y: 99, p: 0 },
   sendT: 0,
   shake: 0,
 };
@@ -501,11 +502,12 @@ net.on('leave', (m) => {
 net.on('snap', (m) => {
   const est = m.now - Date.now();
   state.clockOffset = state.clockOffset * 0.9 + est * 0.1;
-  for (const [id, x, z, ry, anim] of m.p) {
+  for (const [id, x, z, ry, anim, ly, lp] of m.p) {
     if (id === state.myId) continue;
     const r = remotes.get(id);
     if (!r) continue;
     r.tx = x; r.tz = z; r.try = ry; r.anim = anim;
+    r.ly = ly ?? null; r.lp = lp || 0;
   }
 });
 
@@ -525,7 +527,7 @@ net.on('inv', (m) => {
   refreshInventory();
   if (m.gained && me) {
     track('wood_chop', { wood: m.wood });
-    floatText('+1 🪵', me.char.root.position.clone().setY(2.3));
+    floatText('+1 🪵', me.char.root.position.clone().setY(2.55));
     sound.wood();
     if (m.wood === CFG.WOOD_PER_FIRE) UI.toast('장작 5개 완성! 글램핑장 앞 화로에 쌓아 불을 피워 봐요 🔥');
     if (m.wood === CFG.MAX_WOOD) UI.toast(`장작이 ${CFG.MAX_WOOD}개 가득! 북서쪽 창고지기 보리에게 맡기면 더 팰 수 있어요 📦`);
@@ -716,7 +718,7 @@ net.on('buyFail', (m) => {
 net.on('coinBonus', (m) => {
   if (m.n > 0) {
     UI.toast(`💌 공유 고마워요! 코인 +${m.n} 🪙`, 4000);
-    if (me) floatText(`+${m.n} 🪙`, me.char.root.position.clone().setY(2.3));
+    if (me) floatText(`+${m.n} 🪙`, me.char.root.position.clone().setY(2.55));
     sound.gift();
     track('coin_share_bonus', { n: m.n });
   } else UI.toast('오늘 공유 보너스는 이미 받았어요 · 밤 12시가 지나면 또 받을 수 있어요 💌', 3500);
@@ -861,6 +863,7 @@ net.on('fx', (m) => {
 net.on('chat', (m) => {
   if (m.tag && blocked.has(m.tag) && m.id !== state.myId) return; // 차단한 캠퍼
   UI.addChat(m.name, m.text, false, { tag: m.tag, tent: !!m.tent });
+  peekChat();
   const ch = m.id === state.myId ? me?.char : remotes.get(m.id)?.ch;
   ch?.say(m.text);
 });
@@ -1157,6 +1160,7 @@ addEventListener('pointerup', (e) => {
   const s = tapStart.get(e.pointerId);
   tapStart.delete(e.pointerId);
   if (!s || !me || Math.hypot(e.clientX - s.x, e.clientY - s.y) > 10 || performance.now() - s.t > 400) return;
+  if (document.body.classList.contains('chat-open')) return; // 채팅 중 탭은 키보드 내리기 · 채팅 닫기용
   raycaster.setFromCamera(new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
   if (state.tent) { // 텐트 안: 탁자 위 스피커 · 태블릿을 누르면 곡 고르기
     if (!raycaster.intersectObject(tentRoom.hit, false)[0]) return;
@@ -1210,24 +1214,9 @@ function updateTentTags(dt) {
   }
 }
 
-// 연주자 주위로 ♪, 연주 중인 모닥불 TV 켜기, 내가 앉은 모닥불의 음악 재생
-let noteT = 0;
+// 연주 중인 모닥불 TV 켜기, 내가 앉은 모닥불의 음악 재생 (음표 효과는 없다)
 function updateMusicFx(dt) {
-  noteT += dt;
-  const emit = noteT > 0.9;
-  if (emit) noteT = 0;
-  for (const p of pitList) {
-    const m = p.state === 'lit' ? p.music : null;
-    monitors.get(p.id)?.update(dt, !!m);
-    if (m && emit) {
-      const ch = m.by === state.myId ? me?.char : remotes.get(m.by)?.ch;
-      if (ch && camera.position.distanceTo(ch.root.position) < 40) {
-        const pos = ch.root.position.clone();
-        pos.x += (Math.random() - 0.5) * 0.8; pos.y = 1.4 + Math.random() * 0.4; pos.z += (Math.random() - 0.5) * 0.8;
-        floatText(Math.random() < 0.5 ? '♪' : '♫', pos);
-      }
-    }
-  }
+  for (const p of pitList) monitors.get(p.id)?.update(dt, !!(p.state === 'lit' && p.music));
   if (me) {
     music.clockOffset = state.clockOffset;
     const pit = myMusicPit();
@@ -1240,23 +1229,21 @@ function updateMusicFx(dt) {
       if (lpTagEl.textContent !== txt) lpTagEl.textContent = txt;
     }
     lpTag.visible = showTag;
-    // 텐트 스피커로 노래가 나오면 스피커 위로 ♪
-    if (pit?.tent && pit.music && emit) {
-      const pos = tentRoom.speakerWorld(new THREE.Vector3());
-      pos.x += (Math.random() - 0.5) * 0.5; pos.y += 0.5 + Math.random() * 0.3; pos.z += (Math.random() - 0.5) * 0.5;
-      floatText(Math.random() < 0.5 ? '♪' : '♫', pos);
-    }
   }
 }
 
+// 머리 위 +1 같은 짧은 표시. 바깥 div 는 CSS2DRenderer 가 위치(transform)를 잡고, 안쪽 span 만 떠오르게 한다
+// (같은 요소에 애니메이션 transform 을 걸면 위치가 덮여 화면 왼쪽 위 구석, 안내판 밑으로 가 버린다)
 function floatText(text, pos) {
   const el = document.createElement('div');
-  el.className = 'floater';
-  el.textContent = text;
+  const inner = document.createElement('span');
+  inner.className = 'floater';
+  inner.textContent = text;
+  el.appendChild(inner);
   const o = new CSS2DObject(el);
   o.position.copy(pos);
   scene.add(o);
-  setTimeout(() => { scene.remove(o); el.remove(); }, 1300);
+  setTimeout(() => { scene.remove(o); el.remove(); }, 1100);
 }
 function lerpAngle(a, b, t) {
   const d = ((((b - a + Math.PI) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) - Math.PI;
@@ -1615,9 +1602,18 @@ if (isTouch) $('chatInput').placeholder = '메시지를 입력하세요…';
 function openChat() {
   document.body.classList.add('chat-open');
   $('chatInput').focus();
+  chatToBottom();
+}
+// 채팅을 치는 동안에는 늘 가장 최신 채팅이 보이게 맨 아래로
+function chatToBottom() {
   const log = $('chatLog');
+  log.scrollTop = log.scrollHeight;
   requestAnimationFrame(() => { log.scrollTop = log.scrollHeight; });
 }
+const chatting = () => document.activeElement === $('chatInput') || document.body.classList.contains('chat-open');
+$('chatInput').addEventListener('focus', () => { chatToBottom(); setTimeout(chatToBottom, 350); }); // 키보드가 다 올라온 뒤 한 번 더
+$('chatInput').addEventListener('input', chatToBottom);
+new ResizeObserver(() => { if (chatting()) chatToBottom(); }).observe($('chatLog'));
 function closeChat() {
   $('chatInput').blur();
   document.body.classList.remove('chat-open');
@@ -1753,7 +1749,16 @@ canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
   if (ptrs.size === 1) { cam.dragging = true; lastPX = e.clientX; lastPY = e.clientY; }
   if (ptrs.size === 2) { cam.dragging = false; pinchD = pinchDist(); }
-  if (document.activeElement === chatInput || document.body.classList.contains('chat-open')) closeChat();
+  if (!isTouch && document.activeElement === chatInput) closeChat(); // PC: 화면을 누르면 게임으로
+  chatTap = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() };
+});
+let chatTap = null;
+// 모바일 채팅 중 화면을 '탭'하면: 키보드만 내리고 채팅창은 그대로 → 한 번 더 탭하면 닫기 (끌어서 시점을 돌릴 때는 닫지 않는다)
+canvas.addEventListener('pointerup', (e) => {
+  const s = chatTap; chatTap = null;
+  if (!isTouch || !s || s.id !== e.pointerId || !document.body.classList.contains('chat-open')) return;
+  if (Math.hypot(e.clientX - s.x, e.clientY - s.y) > 10 || performance.now() - s.t > 350) return;
+  if (document.activeElement === chatInput) chatInput.blur(); else closeChat();
 });
 canvas.addEventListener('pointermove', (e) => {
   if (!ptrs.has(e.pointerId)) return;
@@ -1872,6 +1877,24 @@ function updateLocal(dt) {
   r.position.set(me.x, world.heightAt(me.x, me.z), me.z);
   r.rotation.y = state.sitting ? me.ry : lerpAngle(r.rotation.y, me.ry, Math.min(1, dt * 16));
 
+  // 고개를 내 시야 쪽으로: 카메라가 보는 방향(좌우)과, 올려다볼 때의 위쪽 각도
+  camera.getWorldDirection(lookDir);
+  const lookYaw = Math.atan2(lookDir.x, lookDir.z);
+  const elev = Math.asin(Math.max(-1, Math.min(1, lookDir.y)));
+  const lookPitch = view.fp ? elev : Math.max(0, elev); // 3인칭은 늘 내려다보는 카메라라 위로 볼 때만
+  me.char.setLook(lookYaw, lookPitch);
+  // 다른 사람 화면에도 같은 방향으로 (5Hz, 바뀌었을 때만)
+  state.lookT += dt;
+  if (state.lookT >= 0.2) {
+    state.lookT = 0;
+    const L = state.lastLook;
+    const dy = Math.abs(Math.atan2(Math.sin(lookYaw - L.y), Math.cos(lookYaw - L.y)));
+    if (dy > 0.06 || Math.abs(lookPitch - L.p) > 0.06) {
+      net.send({ t: 'look', y: +lookYaw.toFixed(2), p: +lookPitch.toFixed(2) });
+      L.y = lookYaw; L.p = lookPitch;
+    }
+  }
+
   // 서버로 위치 전송 (10Hz)
   state.sendT += dt;
   if (state.sendT >= 0.1) {
@@ -1894,6 +1917,7 @@ function updateRemotes(dt) {
     p.y = world.heightAt(p.x, p.z);
     r.ch.root.rotation.y = lerpAngle(r.ch.root.rotation.y, r.try, k);
     r.ch.setAnim(r.anim);
+    r.ch.setLook(r.ly ?? null, r.lp || 0);
     r.ch.update(dt);
   }
 }
@@ -1901,6 +1925,7 @@ function updateRemotes(dt) {
 const focus = new THREE.Vector3();
 const camTarget = new THREE.Vector3();
 const fpPos = new THREE.Vector3(), fpHead = new THREE.Vector3(), fpDir = new THREE.Vector3();
+const lookDir = new THREE.Vector3();
 function updateCamera(dt, t) {
   if (me) me.char.root.visible = !view.fp; // 1인칭이면 내 화면에서만 내 캐릭터를 숨긴다 (다른 사람에겐 보임)
   if (view.fp && me) {
@@ -2260,6 +2285,13 @@ for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchmove']
 // 5초 동안 조작이 없으면 화면 UI가 천천히 사라지고, 화면을 만지거나 키를 누르면 바로 돌아온다.
 // 흐린 상태에서 처음 누른 버튼은 UI만 깨운다 (실수로 일어나거나 가루를 뿌리지 않게)
 const CALM_AFTER = 5000;
+// 불멍으로 UI가 흐린 동안 새 채팅이 오면 채팅창만 몇 초 또렷하게 보여 준다
+let peekTimer = 0;
+function peekChat() {
+  document.body.classList.add('chat-peek');
+  clearTimeout(peekTimer);
+  peekTimer = setTimeout(() => document.body.classList.remove('chat-peek'), 7000);
+}
 let swallowClick = false;
 function updateCalm(now) {
   const busy = UI.dialogOpen() || document.querySelector('.overlay:not(.hidden)') || !$('bagPanel').classList.contains('hidden')
@@ -2270,6 +2302,7 @@ function updateCalm(now) {
 addEventListener('pointerdown', (e) => {
   if (!document.body.classList.contains('calm')) { swallowClick = false; return; } // 깨운 뒤 다음 누름은 그대로 동작
   document.body.classList.remove('calm');
+  if (e.target.closest?.('#chatToggle, #chat')) return; // 채팅은 한 번에 열리게 (흐림만 풀고 그대로 동작)
   if (e.target.closest?.('button, .powder, #status, #topright, #mapPanel')) {
     e.stopPropagation(); e.preventDefault();
     swallowClick = true; setTimeout(() => { swallowClick = false; }, 700);
