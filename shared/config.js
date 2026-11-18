@@ -28,7 +28,117 @@ export function kstDay(now = Date.now()) {
   return new Date(now + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
-export const BOUNDS = { minX: -55, maxX: 55, minZ: -35, maxZ: 35 };
+// 울타리 안 캠핑장 (텐트 · 광장 · 장작 마당). 울타리는 이 바깥 1m에 선다
+export const FENCE = { minX: -55, maxX: 55, minZ: -35, maxZ: 35 };
+// 걸어 다닐 수 있는 곳: 울타리 밖 숲길(둘레길)까지 (v1.19)
+export const BOUNDS = { minX: -92, maxX: 92, minZ: -80, maxZ: 70 };
+
+// ---------------------------------------------------------------- 🌲 숲길 (둘레길)
+// 울타리 출입구: 큰길 양 끝(서쪽 · 동쪽). half = 출입구 너비의 절반
+export const GATES = [
+  { id: 'west', x: FENCE.minX - 1, z: 0, axis: 'z', half: 2.4 },
+  { id: 'east', x: FENCE.maxX + 1, z: 0, axis: 'z', half: 2.4 },
+];
+/** 닫힌 Catmull-Rom 곡선 위 한 점 (u: 0 ~ 점 개수, 정수 = 그 점) */
+export function curveAt(pts, u) {
+  const n = pts.length, i = Math.floor(((u % n) + n) % n), t = (((u % n) + n) % n) - i;
+  const P = (k) => pts[(k + n) % n], p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2), t2 = t * t, t3 = t2 * t;
+  const f = (a, b, c, d) => 0.5 * ((2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+  return [f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])];
+}
+// 울타리 밖을 한 바퀴 도는 흙길 (곡선으로 잇는 점, 시계 방향). 한 바퀴 약 510m, 걸어서 2분 남짓
+export const TRAIL = {
+  width: 2.6,
+  loop: [
+    [78.4, 2.3], [81.2, -13.8], [80.1, -27.6], [77.3, -41.4], [68.3, -55.2], [53.8, -62.7], [33.6, -65.5], [11.2, -63.2], [-11.2, -66.1], [-33.6, -63.2],
+    [-53.8, -63.8], [-69.4, -56.3], [-79.5, -41.4], [-82.3, -18.4], [-80.6, 4.6], [-81.8, 27.6], [-75, 48.3], [-56, 59.2], [-33.6, 56.9], [-11.2, 60.4],
+    [9, 57.5], [29.1, 60.4], [51.5, 57.5], [69.4, 48.3], [79, 29.9], [80.6, 13.8],
+  ],
+  // 출입구에서 둘레길까지 잇는 짧은 길
+  spurs: [
+    [[-53, 0], [-60, 0.4], [-70, 1.6], [-80.6, 4.6]],
+    [[53, 0], [60, 0.4], [70, 1.4], [78.4, 2.3]],
+  ],
+};
+// 쉼터: 가까이 오면 이름 팻말이 뜬다 (r 안에 들어오면 「도착」)
+export const SPOTS = [
+  { id: 'bridge', x: 80.1, z: -27.6, r: 8, icon: '🌉', name: '개울 다리' },
+  { id: 'lake', x: 65, z: -61, r: 10, icon: '🌙', name: '호숫가' },
+  { id: 'hill', x: -68, z: -73, r: 11, icon: '🌅', name: '노을 지는 언덕' },
+  { id: 'kochia', u: 7.2, r: 12, icon: '🍂', name: '억새 · 댑싸리 들판' },
+  { id: 'reeds', u: 1.0, r: 10, icon: '🌾', name: '갈대밭' },
+  { id: 'daisy', u: 12.8, r: 12, icon: '🌼', name: '데이지 꽃밭' },
+  { id: 'cherry', u: 15.5, r: 12, icon: '🌸', name: '벚꽃길' },
+  { id: 'muhly', u: 19.2, r: 12, icon: '💗', name: '핑크뮬리 들판' },
+];
+// 숲길 구간별 풍경 (from ~ to: TRAIL.loop 점 번호. 길 양옆 띠에 심는다). 쉼터 · 출입구 · 호수 · 언덕 자리는 비워 둔다
+export const ZONES = [
+  { kind: 'reed', from: 0.5, to: 1.5 },
+  { kind: 'kochia', from: 5.4, to: 9.1 }, // 억새 · 댑싸리 들판 + 밧줄 울타리
+  { kind: 'daisy', from: 11.7, to: 13.9 },
+  { kind: 'cherry', from: 14.4, to: 16.6 },
+  { kind: 'muhly', from: 16.8, to: 21.7 },
+  { kind: 'daisy', from: 22.0, to: 24.5 },
+  { kind: 'muhly', from: 24.7, to: 25.95 },
+];
+/** 구간을 따라 촘촘한 점 */
+export function zonePath(z, step = 0.04) {
+  const out = [];
+  for (let u = z.from; u <= z.to + 1e-6; u += step) out.push(curveAt(TRAIL.loop, u));
+  return out;
+}
+for (const sp of SPOTS) if (sp.u != null) [sp.x, sp.z] = curveAt(TRAIL.loop, sp.u);
+// 노을 지는 언덕 꼭대기 흔들의자 (앉으면 하늘을 올려다본다). ry: 앉은 사람이 보는 방향
+// 🌅 해가 지는 쪽: 캠핑장에서 노을 지는 언덕 너머 (북서쪽). 이쪽 하늘은 노을, 반대쪽은 해가 진 밤
+export const SUNSET = (() => { const x = -0.68, z = -0.73, l = Math.hypot(x, z); return { x: x / l, z: z / l }; })();
+// 노을 지는 언덕 꼭대기: 노을을 바라보는 등받이 없는 나무 벤치 하나 (한쪽 끝엔 고양이가 앉아 있다)
+export const HILL_BENCH = { x: -68 - SUNSET.x * 0.4, z: -73 - SUNSET.z * 0.4, ry: Math.atan2(SUNSET.x, SUNSET.z), len: 2.6 };
+// 벤치 위 자리 (벤치 방향 기준 옆으로 o 만큼): 사람 두 자리 + 고양이 자리
+const benchSide = (b, o) => ({ x: b.x + Math.cos(b.ry) * o, z: b.z - Math.sin(b.ry) * o });
+export const HILL_CAT = benchSide(HILL_BENCH, 0.85);
+// 호숫가 데크 끝 벤치 (호수를 본다)
+export const LAKE_BENCH = (() => {
+  const sp = { x: 65, z: -61 }, ang = Math.atan2(-71 - sp.z, 70 - sp.x), len = 7.5;
+  return { x: sp.x + Math.cos(ang) * (len - 2.6), z: sp.z + Math.sin(ang) * (len - 2.6), y: 0.3, ry: Math.atan2(Math.cos(ang), Math.sin(ang)) };
+})();
+// 광장 벤치 4개 (가장자리 반지름 8.6, 가운데를 본다)
+export const PLAZA_BENCHES = [0.25, 0.75, 1.25, 1.75].map((k) => { const a = Math.PI * k, x = Math.cos(a) * 8.6, z = Math.sin(a) * 8.6; return { x, z, ry: Math.atan2(-x, -z) }; });
+// 앉아서 쉬는 자리 (모닥불 · 텐트 소파 말고). kind: hill(노을 지는 언덕 벤치, 지평선을 본다) | bench. 앉으면 늘 1인칭
+const benchSeats = (b, id, offs = [-0.5, 0.5], kind = 'bench') => offs.map((o, i) => ({ id: `${id}-${i}`, kind, ...benchSide(b, o), ry: b.ry }));
+export const LOUNGE_SEATS = [
+  ...benchSeats(HILL_BENCH, 'hill', [-0.85, 0.05], 'hill'), // 앉으면 노을 지는 지평선
+  ...benchSeats(LAKE_BENCH, 'lake'),
+  ...PLAZA_BENCHES.flatMap((b, i) => benchSeats(b, `plaza${i}`)),
+];
+// 억새 · 댑싸리 들판 너머 북쪽 숲 경계 밖 풍차 (노을 하늘에 실루엣으로)
+export const WINDMILL = { x: -12, z: -104 };
+export const LAKE = { x: 70, z: -71, rx: 10, rz: 6.5 };
+export const POND = { x: 69.5, z: -28, r: 3.4 };
+export const STREAM = [[72.5, -27.9], [80.1, -27.8], [88, -29.4], [100, -32.5], [116, -31]];
+export const HILL = { x: -68, z: -73, r: 10, h: 2.4 };
+/** 언덕 높이 (그 밖은 0) */
+export function hillHeight(x, z) {
+  const d = Math.hypot(x - HILL.x, z - HILL.z);
+  return d >= HILL.r ? 0 : HILL.h * (Math.cos(Math.PI * d / HILL.r) + 1) / 2;
+}
+/** 닫힌 곡선(Catmull-Rom)을 촘촘한 점으로 (월드 · 지도에서 같이 쓴다) */
+export function trailCurve(pts, closed = true, step = 1.5) {
+  const out = [];
+  const n = pts.length;
+  const P = (i) => pts[closed ? (i + n) % n : Math.max(0, Math.min(n - 1, i))];
+  for (let i = 0; i < (closed ? n : n - 1); i++) {
+    const p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2);
+    const len = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+    const k = Math.max(2, Math.round(len / step));
+    for (let j = 0; j < k; j++) {
+      const t = j / k, t2 = t * t, t3 = t2 * t;
+      const f = (a, b, c, d) => 0.5 * ((2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+      out.push([f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]);
+    }
+  }
+  if (!closed) out.push(pts[n - 1]);
+  return out;
+}
 
 // 글램핑 텐트 12동: 북쪽 6동, 남쪽 6동. 각 텐트 앞에는 화로가 있다. (모닥불은 글램핑 화로에서만 피운다)
 export const TENT_XS = [-42, -28, -14, 0, 14, 28];

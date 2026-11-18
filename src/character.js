@@ -83,6 +83,7 @@ export class Character {
   constructor(look, { name = '', kind = 'other' } = {}) {
     this.look = look;
     this.root = new THREE.Group();
+    this.root.rotation.order = 'YXZ'; // 흔들의자에서 앞뒤로 흔들 때 몸 방향 기준으로
     this.body = new THREE.Group();
     this.root.add(this.body);
 

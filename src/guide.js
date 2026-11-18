@@ -1,6 +1,14 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { CFG, TENTS, STUMPS, NPC, KEEPER, WOODYARD, BOUNDS, GUESTBOOK, BOARD } from '../shared/config.js';
+import { CFG, TENTS, STUMPS, NPC, KEEPER, WOODYARD, BOUNDS, FENCE, GATES, TRAIL, SPOTS, ZONES, zonePath, LAKE, POND, STREAM, HILL, trailCurve, GUESTBOOK, BOARD } from '../shared/config.js';
+
+// 숲길 · 개울 곡선 (지도 · 레이더에서 그린다)
+const TRAIL_PTS = trailCurve(TRAIL.loop, true, 3);
+const SPUR_PTS = TRAIL.spurs.map((sp) => trailCurve(sp, false, 3));
+const STREAM_PTS = trailCurve(STREAM, false, 3);
+// 숲길 구간 풍경 (지도에 색 띠로)
+const ZONE_PTS = ZONES.map((z) => ({ kind: z.kind, pts: zonePath(z, 0.12) }));
+const ZONE_COLOR = { kochia: 'rgba(225, 95, 80, 0.7)', muhly: 'rgba(232, 140, 185, 0.7)', reed: 'rgba(205, 180, 115, 0.7)', daisy: 'rgba(235, 238, 215, 0.6)', cherry: 'rgba(255, 182, 211, 0.75)' };
 
 // 목적지 안내: 멀리서 보이는 빛기둥 + 표지, 미니맵
 
@@ -55,7 +63,7 @@ export class Guide {
     this.canvas = document.getElementById('minimap');
     this.ctx = this.canvas.getContext('2d');
     const dpr = Math.min(devicePixelRatio, 2);
-    this.cw = 230; this.ch = 150;
+    this.cw = 230; this.ch = Math.round(230 * (BOUNDS.maxZ - BOUNDS.minZ) / (BOUNDS.maxX - BOUNDS.minX)); // 숲길까지 (가로세로 비율 그대로)
     this.canvas.width = this.cw * dpr;
     this.canvas.height = this.ch * dpr;
     this.ctx.scale(dpr, dpr);
@@ -109,7 +117,24 @@ export class Guide {
     // 길
     g.strokeStyle = 'rgba(214, 186, 140, 0.75)'; g.lineCap = 'round';
     const line = (x1, z1, x2, z2, w) => { const a = P(x1, z1), b = P(x2, z2); g.lineWidth = w * k; g.beginPath(); g.moveTo(...a); g.lineTo(...b); g.stroke(); };
-    line(-50, 0, 50, 0, 3.4);
+    // 들판
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    for (const z of ZONE_PTS) {
+      g.strokeStyle = ZONE_COLOR[z.kind]; g.lineWidth = 15 * k;
+      g.beginPath(); z.pts.forEach((pt, i) => { const [x, y] = P(pt[0], pt[1]); if (i) g.lineTo(x, y); else g.moveTo(x, y); }); g.stroke();
+    }
+    // 숲 쉼터: 호수 · 연못 · 개울 · 언덕
+    g.fillStyle = 'rgba(70, 120, 170, 0.75)';
+    { const [lx, lz] = P(LAKE.x, LAKE.z); g.save(); g.translate(lx, lz); g.rotate(Math.atan2(-fx, rx)); g.beginPath(); g.ellipse(0, 0, LAKE.rx * k, LAKE.rz * k, 0, 0, Math.PI * 2); g.restore(); g.fill(); }
+    { const [px, pz] = P(POND.x, POND.z); g.beginPath(); g.arc(px, pz, POND.r * k, 0, Math.PI * 2); g.fill(); }
+    const poly = (pts, w, closed) => { g.lineWidth = w * k; g.beginPath(); pts.forEach((pt, i) => { const [x, y] = P(pt[0], pt[1]); if (i) g.lineTo(x, y); else g.moveTo(x, y); }); if (closed) g.closePath(); g.stroke(); };
+    g.strokeStyle = 'rgba(70, 120, 170, 0.75)'; poly(STREAM_PTS, 1.8, false);
+    g.fillStyle = 'rgba(120, 170, 100, 0.45)';
+    { const [hx, hz] = P(HILL.x, HILL.z); g.beginPath(); g.arc(hx, hz, HILL.r * k, 0, Math.PI * 2); g.fill(); }
+    g.strokeStyle = 'rgba(214, 186, 140, 0.75)';
+    poly(TRAIL_PTS, TRAIL.width, true);
+    for (const sp of SPUR_PTS) poly(sp, TRAIL.width - 0.3, false);
+    line(FENCE.minX - 2, 0, FENCE.maxX + 2, 0, 3.4);
     for (const t of TENTS) line(t.x, 0, t.x, Math.sign(t.z) * 23, 2.2);
     g.fillStyle = 'rgba(214, 186, 140, 0.75)';
     { const [px, pz] = P(0, 0); g.beginPath(); g.arc(px, pz, 11.5 * k, 0, Math.PI * 2); g.fill(); }
@@ -123,7 +148,7 @@ export class Guide {
     }
     // 장소 아이콘
     g.font = '11px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    for (const [x, z, ic] of [[WOODYARD.x, WOODYARD.z, '🪓'], [NPC.x + NPC.front.x, NPC.z + NPC.front.z, '✨'], [KEEPER.x, KEEPER.z, '📦'], [GUESTBOOK.x, GUESTBOOK.z, '📖']]) {
+    for (const [x, z, ic] of [[WOODYARD.x, WOODYARD.z, '🪓'], [NPC.x + NPC.front.x, NPC.z + NPC.front.z, '✨'], [KEEPER.x, KEEPER.z, '📦'], [GUESTBOOK.x, GUESTBOOK.z, '📖'], ...SPOTS.map((sp) => [sp.x, sp.z, sp.icon])]) {
       const [px, py] = P(x, z); g.fillText(ic, px, py);
     }
     // 다른 사람
@@ -164,17 +189,37 @@ export class Guide {
   #drawMap(me, target, pits, remotes, camYaw) {
     const g = this.ctx;
     const W = this.cw, H = this.ch, pad = 8;
-    const sx = (W - pad * 2) / (BOUNDS.maxX - BOUNDS.minX);
-    const sz = (H - pad * 2) / (BOUNDS.maxZ - BOUNDS.minZ);
+    const sx = Math.min((W - pad * 2) / (BOUNDS.maxX - BOUNDS.minX), (H - pad * 2) / (BOUNDS.maxZ - BOUNDS.minZ));
+    const sz = sx;
     const X = (x) => pad + (x - BOUNDS.minX) * sx;
     const Z = (z) => pad + (z - BOUNDS.minZ) * sz;
     g.clearRect(0, 0, W, H);
     // 바탕
     g.fillStyle = '#2f5a35';
     g.beginPath(); g.roundRect(0, 0, W, H, 14); g.fill();
+    // 캠핑장(울타리 안)은 조금 밝게, 바깥은 숲
+    g.fillStyle = '#3d6f42';
+    g.fillRect(X(FENCE.minX - 1), Z(FENCE.minZ - 1), (FENCE.maxX - FENCE.minX + 2) * sx, (FENCE.maxZ - FENCE.minZ + 2) * sz);
+    // 들판: 핑크뮬리 · 갈대
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    for (const z of ZONE_PTS) {
+      g.strokeStyle = ZONE_COLOR[z.kind]; g.lineWidth = 15 * sx;
+      g.beginPath(); z.pts.forEach((pt, i) => (i ? g.lineTo(X(pt[0]), Z(pt[1])) : g.moveTo(X(pt[0]), Z(pt[1])))); g.stroke();
+    }
+    // 숲 쉼터: 언덕 · 호수 · 연못 · 개울
+    g.fillStyle = '#4f8a4a';
+    g.beginPath(); g.arc(X(HILL.x), Z(HILL.z), HILL.r * sx, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#4f86b8';
+    g.beginPath(); g.ellipse(X(LAKE.x), Z(LAKE.z), LAKE.rx * sx, LAKE.rz * sz, 0, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.arc(X(POND.x), Z(POND.z), POND.r * sx, 0, Math.PI * 2); g.fill();
+    const poly = (pts, closed) => { g.beginPath(); pts.forEach((pt, i) => (i ? g.lineTo(X(pt[0]), Z(pt[1])) : g.moveTo(X(pt[0]), Z(pt[1])))); if (closed) g.closePath(); g.stroke(); };
+    g.strokeStyle = '#4f86b8'; g.lineCap = 'round'; g.lineJoin = 'round'; g.lineWidth = 2; poly(STREAM_PTS, false);
+    // 숲길 (점선 느낌의 흙길)
+    g.strokeStyle = '#b89668'; g.lineWidth = 2.6; poly(TRAIL_PTS, true);
+    g.lineWidth = 2; for (const sp of SPUR_PTS) poly(sp, false);
     // 길
     g.strokeStyle = '#a98a5e'; g.lineCap = 'round';
-    g.lineWidth = 4; g.beginPath(); g.moveTo(X(-50), Z(0)); g.lineTo(X(50), Z(0)); g.stroke();
+    g.lineWidth = 4; g.beginPath(); g.moveTo(X(FENCE.minX - 1), Z(0)); g.lineTo(X(FENCE.maxX + 1), Z(0)); g.stroke();
     g.lineWidth = 2.5;
     for (const t of TENTS) { g.beginPath(); g.moveTo(X(t.x), Z(0)); g.lineTo(X(t.x), Z(Math.sign(t.z) * 22)); g.stroke(); }
     g.fillStyle = '#a98a5e';
@@ -210,6 +255,7 @@ export class Guide {
     place(KEEPER.x, KEEPER.z, '📦', '', target?.kind === 'keeper', '#8fc46a'); // 장작 아이콘과 가까워 글자는 생략
     place(GUESTBOOK.x, GUESTBOOK.z, '📖', '방명록', false, '#ffc46b');
     place(BOARD.x, BOARD.z, '📌', '', false, '#ffc46b'); // 방명록과 가까워 글자는 생략
+    for (const sp of SPOTS) place(sp.x, sp.z, sp.icon, sp.name, target?.kind === 'spot' && target.id === sp.id, '#9fd0ff');
     if (target?.kind === 'pit') {
       g.strokeStyle = '#ffc46b'; g.lineWidth = 2;
       g.beginPath(); g.arc(X(target.x), Z(target.z), 7 * pulse, 0, Math.PI * 2); g.stroke();

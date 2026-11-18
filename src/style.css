@@ -210,7 +210,7 @@ body.touch .floater { font-size: 13px; }
 
 /* ---------- 길 안내 ---------- */
 #mapPanel { top: 74px; right: 16px; padding: 6px; border-radius: 20px; }
-#minimap { display: block; width: 230px; height: 150px; border-radius: 14px; }
+#minimap { display: block; width: 230px; height: 188px; border-radius: 14px; } /* 숲길까지 (v1.19) */
 .q-dir { margin-top: 6px; padding-top: 6px; border-top: 2px dashed #ead5ad; font-size: 13.5px; }
 .beacon {
   display: flex; flex-direction: column; align-items: center; gap: 1px; pointer-events: none;
@@ -304,7 +304,7 @@ body.touch .quest { font-size: 12.5px; max-width: 210px; }
 body.touch .q-dir { font-size: 12px; }
 body.touch #topright { top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); font-size: 13px; padding: 5px 6px 5px 12px; }
 body.touch #mapPanel { display: block; top: calc(max(10px, env(safe-area-inset-top)) + 50px); right: max(10px, env(safe-area-inset-right)); padding: 4px; border-radius: 16px; }
-body.touch #minimap { width: 150px; height: 98px; border-radius: 12px; }
+body.touch #minimap { width: 150px; height: 122px; border-radius: 12px; }
 body.touch #bottom { bottom: calc(150px + env(safe-area-inset-bottom)); width: calc(100vw - 20px); }
 body.touch .pill { font-size: 14.5px; padding: 8px 14px; white-space: normal; text-align: center; max-width: 100%; }
 body.touch #powders { flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 260px); min-width: 180px; }

@@ -49,6 +49,7 @@ export class LightPool {
           }
         }
       }
+      if (sl.spot) sl.L.color.copy(sl.spot.color); // 색이 천천히 바뀌는 조명 (분수 등)
       const base = sl.spot ? (typeof sl.spot.intensity === 'function' ? sl.spot.intensity() : sl.spot.intensity) : 0;
       sl.L.intensity = base * sl.w;
     }

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import {
-  CFG, FIRES, seatsOf, STUMPS, EMOTES, NPC, KEEPER, QUESTS, LEGEND_POWDERS, legendPowder, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
+  CFG, FIRES, seatsOf, STUMPS, EMOTES, LOUNGE_SEATS, NPC, KEEPER, QUESTS, LEGEND_POWDERS, legendPowder, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
   TENTS, tentAt, tentLocal, kstDay, EGG,
 } from '../shared/config.js';
 import * as guestbook from './guestbook.js';
@@ -411,6 +411,7 @@ function handle(ws, ctx, m) {
       me.z = Math.min(BOUNDS.maxZ, Math.max(BOUNDS.minZ, z));
       me.ry = ry;
       me.anim = ['idle', 'walk', 'run'].includes(m.anim) ? m.anim : 'idle';
+      if (m.anim === 'sit' && LOUNGE_SEATS.some((st) => dist(me, st.x, st.z) < 1.0)) me.anim = 'sit'; // 흔들의자 · 벤치
       updateTent(me, ws);
       if ((m.anim === 'sit' || m.anim === 'guitar') && me.tent) { // 텐트 안 의자에 앉기 (보여 주기만). 스피커로 노래를 틀었으면 기타
         me.anim = m.anim === 'guitar' && tentRooms.get(me.tent)?.music?.by === me.id ? 'guitar' : 'sit';

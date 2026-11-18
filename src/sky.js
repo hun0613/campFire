@@ -5,7 +5,10 @@ import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { radialTexture, mulberry32 } from './toon.js';
 
 const R = 460;
-export const MOON_DIR = new THREE.Vector3(-0.45, 0.42, -0.78).normalize();
+import { SUNSET } from '../shared/config.js';
+// 보름달: 해가 지는 쪽 반대편(남동쪽) 하늘 낮은 곳에서 떠오른다 (달빛도 이쪽에서 — world.js)
+export const MOON_DIR = new THREE.Vector3(-SUNSET.x * 0.95, 0.31, -SUNSET.z * 0.95).normalize();
+export const SUN_DIR = new THREE.Vector3(SUNSET.x, 0.045, SUNSET.z).normalize(); // 먼 숲 지평선에 반쯤 잠긴 해 (원판 아래 절반은 이미지에서 비운다)
 // 은하수가 지나가는 큰 원의 법선 (하늘 꼭대기 근처를 비스듬히 가로지른다)
 const MW_N = new THREE.Vector3(0.82, 0.18, 0.54).normalize();
 
@@ -30,7 +33,7 @@ export function createSky(scene, { lowSpec = false } = {}) {
   const uTime = { value: 0 };
   // 테마(날씨): 별 · 은하수 · 달 밝기 (0~1, 구름이 끼면 줄어든다)
   const uStars = { value: 1 }, uMilky = { value: 1 }, uMoonK = { value: 1 };
-  const target = { stars: 1, milky: 1, moon: 1 };
+  const target = { stars: 1, milky: 1, moon: 1, sunset: 1 };
 
   // ---------- 하늘 + 은하수
   const sky = new THREE.Mesh(
@@ -44,10 +47,11 @@ export function createSky(scene, { lowSpec = false } = {}) {
         moonDir: { value: MOON_DIR },
         mwN: { value: MW_N },
         uGaze, uMilky, uMoonK,
+        sunDir: { value: SUN_DIR }, uSunset: { value: 1 }, uCloudT: { value: 0 },
       },
       vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
       defines: { OCT: lowSpec ? 3 : 5 },
-      fragmentShader: `uniform vec3 top, mid, bottom, moonDir, mwN; uniform float uGaze, uMilky, uMoonK; varying vec3 vP;
+      fragmentShader: `uniform vec3 top, mid, bottom, moonDir, mwN, sunDir; uniform float uGaze, uMilky, uMoonK, uSunset, uCloudT; varying vec3 vP;
         ${NOISE}
         void main(){
           vec3 d = normalize(vP);
@@ -56,10 +60,33 @@ export function createSky(scene, { lowSpec = false } = {}) {
           c = mix(c, top, smoothstep(0.25, 0.9, h));
           float m = max(dot(d, moonDir), 0.0);
           c += vec3(0.25, 0.27, 0.45) * pow(m, 18.0) * 0.35 * uMoonK;
+          // 🌅 노을: 해가 지는 쪽 지평선부터 주황 → 분홍 → 보라로 번지고, 반대쪽은 밤
+          float az = clamp(dot(normalize(d.xz + 1e-5), normalize(sunDir.xz)) * 0.5 + 0.5, 0.0, 1.0);
+          float side = smoothstep(0.0, 1.0, pow(az, 1.6)) * uSunset; // 노을 → 밤으로 넓고 부드럽게
+          vec3 sc = mix(vec3(0.92, 0.42, 0.28), vec3(0.74, 0.24, 0.44), smoothstep(-0.02, 0.22, h)); // 해가 반쯤 잠긴 시간: 전체적으로 한 톤 어둡게
+          sc = mix(sc, vec3(0.44, 0.15, 0.38), smoothstep(0.1, 0.45, h));
+          sc = mix(sc, vec3(0.2, 0.1, 0.3), smoothstep(0.3, 0.85, h));
+          sc *= 0.6; // 해가 반쯤 잠긴 시간: 노을빛을 한 톤 더 가라앉힌다
+          float hb = exp(-max(h, 0.0) * 1.8);
+          c = mix(c, sc, side * mix(0.25, 1.0, hb) * smoothstep(-0.2, 0.0, h));
+          float sd = max(dot(d, sunDir), 0.0);
+          // 해: 지평선에 걸린 부드러운 원판 (블룸이 터지지 않게 밝기를 1 안쪽으로) + 은은한 둘레 빛
+          c += (vec3(1.0, 0.5, 0.35) * pow(sd, 260.0) * 0.1 + vec3(0.95, 0.38, 0.42) * pow(sd, 14.0) * 0.05) * smoothstep(0.45, 1.0, uSunset); // 흐린 날엔 해 둘레 빛도 없다
+          // 🌇 노을 구름: 해 지는 쪽 낮은 하늘에 가로로 길게. 아래쪽 · 해에 가까울수록 주황 · 분홍으로 물들고 위는 보랏빛 회색
+          float cb = smoothstep(0.0, 0.1, h) * (1.0 - smoothstep(0.22, 0.65, h));
+          if (cb > 0.0 && side > 0.03) {
+            vec3 q = vec3(d.x * 2.4 + uCloudT, d.y * 10.0, d.z * 2.4 + uCloudT * 0.6);
+            float n = fbm(q * 1.7);
+            float cl = smoothstep(0.42, 0.72, n) * cb;
+            float lit = clamp(1.15 - (h - 0.02) * 2.6, 0.0, 1.0) * (0.55 + 0.45 * pow(sd, 3.0));
+            float rim = smoothstep(0.62, 0.5, fbm(q * 1.7 + vec3(0.0, 0.18, 0.0))); // 구름 아랫면 가장자리가 더 밝게
+            vec3 cc = mix(vec3(0.24, 0.14, 0.3), mix(vec3(0.78, 0.26, 0.32), vec3(0.92, 0.42, 0.2), pow(sd, 5.0)), smoothstep(0.15, 0.95, lit) * (0.45 + 0.55 * rim));
+            c = mix(c, cc * 0.7, cl * side * 0.92);
+          }
           // 은하수: 큰 원을 따라 흐르는 뿌연 빛 + 가운데 어두운 먼지 띠
           float k = dot(d, mwN);
           float band = exp(-k * k / 0.022);
-          float lift = smoothstep(0.02, 0.35, h) * (1.0 - pow(m, 6.0));
+          float lift = smoothstep(0.02, 0.35, h) * (1.0 - pow(m, 6.0)) * (1.0 - side * 0.85);
           // 은하수가 없는 곳은 무늬 계산을 건너뛴다 (하늘 대부분 — GPU 부담을 크게 줄임)
           if (band * lift * uMilky < 0.004) { gl_FragColor = vec4(c, 1.0); return; }
           float cloud = fbm(d * 5.0 + 3.1);
@@ -106,13 +133,14 @@ export function createSky(scene, { lowSpec = false } = {}) {
     addStar(v, 0.7 + rand() * 0.9);
   }
   const starMat = new THREE.ShaderMaterial({
-    uniforms: { uTime, uGaze, uStars, uPR: { value: Math.min(devicePixelRatio, 2) } },
+    uniforms: { uTime, uGaze, uStars, uPR: { value: Math.min(devicePixelRatio, 2) }, sunXZ: { value: new THREE.Vector2(SUNSET.x, SUNSET.z) }, uSunsetS: { value: 1 } },
     transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending,
-    vertexShader: `attribute float aPhase; attribute float aSize; attribute vec3 aColor; uniform float uTime; uniform float uPR; uniform float uGaze;
+    vertexShader: `attribute float aPhase; attribute float aSize; attribute vec3 aColor; uniform float uTime; uniform float uPR; uniform float uGaze; uniform vec2 sunXZ; uniform float uSunsetS;
       varying float vA; varying vec3 vC;
       void main(){
         vA = 0.55 + 0.45 * sin(uTime * (0.6 + fract(aPhase) * 1.8) + aPhase);
         vA *= mix(0.75, 1.15, uGaze) * smoothstep(0.0, 60.0, position.y);
+        vA *= 1.0 - uSunsetS * pow(clamp(dot(normalize(position.xz + 1e-5), sunXZ) * 0.5 + 0.5, 0.0, 1.0), 3.0) * smoothstep(260.0, 40.0, position.y); // 노을 쪽 낮은 하늘은 별이 아직 안 보인다
         vC = aColor;
         gl_PointSize = aSize * uPR * (1.0 + 0.25 * uGaze);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -174,11 +202,44 @@ export function createSky(scene, { lowSpec = false } = {}) {
 
   // ---------- 달
   // 블룸에 번져 눈부시지 않게 밝기를 낮췄다 (2.2 → 0.9: 블룸 문턱 바로 위라 살짝만 번진다)
-  const moon = new THREE.Mesh(new THREE.SphereGeometry(13, 32, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff3d2').multiplyScalar(0.9), fog: false }));
+  // 동그란 원판 이미지 (가장자리만 살짝 부드럽게): 보름달 · 해
+  const discTex = (spots) => {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+    const g = cv.getContext('2d');
+    const grd = g.createRadialGradient(64, 64, 0, 64, 64, 60);
+    grd.addColorStop(0, '#fff'); grd.addColorStop(0.9, '#fff'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grd; g.beginPath(); g.arc(64, 64, 60, 0, Math.PI * 2); g.fill();
+    if (spots) { g.fillStyle = 'rgba(160,150,140,0.18)'; for (const [x, y, r] of [[48, 50, 14], [78, 70, 10], [60, 84, 8], [84, 44, 7]]) { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); } }
+    return new THREE.CanvasTexture(cv);
+  };
+  // 보름달 (해가 지는 쪽 반대편)
+  const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: discTex(true), color: new THREE.Color('#fff3d2').multiplyScalar(0.92), transparent: true, depthWrite: false, fog: false }));
+  moon.scale.setScalar(24);
   moon.position.copy(MOON_DIR).multiplyScalar(420);
   group.add(moon);
+  // 해: 지평선에 반쯤 잠긴 원판. 위는 노란 주황, 지평선 쪽은 붉게, 잠긴 아래 절반은 부드럽게 사라진다 (블룸이 터지지 않게 밝기는 1 안쪽)
+  const halfSunTex = () => {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+    const g = cv.getContext('2d');
+    const col = g.createLinearGradient(0, 4, 0, 64);
+    col.addColorStop(0, '#ffc77a'); col.addColorStop(0.7, '#ff9a55'); col.addColorStop(1, '#f2643f');
+    g.fillStyle = col; g.beginPath(); g.arc(64, 64, 60, 0, Math.PI * 2); g.fill();
+    g.globalCompositeOperation = 'destination-out'; // 아래 절반 지우기 (지평선 근처는 살짝 번지게)
+    const cut = g.createLinearGradient(0, 58, 0, 70);
+    cut.addColorStop(0, 'rgba(0,0,0,0)'); cut.addColorStop(1, 'rgba(0,0,0,1)');
+    g.fillStyle = cut; g.fillRect(0, 58, 128, 70);
+    g.globalCompositeOperation = 'destination-in'; // 둥근 가장자리 살짝 부드럽게
+    const edge = g.createRadialGradient(64, 64, 0, 64, 64, 60);
+    edge.addColorStop(0.92, '#fff'); edge.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = edge; g.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(cv);
+  };
+  const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: halfSunTex(), color: new THREE.Color(1.0, 0.78, 0.6).multiplyScalar(0.9), transparent: true, depthWrite: false, fog: false }));
+  sun.scale.setScalar(30);
+  sun.position.copy(SUN_DIR).multiplyScalar(430);
+  group.add(sun);
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTexture(), color: '#b9c4ff', transparent: true, opacity: 0.1, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
-  halo.scale.setScalar(80);
+  halo.scale.setScalar(64);
   halo.position.copy(moon.position);
   group.add(halo);
 
@@ -247,6 +308,41 @@ export function createSky(scene, { lowSpec = false } = {}) {
     }
   }
 
+  // ---------- 🐦 새 떼: 이따금 V자로 날갯짓하며 노을 하늘을 가로지른다
+  const birdGeo = new THREE.BufferGeometry();
+  birdGeo.setAttribute('position', new THREE.Float32BufferAttribute([
+    0, 0, 0, -1, 0.42, 0, -0.42, 0.05, 0,  0, 0, 0, -0.42, 0.05, 0, -0.18, -0.12, 0,
+    0, 0, 0, 0.42, 0.05, 0, 1, 0.42, 0,    0, 0, 0, 0.18, -0.12, 0, 0.42, 0.05, 0,
+  ], 3));
+  const BN = 11;
+  const birds = new THREE.InstancedMesh(birdGeo, new THREE.MeshBasicMaterial({ color: '#24152a', side: THREE.DoubleSide, fog: false }), BN);
+  birds.frustumCulled = false; birds.count = 0; birds.renderOrder = -5; group.add(birds);
+  let flock = null, nextFlock = 8 + Math.random() * 10;
+  const bM = new THREE.Matrix4(), bP = new THREE.Vector3(), bQ = new THREE.Quaternion(), bS = new THREE.Vector3(), O = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+  const sunAz = Math.atan2(SUNSET.z, SUNSET.x);
+  function updateBirds(t, dt, sunsetK) {
+    if (!flock) {
+      nextFlock -= dt;
+      if (nextFlock > 0 || sunsetK < 0.6) { birds.count = 0; return; }
+      const dir = Math.random() < 0.5 ? 1 : -1, n = 5 + Math.floor(Math.random() * (BN - 5));
+      flock = { a: sunAz - dir * 0.95, dir, alt: 0.1 + Math.random() * 0.16, dist: 190 + Math.random() * 60, n, life: 0, ph: Math.random() * 6 };
+    }
+    flock.life += dt; flock.a += flock.dir * dt * 0.06;
+    if (Math.abs(flock.a - sunAz) > 1.0 && flock.life > 3) { flock = null; birds.count = 0; nextFlock = 25 + Math.random() * 25; return; }
+    birds.count = flock.n;
+    for (let i = 0; i < flock.n; i++) {
+      const row = Math.ceil(i / 2), side = i === 0 ? 0 : (i % 2 ? 1 : -1);
+      const a = flock.a - flock.dir * row * 0.018, alt = flock.alt + side * row * 0.008 + Math.sin(t * 0.7 + i) * 0.004;
+      bP.set(Math.cos(a) * Math.cos(alt) * flock.dist, Math.sin(alt) * flock.dist, Math.sin(a) * Math.cos(alt) * flock.dist);
+      bP.x += side * row * 2.2 * Math.sin(a); bP.z -= side * row * 2.2 * Math.cos(a);
+      bM.lookAt(bP, O, UP); bQ.setFromRotationMatrix(bM);
+      const flap = 0.35 + 0.65 * Math.abs(Math.sin(t * 7 + i * 0.9 + flock.ph));
+      bS.set(2.6, 2.6 * flap, 2.6);
+      bM.compose(bP, bQ, bS); birds.setMatrixAt(i, bM);
+    }
+    birds.instanceMatrix.needsUpdate = true;
+  }
+
   let nextShoot = 6 + Math.random() * 10;
   const look = new THREE.Vector3();
   const skyU = sky.material.uniforms;
@@ -259,6 +355,7 @@ export function createSky(scene, { lowSpec = false } = {}) {
       const s = th.sky;
       skyTarget.top.set(s.top); skyTarget.mid.set(s.mid); skyTarget.bottom.set(s.bottom);
       target.stars = s.stars; target.milky = s.milky; target.moon = s.moon;
+      target.sunset = s.stars > 0.5 ? 1 : 0.35; // 흐리거나 눈 · 비 오는 날엔 노을이 옅다
     },
     /** @returns {boolean} 이번 프레임에 '올려다보는 중' 별똥별이 떨어졌는지 */
     update(t, dt, camera, gaze) {
@@ -269,6 +366,10 @@ export function createSky(scene, { lowSpec = false } = {}) {
       uStars.value += (target.stars - uStars.value) * k;
       uMilky.value += (target.milky - uMilky.value) * k;
       uMoonK.value += (target.moon - uMoonK.value) * k;
+      skyU.uSunset.value += (target.sunset - skyU.uSunset.value) * k; starMat.uniforms.uSunsetS.value = skyU.uSunset.value;
+      skyU.uCloudT.value = t * 0.0035; // 구름이 아주 천천히 흐른다
+      updateBirds(t, dt, skyU.uSunset.value);
+      sun.material.opacity = THREE.MathUtils.smoothstep(skyU.uSunset.value, 0.45, 1.0); sun.visible = sun.material.opacity > 0.01; // 흐리거나 비 · 눈 오는 날엔 해가 구름에 가려 안 보인다
       moon.visible = uMoonK.value > 0.02;
       moon.material.color.copy(moonBase).multiplyScalar(0.25 + 0.75 * uMoonK.value);
       halo.material.opacity = 0.1 * uMoonK.value;

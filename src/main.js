@@ -28,7 +28,7 @@ import { NoticeBoard } from './board.js';
 import { LightPool } from './lightpool.js';
 import { TentInterior, TENT_PROPS, TENT_ENTRY, collideTents, roofY } from './tent.js';
 import {
-  CFG, PITS, STUMPS, NPC, KEEPER, BOUNDS, RANGE, LOOKS, GUESTBOOK, BOARD, QUESTS, LEGEND_POWDERS, TENTS, FIRES, tentAt, tentLocal, EGG, kstDay, EMOTES,
+  CFG, PITS, STUMPS, NPC, KEEPER, BOUNDS, RANGE, LOOKS, GUESTBOOK, BOARD, QUESTS, LEGEND_POWDERS, TENTS, FIRES, tentAt, tentLocal, EGG, kstDay, EMOTES, FENCE, GATES, SPOTS, LOUNGE_SEATS, SUNSET,
 } from '../shared/config.js';
 
 const $ = (id) => document.getElementById(id);
@@ -141,6 +141,8 @@ const tentRoom = new TentInterior(scene, world.tents);
 // ---------------------------------------------------------------- 🌦️ 캠핑장 테마 (서버가 알려 준다: 서울 날씨 · 관리자 선택)
 const precip = new Precip(scene, shared, { lowSpec: isTouch });
 const fogTarget = { color: new THREE.Color(scene.fog.color), near: scene.fog.near, far: scene.fog.far };
+const fogBase = new THREE.Color(scene.fog.color), fogLook = new THREE.Vector3(), SUNSET_FOG = new THREE.Color('#52244a'); // 지평선 노을빛과 이어지게 (너무 검으면 앉았을 때 지평선이 어두운 띠로 보인다)
+const sunsetK = () => (themeOf(state.theme).sky?.stars > 0.5 ? 1 : 0.35);
 let themeLight = { hemi: 1, ambient: 1, moon: 1 };
 function applyTheme(id, { announce = true } = {}) {
   const th = themeOf(id);
@@ -178,6 +180,7 @@ const state = {
   myId: null,
   inv: { wood: 0, stored: 0, chops: 0, powders: [], quest: null, coins: 0, coinDay: '', shareDay: '' },
   sitting: null,
+  lounge: null, // 앉은 벤치 {i, seat, at}
   tent: null,   // 지금 들어가 있는 글램핑 텐트 (TENTS 항목)
   tentMusic: new Map(), // 텐트 id -> 블루투스 스피커로 트는 곡
   clockOffset: 0,
@@ -303,7 +306,7 @@ if (typeof ResizeObserver !== 'undefined') {
   addEventListener('resize', placeUnderStatus);
 }
 function setView(fp, { silent = false } = {}) {
-  if (fp && !state.sitting) fp = false; // 서 있을 때는 3인칭만
+  if (fp && !state.sitting && !state.lounge) fp = false; // 서 있을 때는 3인칭만
   const changed = view.fp !== fp;
   view.fp = fp;
   cam.look = state.sitting ? -0.14 : 0;
@@ -1182,6 +1185,41 @@ lpTagEl.textContent = '💿 눌러서 곡 고르기';
 const lpTag = new CSS2DObject(lpTagEl);
 lpTag.visible = false;
 scene.add(lpTag);
+
+// ---------------------------------------------------------------- 🌲 숲길: 출입구 · 쉼터 팻말, 처음 도착하면 알림
+const tag3d = (html, x, y, z) => {
+  const wrap = document.createElement('div');
+  const el = document.createElement('div');
+  el.className = 'gb-tag spot-tag';
+  el.innerHTML = html;
+  wrap.appendChild(el);
+  const o = new CSS2DObject(wrap);
+  o.position.set(x, y, z);
+  scene.add(o);
+  return el;
+};
+for (const g of GATES) tag3d('<span class="gb-tag-icon">🌲</span><b>숲길</b>', g.x, 3.7, g.z);
+for (const sp of SPOTS) tag3d(`<span class="gb-tag-icon">${sp.icon}</span><b>${sp.name}</b>`, sp.x, world.heightAt(sp.x, sp.z) + 3.4, sp.z);
+const trailSeen = new Set(); // 이번 접속에서 처음 온 쉼터만 알린다
+let trailT = 0, wasOutside = false;
+function updateTrail(dt) {
+  trailT -= dt;
+  if (trailT > 0 || !me) return;
+  trailT = 0.5;
+  const outside = me.x < FENCE.minX - 1.2 || me.x > FENCE.maxX + 1.2 || me.z < FENCE.minZ - 1.2 || me.z > FENCE.maxZ + 1.2;
+  if (outside && !wasOutside && !trailSeen.has('enter')) {
+    trailSeen.add('enter');
+    UI.toast('🌲 숲길이에요. 한 바퀴 천천히 걸어 봐요', 2800);
+    track('trail_enter');
+  }
+  wasOutside = outside;
+  for (const sp of SPOTS) {
+    if (trailSeen.has(sp.id) || Math.hypot(me.x - sp.x, me.z - sp.z) > sp.r) continue;
+    trailSeen.add(sp.id);
+    UI.toast(`${sp.icon} ${sp.name}에 왔어요`, 2600);
+    track('trail_spot', { spot: sp.id });
+  }
+}
 // 텐트 문 위 「⛺ 2/5」: 지금 안에 몇 명 있는지 (밖에서 가까이 있을 때만)
 const tentTags = new Map(TENTS.map((t) => {
   const el = document.createElement('div');
@@ -1300,6 +1338,7 @@ addEventListener('pointerdown', (e) => {
 function findInteraction() {
   if (!me) return null;
   if (state.sitting) return { type: 'seated', pit: pits.get(state.sitting.pit) };
+  if (state.lounge) return { type: 'lounge' };
   let best = null;
   let bestD = Infinity;
   if (state.tent) {
@@ -1330,6 +1369,10 @@ function findInteraction() {
   if (dg < RANGE.guestbook && dg < bestD) { best = { type: 'guestbook' }; bestD = dg; }
   const db = Math.hypot(me.x - BOARD.x, me.z - BOARD.z);
   if (db < RANGE.board && db < bestD) { best = { type: 'board' }; bestD = db; }
+  LOUNGE_SEATS.forEach((st, i) => { // 언덕 · 호숫가 · 광장 벤치
+    const d = Math.hypot(me.x - st.x, me.z - st.z);
+    if (d < 1.4 && d < bestD && !chairTaken(i)) { best = { type: 'chair', i, kind: st.kind }; bestD = d; }
+  });
   for (const pit of pitList) {
     if (pit.stove) continue; // 텐트 화로는 텐트 안에서만
     const d = Math.hypot(me.x - pit.pos.x, me.z - pit.pos.z);
@@ -1355,6 +1398,8 @@ function promptFor(it) {
   }
   if (it.type === 'tentExit') return ['<kbd>E</kbd> 텐트 밖으로 나가기 🚪'];
   if (it.type === 'egg') return ['<kbd>E</kbd> 풀숲에서 반짝이는 걸 줍기 ✨'];
+  if (it.type === 'chair') return [it.kind === 'hill' ? '<kbd>E</kbd> 벤치에 앉아 노을 보기 🌅' : '<kbd>E</kbd> 벤치에 앉아 쉬기 🪑'];
+  if (it.type === 'lounge') return ['<kbd>E</kbd> 일어나기 · 화면을 끌어 둘러봐요'];
   if (it.type === 'pit') {
     const p = it.pit;
     if (p.state === 'empty') {
@@ -1400,6 +1445,8 @@ function interact(it) {
       track('fire_light', { pit: p.id });
     } else if (p.state === 'lit') net.send({ t: 'sit', pit: p.id });
   } else if (it.type === 'seated') standUp();
+  else if (it.type === 'chair') sitChair(it.i);
+  else if (it.type === 'lounge') leaveChair();
   else if (it.type === 'tentDoor') enterTent(it.t);
   else if (it.type === 'tentExit') exitTent();
   else if (it.type === 'egg') { faceTo(EGG.x, EGG.z); me.char.play('light', { onImpact: () => {} }); net.send({ t: 'egg' }); }
@@ -1528,6 +1575,49 @@ function tryChop(it) {
   });
 }
 
+// ---------------------------------------------------------------- 🌅 노을 지는 언덕 흔들의자: 앉으면 천천히 흔들리며 하늘을 올려다본다
+function chairTaken(i) {
+  const st = LOUNGE_SEATS[i];
+  return [...remotes.values()].some((r) => r.anim === 'sit' && Math.hypot(r.tx - st.x, r.tz - st.z) < 0.45);
+}
+// 앉으면 늘 1인칭. 흔들의자는 하늘을 올려다보고, 벤치는 앞을 본다 (화면을 끌면 둘러볼 수 있다)
+function sitChair(i) {
+  if (!me || state.sitting || chairTaken(i)) return;
+  const st = LOUNGE_SEATS[i];
+  state.lounge = { i, seat: st, at: performance.now() };
+  me.x = st.x; me.z = st.z; me.ry = st.ry;
+  me.char.root.rotation.y = st.ry;
+  me.char.setAnim('sit');
+  setView(true, { silent: true });
+  cam.yaw = st.ry + Math.PI;
+  cam.look = st.kind === 'hill' ? 0.06 : -0.04; // 노을 지는 언덕: 지평선 (끌어 올리면 별)
+  UI.toast(st.kind === 'hill' ? '🌅 노을을 보며 쉬어요 · 위로 끌면 별이 보여요' : '🪑 화면을 끌어 둘러봐요 · 움직이면 일어나요', 3000);
+}
+function leaveChair() {
+  if (!state.lounge || !me) return;
+  const st = state.lounge.seat;
+  state.lounge = null;
+  me.char.root.rotation.x = 0;
+  me.char.setAnim('idle');
+  setView(false, { silent: true });
+  const step = 1.45; // 벤치 앞으로 한 걸음
+  me.x = st.x + Math.sin(st.ry) * step; me.z = st.z + Math.cos(st.ry) * step;
+  collide(me);
+  cam.yaw = st.ry + Math.PI; cam.pitch = Math.max(cam.pitch, 0.6);
+}
+/** 앉은 사람이 있는 흔들의자만 천천히 흔든다 (나 · 다른 캠퍼 모두) */
+function updateChairs(t) {
+  LOUNGE_SEATS.forEach((st, i) => {
+    let ch = state.lounge?.i === i ? me.char : null;
+    if (!ch) for (const r of remotes.values()) if (r.anim === 'sit' && Math.hypot(r.tx - st.x, r.tz - st.z) < 0.45) { ch = r.ch; r.ch.root.rotation.y = st.ry; break; }
+    if (st.kind !== 'rock') return;
+    const a = ch ? Math.sin(t * 1.5 + i * 1.3) * 0.085 : 0;
+    world.trail.rockChair(st.chair, a);
+    if (ch) ch.root.rotation.x = a;
+  });
+  for (const r of remotes.values()) if (r.ch.root.rotation.x && r.anim !== 'sit') r.ch.root.rotation.x = 0;
+}
+
 function standUp() {
   if (!state.sitting || !me) return;
   const pit = pits.get(state.sitting.pit);
@@ -1580,6 +1670,8 @@ function actionFor(it) {
   if (it.type === 'tentDoor') return tentCount(it.t) >= CFG.TENT_CAP ? null : { icon: '⛺', label: '들어가기' };
   if (it.type === 'tentExit') return { icon: '🚪', label: '나가기' };
   if (it.type === 'egg') return { icon: '✨', label: '줍기' };
+  if (it.type === 'chair') return { icon: '🪑', label: '앉기' };
+  if (it.type === 'lounge') return { icon: '🚶', label: '일어나기' };
   if (it.type === 'pit') {
     const p = it.pit;
     if (p.state === 'empty' && state.inv.wood >= CFG.WOOD_PER_FIRE) return { icon: '🪵', label: '장작 쌓기' };
@@ -1893,7 +1985,11 @@ function updateLocal(dt) {
     if (moving) standUp();
     else me.char.setAnim(amDJ() ? 'guitar' : 'sit');
   }
-  if (!state.sitting) {
+  if (state.lounge) {
+    if (moving) leaveChair();
+    else { const st = state.lounge.seat; me.x = st.x; me.z = st.z; me.ry = st.ry; me.char.setAnim('sit'); }
+  }
+  if (!state.sitting && !state.lounge) {
     const chopping = me.char.action?.name === 'chop';
     if (moving && !chopping) {
       const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw);
@@ -1921,11 +2017,12 @@ function updateLocal(dt) {
 
   const r = me.char.root;
   r.position.set(me.x, world.heightAt(me.x, me.z), me.z);
-  r.rotation.y = state.sitting ? me.ry : lerpAngle(r.rotation.y, me.ry, Math.min(1, dt * 16));
+  r.rotation.y = state.sitting || state.lounge ? me.ry : lerpAngle(r.rotation.y, me.ry, Math.min(1, dt * 16));
 
-  // 고개를 내 시야 쪽으로: 카메라가 보는 방향(좌우)과, 올려다볼 때의 위쪽 각도
+  // 고개 방향: 1인칭은 내 시야(카메라가 보는 방향)를 따라 고개를 돌린다.
+  // 3인칭은 몸 정면으로 고정 (카메라를 돌려 내 얼굴을 볼 때 고개가 반대로 돌아가 뒤통수만 보이지 않게). 하늘을 올려다볼 때 고개를 드는 것만 남긴다
   camera.getWorldDirection(lookDir);
-  const lookYaw = Math.atan2(lookDir.x, lookDir.z);
+  const lookYaw = view.fp ? Math.atan2(lookDir.x, lookDir.z) : r.rotation.y;
   const elev = Math.asin(Math.max(-1, Math.min(1, lookDir.y)));
   const lookPitch = view.fp ? elev : Math.max(0, elev); // 3인칭은 늘 내려다보는 카메라라 위로 볼 때만
   me.char.setLook(lookYaw, lookPitch);
@@ -1983,8 +2080,8 @@ function updateCamera(dt, t) {
     const el = cam.look;
     fpDir.set(-Math.sin(cam.yaw) * Math.cos(el), Math.sin(el), -Math.cos(cam.yaw) * Math.cos(el));
     // 앉아 있으면 불까지 2m 남짓이라 너무 가깝다 → 눈 위치를 살짝 뒤 · 위로 빼서 불 전체가 보이게
-    camera.position.copy(fpPos).addScaledVector(fpDir, state.sitting ? -0.95 : 0.3);
-    if (state.sitting) camera.position.y += 0.16; // 앉아서 1인칭: 의자에 앉은 눈높이 그대로, 반 걸음만 물러나 모닥불 둘레가 보이게
+    camera.position.copy(fpPos).addScaledVector(fpDir, state.sitting ? -0.95 : state.lounge ? -0.2 : 0.3);
+    if (state.sitting || state.lounge) camera.position.y += 0.16; // 앉아서 1인칭: 의자에 앉은 눈높이 그대로, 반 걸음만 물러나 모닥불 둘레가 보이게
     if (state.shake > 0) {
       state.shake -= dt;
       camera.position.x += (Math.random() - 0.5) * state.shake * 0.2;
@@ -1993,7 +2090,10 @@ function updateCamera(dt, t) {
     lookTmp.copy(camera.position).add(fpDir);
     camera.lookAt(lookTmp);
     cam.gaze = THREE.MathUtils.smoothstep(el, 0.35, 1.0);
-    const fov = (innerWidth < innerHeight ? 82 : 72) + (state.tent ? 12 : 0) + 8 * cam.gaze; // 1인칭은 시야를 넓게 (가까운 불·사람이 화면을 꽉 채우지 않게). 텐트 안은 더 넓게
+    // 1인칭은 시야를 넓게 (가까운 불·사람이 화면을 꽉 채우지 않게). 텐트 안은 더 넓게.
+    // 벤치는 먼 풍경(노을 · 해)을 보는 자리라 서서 볼 때와 비슷한 화각으로 — 넓으면 해가 작아지고 하늘만 휑해 보인다
+    const fov = state.lounge ? (innerWidth < innerHeight ? 62 : 48) + 8 * cam.gaze
+      : (innerWidth < innerHeight ? 82 : 72) + (state.tent ? 12 : 0) + 8 * cam.gaze;
     if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
     cam.target.set(me.x, 1.0, me.z);
     focus.set(me.x, 0, me.z);
@@ -2116,7 +2216,7 @@ function updateFires(t, dt) {
     if (p.state === 'lit' && d < nearLit) nearLit = d;
     p.update(t, dt, now);
   }
-  const bloomTarget = (view.fp ? 0.16 : 0.22) + 0.2 * THREE.MathUtils.smoothstep(nearLit, 2.5, 9);
+  const bloomTarget = (view.fp && !state.lounge ? 0.16 : 0.22) + 0.2 * THREE.MathUtils.smoothstep(nearLit, 2.5, 9);
   // 가루 효과(빛나는 파티클): 1인칭으로 앉아 있으면 불이 눈앞이라 눈부시다 → 빛 세기를 낮춘다
   const glowTarget = view.fp && state.sitting ? 0.5 : 1;
   glowFx.points.material.uniforms.uGlow.value += (glowTarget - glowFx.points.material.uniforms.uGlow.value) * Math.min(1, dt * 4);
@@ -2342,7 +2442,7 @@ let swallowClick = false;
 function updateCalm(now) {
   const busy = UI.dialogOpen() || document.querySelector('.overlay:not(.hidden)') || !$('bagPanel').classList.contains('hidden')
     || document.body.classList.contains('chat-open') || document.activeElement === chatInput || touch?.active || cam.dragging;
-  const calm = !!state.sitting && !busy && now - lastInputAt > CALM_AFTER;
+  const calm = !!(state.sitting || state.lounge) && !busy && now - lastInputAt > CALM_AFTER;
   if (calm !== document.body.classList.contains('calm')) document.body.classList.toggle('calm', calm);
 }
 addEventListener('pointerdown', (e) => {
@@ -2384,7 +2484,11 @@ function frame(now = performance.now()) {
     world.hemi.intensity = 0.45 * skyDim * themeLight.hemi; world.ambient.intensity = 0.18 * skyDim * themeLight.ambient; world.moonLight.intensity = 0.45 * skyDim * themeLight.moon;
     // 테마 안개 (천천히)
     const fk = Math.min(1, dt * 0.6);
-    scene.fog.color.lerp(fogTarget.color, fk);
+    fogBase.lerp(fogTarget.color, fk);
+    // 🌅 노을 쪽을 볼수록 안개가 분홍빛 (반대쪽은 밤 안개 그대로)
+    camera.getWorldDirection(fogLook);
+    const sw = Math.max(0, (fogLook.x * SUNSET.x + fogLook.z * SUNSET.z) / (Math.hypot(fogLook.x, fogLook.z) || 1));
+    scene.fog.color.copy(fogBase).lerp(SUNSET_FOG, sw * sw * 0.7 * sunsetK()); // 어두운 보랏빛: 숲이 노을 앞 검은 실루엣으로
     scene.fog.near += (fogTarget.near - scene.fog.near) * fk;
     scene.fog.far += (fogTarget.far - scene.fog.far) * fk;
   }
@@ -2407,6 +2511,8 @@ function frame(now = performance.now()) {
   updateFires(t, dt);
   updateMusicFx(dt);
   updateStumps(dt);
+  updateTrail(dt);
+  updateChairs(performance.now() / 1000);
   gbStand.update(dt, me);
   board.update(dt, me);
   lampPool.update(dt, focus, lightSpots);

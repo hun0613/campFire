@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { toon, glow, radialTexture, textTexture, mulberry32 } from './toon.js';
 import { createSky } from './sky.js';
-import { CFG, TENTS, PITS, STUMPS, NPC, KEEPER, WOODYARD, BOUNDS, TENT_WH, TENT_RH, EGG } from '../shared/config.js';
+import { CFG, TENTS, PITS, STUMPS, NPC, KEEPER, WOODYARD, BOUNDS, FENCE, GATES, SUNSET, TENT_WH, TENT_RH, EGG } from '../shared/config.js';
+import { buildTrail } from './trail.js';
 
 const W = { minX: -60, maxX: 60, minZ: -42, maxZ: 42 };
 const tmpM = new THREE.Matrix4();
@@ -12,7 +13,7 @@ const tmpE = new THREE.Euler();
 
 // ---------------------------------------------------------------- 길 판정 (지면 텍스처와 동일한 모양)
 export function isPath(x, z) {
-  if (Math.abs(z) < 2.4 && x > -50 && x < 50) return true;
+  if (Math.abs(z) < 2.4 && x > FENCE.minX - 2 && x < FENCE.maxX + 2) return true; // 큰길 (양 끝은 숲길 출입구)
   if (x * x + z * z < 11.5 * 11.5) return true;
   for (const t of TENTS) if (Math.abs(x - t.x) < 1.3 && Math.abs(z) < 23 && Math.sign(z) === Math.sign(t.z)) return true;
   for (const p of PITS) if ((x - p.x) ** 2 + (z - p.z) ** 2 < 3.7 * 3.7) return true;
@@ -191,7 +192,11 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   moonLight.shadow.bias = -0.0005;
   moonLight.shadow.normalBias = 0.03;
   scene.add(moonLight, moonLight.target);
-  const moonOffset = new THREE.Vector3(-0.45, 0.8, -0.78).normalize().multiplyScalar(60);
+  const moonOffset = new THREE.Vector3(0.55, 0.8, 0.72).normalize().multiplyScalar(60); // 달은 해가 진 쪽 반대편
+  // 🌅 노을빛: 해가 지는 쪽(북서)에서 낮게 비추는 따뜻한 분홍 빛 (그림자 없음)
+  const sunsetLight = new THREE.DirectionalLight('#ff8f78', 0.3); // 해가 반쯤 잠겨 노을빛도 은은하게
+  scene.add(sunsetLight); scene.add(sunsetLight.target);
+  const sunsetOffset = new THREE.Vector3(SUNSET.x, 0.18, SUNSET.z).normalize().multiplyScalar(60);
 
   // ---------- 지면
   const groundTex = { grass: groundTexture() };
@@ -210,23 +215,33 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   outer.receiveShadow = true;
   scene.add(outer);
 
+  // ---------- 🌲 숲길 (둘레길) · 쉼터
+  const trail = buildTrail(scene, { addCol, updaters, lightSpots, lowSpec });
+
   // ---------- 울타리
   {
     const posts = [];
     const rails = [];
-    const fx = BOUNDS.maxX + 1, fz = BOUNDS.maxZ + 1;
+    const fx = FENCE.maxX + 1, fz = FENCE.maxZ + 1;
+    // 숲길 출입구 자리는 비운다 (울타리는 이제 경계 대신 충돌로 막는다)
+    const inGate = (x, z) => GATES.some((g) => (g.axis === 'x' ? Math.abs(z - g.z) < 0.6 && Math.abs(x - g.x) < g.half : Math.abs(x - g.x) < 0.6 && Math.abs(z - g.z) < g.half));
     const addLine = (x1, z1, x2, z2) => {
       const len = Math.hypot(x2 - x1, z2 - z1);
       const n = Math.round(len / 2.5);
       const ang = Math.atan2(z2 - z1, x2 - x1);
       for (let i = 0; i <= n; i++) {
         const x = x1 + ((x2 - x1) * i) / n, z = z1 + ((z2 - z1) * i) / n;
-        posts.push({ x, y: 0.5, z, color: i % 2 ? '#8a5e3a' : '#7d5434' });
+        if (!inGate(x, z)) posts.push({ x, y: 0.5, z, color: i % 2 ? '#8a5e3a' : '#7d5434' });
         if (i < n) {
           const mx = x + (x2 - x1) / n / 2, mz = z + (z2 - z1) / n / 2;
+          if (inGate(mx, mz) || inGate(x, z) || inGate(x + (x2 - x1) / n, z + (z2 - z1) / n)) continue;
           rails.push({ x: mx, y: 0.75, z: mz, ry: -ang, sx: len / n });
           rails.push({ x: mx, y: 0.4, z: mz, ry: -ang, sx: len / n });
         }
+      }
+      for (let k = 0; k <= Math.round(len / 0.9); k++) {
+        const x = x1 + ((x2 - x1) * k) / Math.round(len / 0.9), z = z1 + ((z2 - z1) * k) / Math.round(len / 0.9);
+        if (!inGate(x, z)) addCol(x, z, 0.32);
       }
     };
     addLine(-fx, -fz, fx, -fz); addLine(fx, -fz, fx, fz); addLine(fx, fz, -fx, fz); addLine(-fx, fz, -fx, -fz);
@@ -740,6 +755,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     const tooClose = (x, z, list, d) => list.some((p) => (p.x - x) ** 2 + (p.z - z) ** 2 < d * d);
     const blocked = (x, z) => {
       if (isPath(x, z)) return true;
+      if (trail.treeBlocked(x, z)) return true;
       for (const t of TENTS) if ((x - t.x) ** 2 + (z - t.z) ** 2 < (CFG.TENT_R + 2.8) ** 2) return true;
       for (const p of PITS) if ((x - p.x) ** 2 + (z - p.z) ** 2 < 5 ** 2) return true;
       if ((x - (WOODYARD.x + 6.5)) ** 2 + (z - (WOODYARD.z + 1)) ** 2 < 5 ** 2) return true;
@@ -749,22 +765,24 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     };
     const all = [];
     let tries = 0;
-    while (all.length < 330 && tries++ < 20000) {
-      const x = (rand() * 2 - 1) * 95;
-      const z = (rand() * 2 - 1) * 75;
-      const inside = Math.abs(x) < BOUNDS.maxX + 1.5 && Math.abs(z) < BOUNDS.maxZ + 1.5;
+    while (all.length < 620 && tries++ < 40000) {
+      // 맵 끝 울타리 너머까지 숲이 이어지게 (울타리 밖이 텅 비어 보이지 않게)
+      const x = (rand() * 2 - 1) * 128;
+      const z = (rand() * 2 - 1) * 112;
+      const inside = Math.abs(x) < FENCE.maxX + 1.5 && Math.abs(z) < FENCE.maxZ + 1.5;
       const ring = !inside;
       // 안쪽은 듬성듬성
       if (inside && rand() > 0.12) continue;
-      if (Math.abs(x) < BOUNDS.maxX + 3 && Math.abs(z) < BOUNDS.maxZ + 3 && !inside) continue; // 울타리 바로 옆 비우기
+      if (Math.abs(x) < FENCE.maxX + 3 && Math.abs(z) < FENCE.maxZ + 3 && !inside) continue; // 울타리 바로 옆 비우기
       if (blocked(x, z)) continue;
       if (tooClose(x, z, all, inside ? 4 : 2.6)) continue;
       if (inside && Math.abs(z) > 20 && Math.abs(z) < 37 && TENTS.some((t) => Math.abs(t.x - x) < CFG.TENT_R + 1.8)) continue;
       const s = 0.8 + rand() * 0.7;
       const tree = { x, z, s, ry: rand() * 6.28, ring };
       all.push(tree);
-      (rand() < 0.62 ? pines : rounds).push(tree);
-      if (inside) addCol(x, z, 0.55 * s);
+      const beyond = x < BOUNDS.minX || x > BOUNDS.maxX || z < BOUNDS.minZ || z > BOUNDS.maxZ;
+      (rand() < (beyond ? 0.92 : 0.62) ? pines : rounds).push(tree); // 울타리 너머는 대부분 가벼운 바늘잎나무 (폰 부담)
+      if (inside || (x > BOUNDS.minX - 2 && x < BOUNDS.maxX + 2 && z > BOUNDS.minZ - 2 && z < BOUNDS.maxZ + 2)) addCol(x, z, 0.55 * s); // 숲길을 걷다 나무를 지나치지 않게
     }
     const trunkGeo = new THREE.CylinderGeometry(0.16, 0.24, 1.3, 7);
     const trunkList = all.map((t) => ({ x: t.x, y: 0.65 * t.s, z: t.z, s: t.s, color: '#6b4428' }));
@@ -1093,7 +1111,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
 
   function heightAt(x, z) {
     for (const d of decks) if (x > d.minX && x < d.maxX && z > d.minZ && z < d.maxZ) return d.h;
-    return 0;
+    return trail.heightAt(x, z); // 언덕 · 다리 · 데크
   }
 
   return {
@@ -1110,6 +1128,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     sky,
     /** 바깥 모닥불 천막 자리 (비 · 눈을 막는 곳) */
     tarpSpots: themeParts.tarps.map((t) => ({ x: t.x, z: t.z })),
+    trail, // 숲길 (흔들의자 등)
     /** 테마 템플릿(shared/themes.js)대로 캠핑장을 바꾼다 */
     setTheme(th) {
       const kind = th.ground || 'grass';
@@ -1124,10 +1143,14 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
       if (themeParts.fireflies) themeParts.fireflies.visible = !!th.fireflies;
       roofMat.color.set(kind === 'snow' ? '#f6f8fc' : '#eadbbd'); // 텐트 지붕에도 눈
       deckMat.color.set(kind === 'wet' ? '#7d5537' : '#9b6a43');
+      trail.setTheme(kind);
+      sunsetLight.intensity = th.sky?.stars > 0.5 ? 0.3 : 0.08; // 흐린 날엔 노을빛도 거의 없다
     },
     update(t, dt, camera, focus, shared) {
       moonLight.position.copy(focus).add(moonOffset);
       moonLight.target.position.copy(focus);
+      sunsetLight.position.copy(focus).add(sunsetOffset); sunsetLight.target.position.copy(focus);
+      if (shared) shared.focus = focus; // 숲길 벚꽃 터널: 캐릭터 쪽을 가리지 않게
       for (const u of updaters) u(t, dt, shared);
       // 천막: 카메라가 천막 위 높은 곳에서 가까이 내려다보면 반투명하게 (불이 가리지 않게)
       for (const tp of themeParts.tarps) {
