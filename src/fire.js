@@ -165,7 +165,6 @@ export class FirePit {
 
     // 좌석
     this.seatPos = [];
-    this.seatObjs = []; // 자리별 의자 · 그루터기 (1인칭으로 앉으면 내 의자만 내 화면에서 숨긴다)
     for (let i = 0; i < this.seats.length; i++) {
       const s = seatPos(def, i);
       this.seatPos.push(s);
@@ -174,7 +173,6 @@ export class FirePit {
       seat.position.set(s.x - def.x, 0, s.z - def.z);
       seat.rotation.y = s.ry;
       g.add(seat);
-      this.seatObjs[i] = seat;
     }
   }
 

@@ -78,6 +78,19 @@ const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 15
 // 계단 현상(모자 · 울타리 · 나무 가장자리)을 줄이는 멀티샘플 안티에일리어싱: PC 4배, 폰 2배 (폰 GPU는 타일 방식이라 2배는 거의 공짜)
 const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(innerWidth * renderPR(), innerHeight * renderPR(), { type: THREE.HalfFloatType, samples: isTouch ? 2 : 4 }));
 composer.addPass(new RenderPass(scene, camera));
+// 빛 번짐 전에 픽셀 값 정리: 아주 드물게 생기는 NaN · 무한대 픽셀(멀티샘플 + HDR)이 블룸에 번지면 화면 전체가 까매진다
+// (노을 언덕 벤치에서 캠핑장 쪽으로 고개를 돌릴 때 재현) → 그런 픽셀은 0으로, 지나치게 밝은 값은 잘라 둔다
+const sanitize = new ShaderPass({
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+    void main(){
+      vec4 c = texture2D(tDiffuse, vUv);
+      if (any(isnan(c)) || any(isinf(c))) c = vec4(0.0, 0.0, 0.0, 1.0);
+      gl_FragColor = vec4(clamp(c.rgb, 0.0, 64.0), clamp(c.a, 0.0, 1.0));
+    }`,
+});
+composer.addPass(sanitize);
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.42, 0.32, 0.85);
 composer.addPass(bloom);
 // 빛 번짐(블룸)은 원래 흐릿한 효과라 절반 해상도로 계산해도 티가 거의 안 난다 — GPU 부담은 크게 준다
@@ -2091,12 +2104,8 @@ const focus = new THREE.Vector3();
 const camTarget = new THREE.Vector3();
 const fpPos = new THREE.Vector3(), fpHead = new THREE.Vector3(), fpDir = new THREE.Vector3();
 const lookDir = new THREE.Vector3();
-let hiddenSeat = null;
 function updateCamera(dt, t) {
   if (me) me.char.root.visible = !view.fp; // 1인칭이면 내 화면에서만 내 캐릭터를 숨긴다 (다른 사람에겐 보임)
-  // 1인칭으로 앉으면 내 의자가 화면 아래를 크게 가려서(특히 세로 화면) 내 의자도 내 화면에서만 숨긴다
-  const mySeat = view.fp && state.sitting ? pits.get(state.sitting.pit)?.seatObjs?.[state.sitting.idx] : null;
-  if (mySeat !== hiddenSeat) { if (hiddenSeat) hiddenSeat.visible = true; if (mySeat) mySeat.visible = false; hiddenSeat = mySeat; }
   if (view.fp && me) {
     // 눈높이: 머리 위치를 따라가되 걸을 때 흔들림은 부드럽게
     me.char.head.getWorldPosition(fpHead);
@@ -2560,4 +2569,4 @@ function frame(now = performance.now()) {
 requestAnimationFrame(frame);
 
 // 디버그용
-window.__game = { scene, pits, state, effects, camera, net, cam, preview, monitors, tentRoom, THREE, renderer, get me() { return me; } };
+window.__game = { scene, pits, state, effects, camera, net, cam, preview, monitors, tentRoom, THREE, renderer, composer, bloom, grade, get me() { return me; } };
