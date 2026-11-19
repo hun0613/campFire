@@ -3,6 +3,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
 import { buildWorld } from './world.js';
@@ -13,6 +14,7 @@ import { Effects } from './effects.js';
 import { Net } from './net.js';
 import { UI } from './ui.js';
 import { Sound } from './audio.js';
+import { icon, fillIcons, EMOJI_ICON } from './icons.js';
 import { Precip } from './precip.js';
 import { themeOf } from '../shared/themes.js';
 import { Guide, pickTarget } from './guide.js';
@@ -36,6 +38,10 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* 무시 */ } },
 };
+
+// 앱 설치 버튼 · 버튼 아이콘은 월드를 만들기 전에 바로 살린다 (입장 화면에서 일찍 눌러도 반응하게)
+initPWA();
+fillIcons();
 
 // 간판 글꼴이 준비된 뒤 월드를 만든다
 await Promise.race([document.fonts.load('64px Jua'), new Promise((r) => setTimeout(r, 2500))]);
@@ -69,7 +75,8 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.Fog('#1a1c44', 40, 150);
 const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 1500);
 
-const composer = new EffectComposer(renderer);
+// 계단 현상(모자 · 울타리 · 나무 가장자리)을 줄이는 멀티샘플 안티에일리어싱: PC 4배, 폰 2배 (폰 GPU는 타일 방식이라 2배는 거의 공짜)
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(innerWidth * renderPR(), innerHeight * renderPR(), { type: THREE.HalfFloatType, samples: isTouch ? 2 : 4 }));
 composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.42, 0.32, 0.85);
 composer.addPass(bloom);
@@ -81,6 +88,21 @@ Object.assign(bloom.blendMaterial, {
   blendEquation: THREE.AddEquation, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor,
   blendEquationAlpha: THREE.AddEquation, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
 });
+// 마무리 색감: 화면 가장자리를 살짝 어둡게(비네팅) + 채도를 조금 올려 따뜻한 밤 느낌. 투명도(TV 화면 구멍)는 그대로 둔다
+const grade = new ShaderPass({
+  uniforms: { tDiffuse: { value: null }, uVig: { value: 0.32 }, uSat: { value: 1.07 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uVig, uSat; varying vec2 vUv;
+    void main(){
+      vec4 c = texture2D(tDiffuse, vUv);
+      float l = dot(c.rgb, vec3(.2126, .7152, .0722));
+      c.rgb = max(mix(vec3(l), c.rgb, uSat), 0.0);
+      vec2 d = vUv - .5; d.x *= 1.15;
+      c.rgb *= 1.0 - uVig * smoothstep(.28, .82, length(d) * 1.25);
+      gl_FragColor = c;
+    }`,
+});
+composer.addPass(grade);
 composer.addPass(new OutputPass());
 
 const shared = { uTime: { value: 0 }, uScale: { value: 600 } };
@@ -289,7 +311,7 @@ $('helpBtn').onclick = () => $('help').classList.remove('hidden');
 // 처음에는 ☰ 버튼 하나만 (접속자 수 배지). 누르면 펼쳐지고, 메뉴를 하나 고르거나 화면을 만지면 다시 접힌다
 function setDock(open) {
   document.body.classList.toggle('dock-open', open);
-  $('dockToggle').textContent = open ? '✕' : '☰';
+  $('dockToggle').innerHTML = icon(open ? 'close' : 'menu');
   $('dockToggle').title = open ? '메뉴 접기' : '메뉴 펼치기';
   $('dockToggle').setAttribute('aria-expanded', String(open));
 }
@@ -313,7 +335,7 @@ function setView(fp, { silent = false } = {}) {
   fpPos.set(0, 0, 0);
   // 앉아 있을 때 보이는 시점 버튼: 지금과 반대 시점을 알려 준다
   // 작은 아이콘 버튼: 누르면 바뀔 시점을 보여 준다 (설명은 툴팁)
-  $('seatViewBtn').textContent = fp ? '🎥' : '👁️';
+  $('seatViewBtn').innerHTML = icon(fp ? 'camera' : 'eye');
   $('seatViewBtn').title = `${fp ? '3인칭' : '1인칭'}으로 보기${isTouch ? '' : ' (V)'}`;
   $('seatViewBtn').setAttribute('aria-label', $('seatViewBtn').title);
   document.body.classList.toggle('fp', fp);
@@ -344,9 +366,9 @@ async function shareInvite() {
   if (ok) { net.send({ t: 'quest', ev: 'share' }); track('share', { method: navigator.share ? 'share' : 'copy' }); }
   return ok;
 }
-initPWA();
 initAnalytics();
-$('seatViewBtn').textContent = '👁️'; $('seatViewBtn').title = `1인칭으로 보기${isTouch ? '' : ' (V)'}`; // 처음엔 3인칭 (setView는 카메라 준비 뒤에 쓴다)
+fillIcons(); // 버튼 아이콘 (나무에 새긴 선 아이콘)
+$('seatViewBtn').innerHTML = icon('eye'); $('seatViewBtn').title = `1인칭으로 보기${isTouch ? '' : ' (V)'}`; // 처음엔 3인칭 (setView는 카메라 준비 뒤에 쓴다)
 initFullscreen();
 $('mapToggle').onclick = () => document.body.classList.toggle('map-open');
 $('status').addEventListener('click', () => { if (isTouch) document.body.classList.toggle('quest-open'); });
@@ -354,7 +376,7 @@ $('helpClose').onclick = () => $('help').classList.add('hidden');
 $('soundBtn').onclick = (e) => {
   sound.init();
   const muted = sound.toggle();
-  e.currentTarget.textContent = muted ? '🔇' : '🔊';
+  e.currentTarget.innerHTML = icon(muted ? 'mute' : 'sound');
   music.muted = muted;
 };
 
@@ -481,7 +503,7 @@ net.on('welcome', (m) => {
       setTimeout(() => {
         if (innerHeight <= innerWidth) return;
         store.set('rotateTipN', rotN + 1);
-        UI.toast('📱 가로로 돌리면 더 넓게 볼 수 있어요', 5000);
+        UI.tip('📱 가로로 돌리면 더 넓게 볼 수 있어요', 5000);
       }, showHint ? 5600 : 1500);
     }
   };
@@ -678,7 +700,7 @@ function renderShop() {
     return `<div class="shop-item">
       <span class="shop-bottle" style="background:${L.bg};box-shadow:0 0 14px ${L.color}"></span>
       <span class="shop-txt"><b>${escHtml(L.name)}</b><small>${escHtml(L.desc)}${have ? ` · 가방에 ${have}개` : ''}</small></span>
-      <button class="shop-buy" data-effect="${id}"${can ? '' : ' disabled'}>🪙 ${CFG.LEGEND_PRICE}</button>
+      <button class="shop-buy" data-effect="${id}"${can ? '' : ' disabled'}>${icon('coin')} ${CFG.LEGEND_PRICE}</button>
     </div>`;
   }).join('');
   for (const b of $('shopShelf').querySelectorAll('.shop-buy')) b.onclick = () => { b.disabled = true; net.send({ t: 'buy', effect: b.dataset.effect }); };
@@ -734,7 +756,7 @@ function closeCoinIntro() {
   // 💌 버튼 위치를 알려 준다 (모바일은 ☰ 메뉴 밖에 꺼내 둔 💌)
   $('shareBtn').classList.add('pulse');
   setTimeout(() => $('shareBtn').classList.remove('pulse'), 12000);
-  UI.toast('오른쪽 위 💌 버튼으로 언제든 친구를 초대할 수 있어요', 4500);
+  UI.toast('오른쪽 위 편지 모양 버튼으로 언제든 친구를 초대할 수 있어요', 4500);
 }
 $('ciClose').onclick = closeCoinIntro;
 $('ciShare').onclick = async () => { await shareInvite(); closeCoinIntro(); };
@@ -819,10 +841,10 @@ net.on('sat', (m) => {
   me.char.setAnim('sit');
   refreshInventory();
   if (pd?.kind === 'stove') {
-    setTimeout(() => UI.toast('🔥 텐트 화로 불멍 · 가만히 있으면 화면이 조용해져요 (🎥 3인칭으로 보면 텐트 안이 다 보여요)', 4500), 1200);
+    setTimeout(() => UI.tip('🔥 텐트 화로 불멍 · 가만히 있으면 화면이 조용해져요 (🎥 3인칭으로 보면 텐트 안이 다 보여요)', 4500), 1200);
   } else if (!stargazeHinted) {
     stargazeHinted = true;
-    setTimeout(() => UI.toast(isTouch ? '🌌 오른쪽 화면을 위로 쓸어 올리면 밤하늘을 올려다볼 수 있어요' : '🌌 화면을 위로 드래그하면 밤하늘을 올려다볼 수 있어요', 5000), 2500);
+    setTimeout(() => UI.tip(isTouch ? '🌌 오른쪽 화면을 위로 쓸어 올리면 밤하늘을 올려다볼 수 있어요' : '🌌 화면을 위로 드래그하면 밤하늘을 올려다볼 수 있어요', 5000), 2500);
   }
 });
 
@@ -991,7 +1013,7 @@ $('musicForm').addEventListener('submit', (e) => {
     return;
   }
   $('musicSearch').disabled = true;
-  $('musicSearch').textContent = '…';
+  $('musicSearch').innerHTML = `${icon('search')}…`;
   $('musicQ').blur();
   net.send({ t: 'search', q });
 });
@@ -1005,13 +1027,13 @@ net.on('musicMenu', (m) => {
   if (!m.hasKey) $('musicQ').placeholder = '유튜브 링크를 붙여 넣어 주세요';
 });
 net.on('searchResult', (m) => {
-  $('musicSearch').textContent = '검색';
+  $('musicSearch').innerHTML = `${icon('search')}검색`;
   music$.left = m.left;
   renderQuota();
   renderSongs(`🔍 "${m.q}" 검색 결과`, m.items, '틀 수 있는 곡을 찾지 못했어요. 다른 검색어로 해 보세요');
 });
 net.on('searchFail', (m) => {
-  $('musicSearch').textContent = '검색';
+  $('musicSearch').innerHTML = `${icon('search')}검색`;
   if (m.exhausted) { music$.left = 0; music$.resetAt = m.resetAt; } else if (m.left != null) music$.left = m.left;
   renderQuota();
   if (!m.exhausted) { $('musicSearch').disabled = false; $('musicQ').disabled = false; }
@@ -1084,14 +1106,14 @@ $('gbForm').addEventListener('submit', (e) => {
   if (!text || gb$.busy) return;
   gb$.busy = true;
   $('gbSend').disabled = true;
-  $('gbSend').textContent = '남기는 중…';
+  $('gbSend').innerHTML = `${icon('pen')}남기는 중…`;
   $('gbErr').classList.add('hidden');
   net.send({ t: 'gbWrite', text });
 });
 function gbDone() {
   gb$.busy = false;
   $('gbSend').disabled = false;
-  $('gbSend').textContent = '✍️ 남기기';
+  $('gbSend').innerHTML = `${icon('pen')}남기기`;
 }
 // ---------------------------------------------------------------- 캠핑장 소식 게시판
 const board$ = { items: [], timer: null };
@@ -2069,8 +2091,12 @@ const focus = new THREE.Vector3();
 const camTarget = new THREE.Vector3();
 const fpPos = new THREE.Vector3(), fpHead = new THREE.Vector3(), fpDir = new THREE.Vector3();
 const lookDir = new THREE.Vector3();
+let hiddenSeat = null;
 function updateCamera(dt, t) {
   if (me) me.char.root.visible = !view.fp; // 1인칭이면 내 화면에서만 내 캐릭터를 숨긴다 (다른 사람에겐 보임)
+  // 1인칭으로 앉으면 내 의자가 화면 아래를 크게 가려서(특히 세로 화면) 내 의자도 내 화면에서만 숨긴다
+  const mySeat = view.fp && state.sitting ? pits.get(state.sitting.pit)?.seatObjs?.[state.sitting.idx] : null;
+  if (mySeat !== hiddenSeat) { if (hiddenSeat) hiddenSeat.visible = true; if (mySeat) mySeat.visible = false; hiddenSeat = mySeat; }
   if (view.fp && me) {
     // 눈높이: 머리 위치를 따라가되 걸을 때 흔들림은 부드럽게
     me.char.head.getWorldPosition(fpHead);
@@ -2353,7 +2379,7 @@ function updateHud() {
     state._mb = mbKey;
     const b = $('musicBtn');
     b.classList.toggle('hidden', !mb);
-    if (mb) { b.innerHTML = mb.text; b.classList.toggle('off', !mb.on); b.dataset.tip = mb.tip || ''; b.title = mb.tip || ''; }
+    if (mb) { b.innerHTML = mb.text.replace(/^(\S+) /, (m, e) => (EMOJI_ICON[e] ? icon(EMOJI_ICON[e]) + ' ' : m)); b.classList.toggle('off', !mb.on); b.dataset.tip = mb.tip || ''; b.title = mb.tip || ''; }
   }
   if (!mp && !$('musicModal').classList.contains('hidden')) closeMusicModal();
   // 🪵 장작 더 넣기: 타는 불 옆(앉아 있어도)에서 손에 장작이 있고, 2분 넘게 늘릴 여유가 있을 때
@@ -2362,7 +2388,7 @@ function updateHud() {
   if (state._fk !== fk) {
     state._fk = fk;
     $('feedBtn').classList.toggle('hidden', !fp);
-    if (fp) $('feedBtn').innerHTML = `🪵 장작 <small>+${CFG.FEED_MS / 60000}분</small>${isTouch ? '' : ' <kbd>F</kbd>'}`;
+    if (fp) $('feedBtn').innerHTML = `${icon('log')} 장작 <small>+${CFG.FEED_MS / 60000}분</small>${isTouch ? '' : ' <kbd>F</kbd>'}`;
   }
   const canThrow = !!state.sitting && pits.get(state.sitting.pit)?.state === 'lit';
   if (canThrow !== state._canThrow) { state._canThrow = canThrow; UI.setPowderEnabled(canThrow); }

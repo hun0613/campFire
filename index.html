@@ -42,10 +42,10 @@
       <div class="field"><label>바지</label><div class="swatches" data-key="pants"></div></div>
       <div class="field"><label>모자</label><div class="choices" data-key="hat"></div></div>
       <button id="joinBtn" class="btn" disabled>서버 연결 중…</button>
-      <button class="install-btn link-btn hidden">📲 홈 화면에 앱으로 설치하기</button>
+      <button class="install-btn link-btn hidden" data-icon="install">홈 화면에 앱으로 설치하기 <small>전체 화면으로 즐겨요</small></button>
       <div id="lanInfo" class="lan hidden"></div>
       <div class="hint pc-only">WASD 이동 · Shift 달리기 · E 상호작용 · 마우스 드래그 시점 · 휠 줌 · Enter 채팅</div>
-      <div class="hint touch-only">화면 왼쪽 아래 이동 · 나머지 화면 드래그 시점 · 두 손가락 줌 · 버튼 상호작용 · 💬 채팅</div>
+      <div class="hint touch-only">화면 왼쪽 아래 이동 · 나머지 화면 드래그 시점 · 두 손가락 줌 · 버튼 상호작용 · <span class="ico-chip" data-icon="chat"></span> 채팅</div>
     </div>
     </div>
   </div>
@@ -63,14 +63,14 @@
     </div>
 
     <div id="topright" class="panel small">
-      <button id="dockToggle" class="icon-btn dock-toggle touch-only-inline" title="메뉴 펼치기" aria-expanded="false">☰</button>
+      <button id="dockToggle" class="icon-btn dock-toggle touch-only-inline" title="메뉴 펼치기" aria-expanded="false" data-icon="menu"></button>
       <span class="online-dot"></span><span id="online">1</span><span class="online-label">명 캠핑 중</span>
-      <button id="mapToggle" class="icon-btn touch-only-inline" title="지도">🗺️</button>
-      <button class="icon-btn install-btn hidden" title="앱으로 설치">📲</button>
-      <button id="viewBtn" class="icon-btn" title="1인칭으로 보기 (V)">👁️</button>
-      <button id="shareBtn" class="icon-btn" title="친구 초대">💌</button>
-      <button id="soundBtn" class="icon-btn" title="소리">🔊</button>
-      <button id="helpBtn" class="icon-btn" title="도움말">?</button>
+      <button id="mapToggle" class="icon-btn touch-only-inline" title="지도" data-icon="map"></button>
+      <button class="icon-btn install-btn hidden" title="앱으로 설치" data-icon="install"></button>
+      <button id="viewBtn" class="icon-btn" title="1인칭으로 보기 (V)" data-icon="eye"></button>
+      <button id="shareBtn" class="icon-btn" title="친구 초대" data-icon="mail"></button>
+      <button id="soundBtn" class="icon-btn" title="소리" data-icon="sound"></button>
+      <button id="helpBtn" class="icon-btn" title="도움말" data-icon="help"></button>
     </div>
 
     <div id="mapPanel" class="panel"><canvas id="minimap"></canvas></div>
@@ -97,19 +97,19 @@
       <div id="chatLog"></div>
       <div id="emotePanel" class="emote-panel hidden" aria-label="감정 표현"></div>
       <div class="chat-row">
-        <button id="emoteBtn" class="emote-btn" title="감정 표현 (T)">😊</button>
+        <button id="emoteBtn" class="emote-btn" title="감정 표현 (T)" data-icon="smile"></button>
         <textarea id="chatInput" rows="1" maxlength="120" placeholder="Enter 를 눌러 채팅…" autocomplete="off" autocorrect="off" enterkeyhint="send" spellcheck="false"></textarea>
         <button id="chatSend" class="chat-send">전송</button>
-        <button id="chatClose" class="chat-close" title="닫기">✕</button>
+        <button id="chatClose" class="chat-close" title="닫기" data-icon="close"></button>
       </div>
     </div>
-    <button id="chatToggle" class="chat-toggle">💬</button>
+    <button id="chatToggle" class="chat-toggle" data-icon="chat"></button>
     <div id="selfEmote" class="self-emote" aria-hidden="true"></div>
 
     <!-- 🎒 가방: 서 있을 때는 가루 칸 대신 이 버튼으로 가진 가루를 본다 (앉으면 가루 칸이 다시 나온다) -->
-    <button id="bagBtn" class="bag-btn" title="내 가방">🎒<b id="bagCount">0</b></button>
+    <button id="bagBtn" class="bag-btn" title="내 가방" data-icon="bag"><b id="bagCount">0</b></button>
     <div id="bagPanel" class="bag-panel hidden">
-      <div class="bag-head">🎒 내 가방 <small id="bagSub"></small></div>
+      <div class="bag-head"><span class="ico-chip" data-icon="bag"></span> 내 가방 <small id="bagSub"></small></div>
       <div id="bagList" class="bag-list"></div>
       <div class="bag-hint">모닥불에 앉으면 <span class="pc-only-inline">숫자키로</span><span class="touch-only-inline">가루를 눌러</span> 뿌릴 수 있어요 🔥</div>
     </div>
@@ -128,17 +128,17 @@
           <li><b>동쪽 장작 패는 곳</b>에서 통나무 앞에 서서 <kbd>E</kbd> (꾹 누르면 계속 패요)</li>
           <li>장작 패는 곳 길 건너 <b>루미</b>에게 가면 장작 없이도 랜덤 <b>마법 가루</b>를 3개까지 채워 줘요. 루미의 <b>부탁</b>을 들어주면 <b>✦ 특별한 가루</b>를 받아요</li>
           <li><b>글램핑장 앞 화로</b>에서 <kbd>E</kbd>로 장작을 쌓고, 한 번 더 <kbd>E</kbd>로 불을 붙여요</li>
-          <li>타오르는 불 앞에서 <kbd>E</kbd>로 앉아 불멍! <kbd>1</kbd>~<kbd>9</kbd> 로 가루를 뿌려요. 서 있을 때는 아래 <b>🎒 가방</b>을 눌러 가진 가루를 볼 수 있어요. 장작이 없어도 빈 화로 의자에 앉아 쉴 수 있어요</li>
+          <li>타오르는 불 앞에서 <kbd>E</kbd>로 앉아 불멍! <kbd>1</kbd>~<kbd>9</kbd> 로 가루를 뿌려요. 서 있을 때는 아래 <b><span class="ico-chip" data-icon="bag"></span> 가방</b>을 눌러 가진 가루를 볼 수 있어요. 장작이 없어도 빈 화로 의자에 앉아 쉴 수 있어요</li>
           <li>앉은 채로 옆의 <b>💿 LP 플레이어</b>를 누르면(<kbd>M</kbd>) 곡을 검색해서 틀 수 있어요. 기타를 치며 옆 TV로 음악이 나오고, 같은 모닥불에 앉은 사람만 들려요</li>
           <li>장작은 10분 동안 타요. 타는 중에 <b>🪵 장작 더 넣기</b>(F)로 1개에 2분씩 늘릴 수 있어요 (10분 → 12분 → 14분…, 최대 30분). 다 타면 음악도 멈춰요 🪓</li>
           <li>광장의 <b>📖 방명록</b>에서 한마디를 남기고, 다른 캠퍼들의 방명록도 구경할 수 있어요</li>
-          <li>오른쪽 위 <b>💌 버튼</b>으로 친구에게 캠핑장 링크를 보낼 수 있어요. 하루 한 번 <b>🪙 코인 10개</b>를 더 받아요</li>
+          <li>오른쪽 위 <b><span class="ico-chip" data-icon="mail"></span> 버튼</b>으로 친구에게 캠핑장 링크를 보낼 수 있어요. 하루 한 번 <b>🪙 코인 10개</b>를 더 받아요</li>
           <li><b>🪙 코인</b>은 매일 밤 12시에 30개로 채워져요. 루미의 가루 공방에서 <b>✦ 특별한 가루</b>를 10코인에 살 수 있어요</li>
           <li><b>🏕️ 글램핑 텐트</b>는 문 앞에서 <b>들어가기</b>를 누르면 들어가요 (한 동에 5명까지, 문 위 ⛺ 표시가 지금 인원). 가운데 <b>화로</b>에 장작 5개를 넣어 불을 피우면 지붕 연통에서 연기가 올라가요. 둘레 소파에 앉으면 TV장 스피커로 노래도 틀 수 있어요. 나올 때는 문 앞에서 <b>🚪 나가기</b>. 텐트 안에서 한 말은 <b>텐트 안 사람에게만</b> 보여요. 채팅에서 이름을 누르면 그 캠퍼를 차단할 수 있어요</li>
           <li>캠핑장은 <b>서울 날씨</b>를 따라 바뀌어요. 비가 오면 <b>☔ 우중캠핑장</b>(모닥불 천막 · 우비 · 빗소리, 천막 아래선 토독토독), 눈이 오면 <b>❄️ 설산캠핑장</b>(쌓인 눈 · 패딩)이 돼요</li>
-          <li>걸을 때는 3인칭, <b>모닥불에 앉으면 1인칭</b>으로 바뀌어요. 앉아 있을 때 오른쪽 아래 작은 <b>🎥 / 👁️ 버튼</b>(PC는 <kbd>V</kbd>)으로 바꿀 수 있어요</li>
-          <li><b>🌲 숲길</b>: 큰길 양 끝 출입구로 나가면 캠핑장을 한 바퀴 도는 산책로가 있어요. <b>🌉 개울 다리</b> · <b>🌙 호숫가</b> · <b>🌅 노을 지는 언덕</b>(고양이 옆 벤치에 앉아 노을을 봐요)에 들러 쉬고 (벤치는 <kbd>E</kbd>로 앉아요), <b>🍂 억새 · 댑싸리 들판</b> · <b>🌾 갈대밭</b> · <b>🌼 데이지 꽃밭</b> · <b>🌸 벚꽃길</b> · <b>💗 핑크뮬리 들판</b>을 지나 걸어요 (한 바퀴 걸어서 2분 남짓)</li>
-          <li><b>😊 감정 표현</b>: PC는 채팅창 옆 😊(<kbd>T</kbd>), 휴대폰은 💬를 열면 입력창 위에 나와요. 인사 · 좋아요 · 웃겨요 · 사랑해요 · 박수 · 놀라워요 · 슬퍼요 · 졸려요를 머리 위 이모지와 몸짓으로 보여 줘요</li>
+          <li>걸을 때는 3인칭, <b>모닥불에 앉으면 1인칭</b>으로 바뀌어요. 앉아 있을 때 오른쪽 아래 작은 <b><span class="ico-chip" data-icon="camera"></span> / <span class="ico-chip" data-icon="eye"></span> 버튼</b>(PC는 <kbd>V</kbd>)으로 바꿀 수 있어요</li>
+          <li><b>🌲 숲길</b>: 큰길 양 끝과 캠핑장 네 모서리의 나무 문으로 나가면 캠핑장을 한 바퀴 도는 산책로가 있어요. 돌아올 땐 갈림길의 「🔥 불멍존」 팻말을 따라와요. <b>🌉 개울 다리</b> · <b>🌙 호숫가</b> · <b>🌅 노을 지는 언덕</b>(고양이 옆 벤치에 앉아 노을을 봐요)에 들러 쉬고 (벤치는 <kbd>E</kbd>로 앉아요), <b>🍂 억새 · 댑싸리 들판</b> · <b>🌾 갈대밭</b> · <b>🌼 데이지 꽃밭</b> · <b>🌸 벚꽃길</b> · <b>💗 핑크뮬리 들판</b>을 지나 걸어요 (한 바퀴 걸어서 2분 남짓)</li>
+          <li><b>😊 감정 표현</b>: PC는 채팅창 옆 <span class="ico-chip" data-icon="smile"></span>(<kbd>T</kbd>), 휴대폰은 <span class="ico-chip" data-icon="chat"></span>를 열면 입력창 위에 나와요. 인사 · 좋아요 · 웃겨요 · 사랑해요 · 박수 · 놀라워요 · 슬퍼요 · 졸려요를 머리 위 이모지와 몸짓으로 보여 줘요</li>
           <li>화면을 위로 끌어 올리면 <b>밤하늘</b>을 올려다볼 수 있어요. 은하수와 별자리, 가끔 떨어지는 별똥별 🌠</li>
         </ol>
         <div id="lanHelp" class="lan hidden"></div>
@@ -147,7 +147,7 @@
           <span><kbd>WASD</kbd> 이동</span><span><kbd>Shift</kbd> 달리기</span>
           <span><kbd>드래그</kbd> 시점 (위로 끌면 하늘 보기)</span><span><kbd>휠</kbd> 줌</span><span><kbd>V</kbd> 시점</span><span><kbd>M</kbd> 음악</span><span><kbd>Enter</kbd> 채팅</span>
         </div>
-        <button class="install-btn link-btn hidden">📲 홈 화면에 앱으로 설치하기</button>
+        <button class="install-btn link-btn hidden" data-icon="install">홈 화면에 앱으로 설치하기 <small>전체 화면으로 즐겨요</small></button>
         <button class="btn" id="helpClose">알겠어요!</button>
       </div>
     </div>
@@ -157,8 +157,8 @@
     <div class="card help-card music-card">
       <div class="title small">💿 모닥불에서 틀 곡 고르기</div>
       <form id="musicForm" class="mm-row" autocomplete="off">
-        <input id="musicQ" type="search" enterkeyhint="search" placeholder="곡 이름이나 가수 (예: 아이유 밤편지)" spellcheck="false" />
-        <button id="musicSearch" class="mm-go" type="submit">검색</button>
+        <input id="musicQ" type="search" enterkeyhint="search" placeholder="곡 이름 · 가수 (예: 밤편지)" spellcheck="false" />
+        <button id="musicSearch" class="mm-go" type="submit" data-icon="search">검색</button>
       </form>
       <div id="musicQuota" class="mm-quota"></div>
       <div id="musicErr" class="mm-err hidden"></div>
@@ -191,7 +191,7 @@
       <div class="shop-label">✦ 특별한 가루 <small>한 개에 🪙 10</small></div>
       <div id="shopShelf" class="shop-shelf"></div>
       <div id="shopBag" class="shop-bag"></div>
-      <button id="shopShare" class="btn shop-share hidden" type="button">💌 친구에게 알려 주고 오늘 🪙 10 더 받기</button>
+      <button id="shopShare" class="btn shop-share hidden" type="button" data-icon="mail">친구에게 알려 주고 오늘 코인 10 더 받기</button>
       <div class="shop-note">코인은 매일 밤 12시에 30개로 다시 채워져요 (남은 코인은 넘어가지 않아요)</div>
       <button class="btn ghost" id="shopClose">닫기</button>
     </div>
@@ -204,10 +204,10 @@
       <ul class="coin-list">
         <li>매일 밤 <b>12시</b>마다 코인 <b>30개</b>가 채워져요</li>
         <li>루미의 가루 공방에서 <b>✦ 특별한 가루</b>를 <b>10코인</b>에 살 수 있어요</li>
-        <li>오른쪽 위 <b>💌 버튼</b>으로 친구를 초대하면 하루 한 번 <b>+10코인</b></li>
+        <li>오른쪽 위 <b><span class="ico-chip" data-icon="mail"></span> 버튼</b>으로 친구를 초대하면 하루 한 번 <b>+10코인</b></li>
         <li>그리고 <b>🏕️ 글램핑 텐트</b> 안에 들어갈 수 있어요. 화로 불멍 · 소파 · 해먹 · 스피커 음악, 텐트 안 이야기는 텐트 안에만 들려요</li>
       </ul>
-      <button class="btn" id="ciShare" type="button">💌 친구에게 공유하고 🪙 10 받기</button>
+      <button class="btn" id="ciShare" type="button" data-icon="mail">친구에게 공유하고 코인 10 받기</button>
       <button class="btn ghost" id="ciClose" type="button">나중에 할게요</button>
     </div>
   </div>
@@ -236,14 +236,14 @@
       <div class="gb-sub" id="gbSub">캠핑장에서 보낸 시간을 한 줄 남겨 주세요</div>
       <form id="gbForm" class="gb-write" autocomplete="off">
         <textarea id="gbText" rows="3" maxlength="300" placeholder="오늘 캠핑은 어땠나요? 다음에 올 캠퍼에게 한마디도 좋아요 🔥" spellcheck="false"></textarea>
-        <div class="gb-write-row"><span id="gbCount" class="gb-count">0 / 300</span><button id="gbSend" class="mm-go" type="submit">✍️ 남기기</button></div>
+        <div class="gb-write-row"><span id="gbCount" class="gb-count">0 / 300</span><button id="gbSend" class="mm-go" type="submit" data-icon="pen">남기기</button></div>
       </form>
       <div id="gbErr" class="mm-err hidden"></div>
       <div id="gbBook" class="gb-book"></div>
       <div class="gb-nav">
-        <button id="gbPrev" class="gb-flip" type="button">◀</button>
+        <button id="gbPrev" class="gb-flip" type="button" data-icon="prev"></button>
         <span id="gbPage" class="gb-page"></span>
-        <button id="gbNext" class="gb-flip" type="button">▶</button>
+        <button id="gbNext" class="gb-flip" type="button" data-icon="next"></button>
       </div>
       <button class="btn ghost" id="gbClose">닫기</button>
     </div>
@@ -251,7 +251,7 @@
 
   <div id="installGuide" class="overlay hidden">
     <div class="card help-card">
-      <div class="title small">📲 앱으로 설치하기</div>
+      <div class="title small ig-title" data-icon="install">앱으로 설치하기</div>
       <div class="ig-body"></div>
       <button class="btn" onclick="document.getElementById('installGuide').classList.add('hidden')">닫기</button>
     </div>

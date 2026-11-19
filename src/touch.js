@@ -1,3 +1,4 @@
+import { icon, EMOJI_ICON } from './icons.js';
 // 모바일 터치 컨트롤: 왼쪽 가상 조이스틱 + 오른쪽 액션 버튼
 
 export const isTouch = (() => {
@@ -24,7 +25,7 @@ export class TouchControls {
         <div class="th-half th-left"><div class="th-ico">🕹️</div><b>이동</b><span>왼쪽 아래를<br>엄지로 대고 밀기</span></div>
         <div class="th-half th-right"><div class="th-ico">👆</div><b>시점 돌리기</b><span>나머지 화면을 드래그<br>두 손가락으로 줌</span></div>
       </div>
-      <button id="actionBtn" class="hidden"><span class="a-icon">✋</span><span class="a-label"></span></button>`;
+      <button id="actionBtn" class="hidden"><span class="a-icon"></span><span class="a-label"></span></button>`;
     document.getElementById('hud').appendChild(root);
 
     const zone = root.querySelector('#joyZone');
@@ -112,7 +113,7 @@ export class TouchControls {
     this.btn.classList.remove('hidden');
     if (this._key !== action.label) {
       this._key = action.label;
-      this.btnIcon.textContent = action.icon;
+      this.btnIcon.innerHTML = EMOJI_ICON[action.icon] ? icon(EMOJI_ICON[action.icon]) : action.icon; // 나무에 새긴 아이콘 (모르는 건 그대로)
       this.btnLabel.textContent = action.label;
     }
   }

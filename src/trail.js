@@ -627,6 +627,46 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
     scene.add(g);
   }
 
+  // ---------- 갈림길 표지판 (v1.19.1): 숲길에서 캠핑장 출입구로 꺾이는 곳마다 「🔥 불멍존」 화살표 팻말
+  //   팻말 끝이 출입구 쪽을 가리킨다. 숲길을 따라 어느 쪽에서 와도 읽히게 앞뒤 양면 (뒷면은 화살표 방향을 반대로)
+  {
+    const signTex = (flip) => {
+      const cv = document.createElement('canvas'); cv.width = 512; cv.height = 160;
+      const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+      const draw = () => {
+        const g2 = cv.getContext('2d'); g2.clearRect(0, 0, 512, 160);
+        // 화살표 모양 나무판 (flip 이면 왼쪽을 가리킨다)
+        g2.save(); if (flip) { g2.translate(512, 0); g2.scale(-1, 1); }
+        g2.fillStyle = '#a47448'; g2.strokeStyle = '#6e4a2c'; g2.lineWidth = 8;
+        g2.beginPath(); g2.moveTo(12, 22); g2.lineTo(410, 22); g2.lineTo(498, 80); g2.lineTo(410, 138); g2.lineTo(12, 138); g2.closePath(); g2.fill(); g2.stroke();
+        g2.strokeStyle = 'rgba(80,50,28,0.35)'; g2.lineWidth = 3;
+        for (const y of [52, 84, 112]) { g2.beginPath(); g2.moveTo(24, y); g2.lineTo(400, y + 4); g2.stroke(); }
+        g2.restore();
+        g2.fillStyle = '#fff4e2'; g2.font = "64px Jua, 'Apple SD Gothic Neo', sans-serif"; g2.textAlign = 'center'; g2.textBaseline = 'middle';
+        g2.shadowColor = 'rgba(40,20,10,0.6)'; g2.shadowBlur = 6;
+        g2.fillText('🔥 불멍존', flip ? 285 : 227, 84);
+        tex.needsUpdate = true;
+      };
+      draw(); document.fonts?.load("64px Jua").then(draw, () => {});
+      return tex;
+    };
+    const texR = signTex(false), texL = signTex(true);
+    const postMat = toon('#6e4a2c'), boardGeo = new THREE.PlaneGeometry(2.6, 0.82);
+    const matR = new THREE.MeshBasicMaterial({ map: texR, transparent: true, alphaTest: 0.5, color: new THREE.Color('#eadbc6') });
+    const matL = new THREE.MeshBasicMaterial({ map: texL, transparent: true, alphaTest: 0.5, color: new THREE.Color('#eadbc6') });
+    for (const sp of TRAIL.spurs) {
+      const [jx, jz] = sp[sp.length - 1], [px, pz] = sp[sp.length - 2];
+      const dl = Math.hypot(px - jx, pz - jz) || 1, dx = (px - jx) / dl, dz = (pz - jz) / dl; // 갈림길 → 출입구 쪽
+      // 숲길 가장자리, 갈림길 옆 (출입구 쪽 길 입구 한쪽)
+      const sx = jx + dx * (TRAIL.width / 2 + 1.6) - dz * 2.1, sz = jz + dz * (TRAIL.width / 2 + 1.6) + dx * 2.1;
+      const g = new THREE.Group(); g.position.set(sx, 0, sz); g.rotation.y = Math.atan2(-dz, dx); // 판의 +x 가 출입구 쪽
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 2.5, 6), postMat); post.position.y = 1.25; post.castShadow = true; g.add(post);
+      const front = new THREE.Mesh(boardGeo, matR); front.position.set(1.05, 2.1, 0.03); g.add(front);
+      const back = new THREE.Mesh(boardGeo, matL); back.position.set(1.05, 2.1, -0.03); back.rotation.y = Math.PI; g.add(back);
+      scene.add(g); addCol(sx, sz, 0.15);
+    }
+  }
+
   // ---------- 숲길 랜턴: 길을 따라 듬성듬성, 언덕 근처는 별이 잘 보이게 비운다
   {
     const posts = [], heads = [], pools = [];

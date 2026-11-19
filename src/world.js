@@ -15,6 +15,7 @@ const tmpE = new THREE.Euler();
 export function isPath(x, z) {
   if (Math.abs(z) < 2.4 && x > FENCE.minX - 2 && x < FENCE.maxX + 2) return true; // 큰길 (양 끝은 숲길 출입구)
   if (x * x + z * z < 11.5 * 11.5) return true;
+  for (const g of GATES) if (g.inner && Math.abs(x - g.inner[0]) < 1.3 && z > Math.min(g.inner[1], g.inner[2]) && z < Math.max(g.inner[1], g.inner[2])) return true; // 모서리 출입구 안쪽 흙길
   for (const t of TENTS) if (Math.abs(x - t.x) < 1.3 && Math.abs(z) < 23 && Math.sign(z) === Math.sign(t.z)) return true;
   for (const p of PITS) if ((x - p.x) ** 2 + (z - p.z) ** 2 < 3.7 * 3.7) return true;
   if (((x - WOODYARD.x) / 8.5) ** 2 + ((z - WOODYARD.z) / 7.5) ** 2 < 1) return true;
@@ -191,6 +192,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   sc.left = -32; sc.right = 32; sc.top = 32; sc.bottom = -32; sc.near = 1; sc.far = 140;
   moonLight.shadow.bias = -0.0005;
   moonLight.shadow.normalBias = 0.03;
+  moonLight.shadow.radius = lowSpec ? 2 : 3; // 그림자 가장자리를 부드럽게 (계단 진 그림자 줄이기)
   scene.add(moonLight, moonLight.target);
   const moonOffset = new THREE.Vector3(0.55, 0.8, 0.72).normalize().multiplyScalar(60); // 달은 해가 진 쪽 반대편
   // 🌅 노을빛: 해가 지는 쪽(북서)에서 낮게 비추는 따뜻한 분홍 빛 (그림자 없음)

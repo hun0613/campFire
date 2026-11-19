@@ -136,6 +136,7 @@ export class Guide {
     for (const sp of SPUR_PTS) poly(sp, TRAIL.width - 0.3, false);
     line(FENCE.minX - 2, 0, FENCE.maxX + 2, 0, 3.4);
     for (const t of TENTS) line(t.x, 0, t.x, Math.sign(t.z) * 23, 2.2);
+    for (const gt of GATES) if (gt.inner) line(gt.inner[0], gt.inner[1], gt.inner[0], gt.inner[2], 2.4); // 모서리 출입구 안쪽 길
     g.fillStyle = 'rgba(214, 186, 140, 0.75)';
     { const [px, pz] = P(0, 0); g.beginPath(); g.arc(px, pz, 11.5 * k, 0, Math.PI * 2); g.fill(); }
     // 텐트 · 화로

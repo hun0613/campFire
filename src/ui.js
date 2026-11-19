@@ -11,6 +11,14 @@ function powderBg(p) {
   return `radial-gradient(circle at 35% 30%, #fff 0%, ${p.color} 45%, ${p.color} 100%)`;
 }
 
+const tipQueue = [];
+function nextTip() {
+  const t = tipQueue[0];
+  if (!t) return;
+  UI.toast(t[0], t[1]);
+  setTimeout(() => { tipQueue.shift(); nextTip(); }, t[1] + 400);
+}
+
 export const UI = {
   toast(text, ms = 3300) {
     // 같은 문구가 이미 떠 있으면 또 띄우지 않는다 (연타 · 꾹 누르기 · 서버 안내가 겹칠 때)
@@ -21,6 +29,12 @@ export const UI = {
     if (ms !== 3300) el.style.animation = `toastIn .35s cubic-bezier(.2, 1.4, .4, 1), toastOut .4s ease ${ms - 500}ms forwards`;
     $('toasts').appendChild(el);
     setTimeout(() => el.remove(), ms);
+  },
+
+  // 안내 팁(가로로 돌리기 · 밤하늘 보기 …)은 급하지 않으니 한 번에 하나씩: 앞 팁이 사라진 뒤에 다음 팁을 띄운다
+  tip(text, ms = 5000) {
+    tipQueue.push([text, ms]);
+    if (tipQueue.length === 1) nextTip();
   },
 
   setOnline(n) { $('online').textContent = n; $('online').title = `지금 ${n}명 캠핑 중`; },

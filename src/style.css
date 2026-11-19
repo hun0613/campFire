@@ -95,6 +95,7 @@ html, body {
 
 #toasts { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 6; pointer-events: none; }
 .toast {
+  word-break: keep-all; text-align: center; /* 한국어는 낱말 단위로 줄바꿈 (「볼 / 수 있어요」처럼 끊기지 않게) */
   background: rgba(70, 45, 25, .88); color: #fff3dc; padding: 9px 18px; border-radius: 999px; font-size: 15.5px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, .3); animation: toastIn .35s cubic-bezier(.2, 1.4, .4, 1), toastOut .4s ease 2.8s forwards;
 }
@@ -704,8 +705,8 @@ body:not(.touch) #helpClose,
 body:not(.touch) #joinBtn { position: sticky; bottom: 0; z-index: 2; }
 /* 아래에 붙어 있을 때만 뒤로 지나가는 내용을 크림색으로 가린다 (끝까지 내리면 가리지 않아 설치 버튼이 보임) */
 body:not(.touch) #helpClose,
-body:not(.touch) #joinBtn.stuck { box-shadow: 0 5px 0 #c95c1c, 0 -16px 16px 2px var(--cream), 0 26px 0 14px var(--cream); }
-body:not(.touch) #joinBtn.stuck:active { box-shadow: 0 1px 0 #c95c1c, 0 -16px 16px 2px var(--cream); }
+body:not(.touch) #joinBtn.stuck { box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 3px 0 var(--wood-edge), 0 -16px 16px 2px var(--cream), 0 26px 0 14px var(--cream); }
+body:not(.touch) #joinBtn.stuck:active { box-shadow: inset 0 2px 5px rgba(140,95,45,.35), 0 -16px 16px 2px var(--cream); }
 body:not(.touch) .join-card { scrollbar-width: thin; }
 
 /* 창 높이가 낮으면 입장 화면 · 안내서를 촘촘하게 */
@@ -939,7 +940,7 @@ body:not(.touch).seated #bottom .pill { white-space: nowrap; }
 
 /* 모바일 안내서: 안내서 안에서 스크롤, 「알겠어요!」는 늘 아래에 보이게 (내용이 길어져 버튼이 화면 밖으로 밀리던 문제) */
 body.touch #help .card { max-height: calc(var(--vvh, 100vh) - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; -webkit-overflow-scrolling: touch; margin: auto; }
-body.touch #helpClose { position: sticky; bottom: 0; z-index: 2; box-shadow: 0 5px 0 #c95c1c, 0 -16px 16px 2px var(--cream), 0 26px 0 14px var(--cream); }
+body.touch #helpClose { position: sticky; bottom: 0; z-index: 2; box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 3px 0 var(--wood-edge), 0 -16px 16px 2px var(--cream), 0 26px 0 14px var(--cream); }
 
 /* ---------- v1.15 🪙 코인 · 루미의 가루 공방 ---------- */
 .coin-num { display: inline-flex; align-items: baseline; gap: 3px; margin-left: 8px; padding: 2px 9px; border-radius: 999px; background: #fff1c9; font-size: 15px; white-space: nowrap; }
@@ -1100,3 +1101,179 @@ body.touch.chat-open .emote-item { flex: 1 0 auto; min-width: 42px; padding: 5px
 body.touch.chat-open .emote-item span { font-size: 23px; }
 body.touch.chat-open .emote-item small { font-size: 10px; color: rgba(255, 243, 220, .75); }
 body.touch.chat-open .emote-item:active { background: rgba(255, 248, 232, .18); }
+
+/* ================================================================
+   🪵 나무 버튼 테마 (v1.20): 버튼은 모두 밝은 나무판 + 아이콘 · 글씨를 새긴(음각) 느낌으로 통일.
+   감정 표현 이모지 말고 버튼에는 이모지를 쓰지 않는다 (아이콘은 src/icons.js)
+   ================================================================ */
+:root {
+  --wood-hi: #ecc893; --wood: #d9a96d; --wood-lo: #c38b51; --wood-edge: #8c5a31; --wood-deep: #6e4424;
+  --engrave: #5b391c; --engrave-hi: rgba(255, 238, 206, .75);
+  --grain: repeating-linear-gradient(92deg, rgba(120, 72, 32, .07) 0 2px, rgba(0, 0, 0, 0) 2px 9px, rgba(255, 236, 200, .06) 9px 10px, rgba(0, 0, 0, 0) 10px 17px);
+}
+.ico { width: 1.18em; height: 1.18em; flex: none; vertical-align: -0.2em; overflow: visible;
+  filter: drop-shadow(0 1px 0 var(--engrave-hi)) drop-shadow(0 -0.6px 0 rgba(70, 38, 14, .45)); }
+
+/* 공통 나무판 */
+.icon-btn, .emote-btn, .chat-send, .chat-close, body.touch .chat-toggle, .bag-btn, .mm-go, .gb-flip, .btn, .shop-buy,
+#feedBtn, #musicBtn, #seatViewBtn, #actionBtn {
+  background: var(--grain), linear-gradient(180deg, var(--wood-hi), var(--wood) 55%, var(--wood-lo));
+  border: 1px solid var(--wood-edge); color: var(--engrave);
+  text-shadow: 0 1px 0 var(--engrave-hi), 0 -1px 0 rgba(70, 38, 14, .25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), inset 0 -2px 3px rgba(165, 115, 60, .2), 0 2px 0 var(--wood-edge), 0 3px 7px rgba(60, 35, 10, .2);
+  -webkit-backdrop-filter: none; backdrop-filter: none; opacity: 1;
+  transition: transform .08s, box-shadow .08s, filter .15s;
+}
+.icon-btn:hover, .emote-btn:hover, .bag-btn:hover, .mm-go:hover:not(:disabled), .gb-flip:hover:not(:disabled), .btn:hover:not(:disabled), .shop-buy:hover:not(:disabled), #feedBtn:hover, #musicBtn:hover, #seatViewBtn:hover { filter: brightness(1.05); background: var(--grain), linear-gradient(180deg, var(--wood-hi), var(--wood) 55%, var(--wood-lo)); }
+/* 눌렀을 때 · 켜진 상태: 판이 살짝 들어간다 */
+.icon-btn:active, .emote-btn:active, .emote-btn.on, .chat-send:active, .chat-close:active, body.touch .chat-toggle:active, .bag-btn:active, .bag-btn.on,
+.mm-go:active:not(:disabled), .gb-flip:active:not(:disabled), .btn:active:not(:disabled), .shop-buy:active:not(:disabled), #feedBtn:active, #musicBtn:active, #seatViewBtn:active, #actionBtn.press,
+body.touch.dock-open #topright .dock-toggle {
+  transform: translateY(2px);
+  background: var(--grain), linear-gradient(180deg, var(--wood-lo), var(--wood) 60%, var(--wood-hi));
+  box-shadow: inset 0 2px 5px rgba(140, 95, 45, .35), inset 0 -1px 0 rgba(255, 255, 255, .5), 0 0 0 var(--wood-edge), 0 1px 3px rgba(60, 35, 10, .2);
+}
+.btn:disabled, .mm-go:disabled, .gb-flip:disabled, .shop-buy:disabled { filter: saturate(.4) brightness(.92); opacity: .6; }
+
+/* 동그란 아이콘 → 둥근 네모 나무 단추 */
+.icon-btn { width: 32px; height: 32px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; padding: 0; font-size: 17px; }
+.icon-btn .ico { width: 19px; height: 19px; }
+body.touch #topright .dock-toggle { font-size: 17px; }
+
+/* 큰 버튼 (입장 · 확인 · 공유 · 닫기) */
+.btn { border-radius: 16px; font-size: 19px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.btn.ghost {
+  background: var(--grain), linear-gradient(180deg, #f3dcb3, #e4c28e 60%, #d7b07a); border-color: #a77846;
+  box-shadow: inset 0 1px 0 rgba(255, 248, 230, .85), inset 0 -2px 3px rgba(120, 70, 30, .2), 0 2px 0 #a77846, 0 4px 8px rgba(36, 18, 4, .25);
+}
+.link-btn { display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+/* 앉았을 때 아래 줄 (장작 더 넣기 · 노래 · 시점) */
+#feedBtn, #musicBtn { border-radius: 14px; align-items: center; gap: 6px; }
+#feedBtn:not(.hidden), #musicBtn:not(.hidden) { display: inline-flex; }
+#musicBtn.off { filter: saturate(.5) brightness(.95); }
+#seatViewBtn { border-radius: 12px; align-items: center; justify-content: center; } /* 보이기 · 숨기기는 원래 규칙(body.seated · lounging)대로 */
+#seatViewBtn .ico { width: 22px; height: 22px; }
+.pill kbd, .help-card kbd {
+  background: var(--grain), linear-gradient(180deg, #f0d3a4, #d9ab70); color: var(--engrave); border: 1px solid var(--wood-edge);
+  text-shadow: 0 1px 0 var(--engrave-hi); box-shadow: inset 0 1px 0 rgba(255, 246, 224, .8), 0 2px 0 var(--wood-edge);
+  line-height: 1.35; vertical-align: 1px; padding: 0 7px; /* 줄 간격이 넓은 안내서에서 키캡이 줄 높이만큼 커지지 않게 */
+}
+
+/* 채팅 · 감정 표현 · 가방 */
+.emote-btn { border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; font-size: 20px; }
+.chat-send { border-radius: 12px; }
+.chat-close { border-radius: 12px; align-items: center; justify-content: center; }
+body.touch .chat-toggle { display: flex; align-items: center; justify-content: center; border-radius: 13px; font-size: 21px; }
+.bag-btn { border-radius: 16px; font-size: 22px; padding: 7px 14px 7px 12px; }
+.bag-btn b { color: var(--engrave); }
+.bag-btn.has-legend { box-shadow: inset 0 1px 0 rgba(255, 246, 224, .8), 0 2px 0 var(--wood-edge), 0 0 14px rgba(255, 200, 90, .6); }
+.mm-go { display: inline-flex; align-items: center; gap: 5px; border-radius: 12px; }
+.gb-flip { display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; }
+.shop-buy { display: inline-flex; align-items: center; gap: 4px; border-radius: 12px; }
+
+/* 모바일 액션 버튼: 둥근 나무 원판 + 새긴 아이콘 */
+#actionBtn { border: 2px solid var(--wood-edge); color: var(--engrave); }
+#actionBtn .a-icon { font-size: 40px; display: flex; }
+#actionBtn .a-icon .ico { width: 40px; height: 40px; }
+#actionBtn .a-label { text-shadow: 0 1px 0 var(--engrave-hi); }
+/* 나무 단추가 inline-flex 라도 PC 에서는 모바일 전용 단추(메뉴 · 지도)를 숨긴다 */
+.icon-btn.touch-only-inline { display: none; }
+body.touch .icon-btn.touch-only-inline { display: inline-flex; }
+.icon-btn.hidden { display: none !important; }
+/* 조이스틱 손잡이 · 가루 칸도 같은 나무 톤 */
+#joyKnob { background: var(--grain), radial-gradient(circle at 38% 32%, var(--wood-hi), var(--wood) 60%, var(--wood-lo)); border: 1px solid var(--wood-edge);
+  box-shadow: inset 0 1px 0 rgba(255, 246, 224, .8), 0 3px 0 var(--wood-edge), 0 6px 14px rgba(0, 0, 0, .35); }
+.powder { background: var(--grain), linear-gradient(180deg, #f1d6a8, #ddb07a); border: 1px solid var(--wood-edge);
+  box-shadow: inset 0 1px 0 rgba(255, 246, 224, .8), inset 0 -2px 3px rgba(110, 62, 24, .22), 0 2px 0 var(--wood-edge), 0 4px 9px rgba(36, 18, 4, .3); }
+/* 도움말 글 속 버튼 표시: 작은 나무 단추 모양 */
+.ico-chip { display: inline-flex; align-items: center; justify-content: center; width: 1.55em; height: 1.4em; vertical-align: -0.3em; margin: 0 1px;
+  border-radius: 6px; border: 1px solid var(--wood-edge); color: var(--engrave);
+  background: var(--grain), linear-gradient(180deg, var(--wood-hi), var(--wood-lo)); box-shadow: inset 0 1px 0 rgba(255, 246, 224, .8), 0 1px 0 var(--wood-edge); }
+.ico-chip .ico { width: 1em; height: 1em; vertical-align: 0; }
+/* 휴대폰: 가방 · 채팅 닫기 버튼도 나무 단추 (반투명 유리 스타일을 덮어쓴다) */
+body.touch .bag-btn, body.touch.chat-open .chat-close {
+  background: var(--grain), linear-gradient(180deg, var(--wood-hi), var(--wood) 55%, var(--wood-lo));
+  border: 1px solid var(--wood-edge); color: var(--engrave); -webkit-backdrop-filter: none; backdrop-filter: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), inset 0 -2px 3px rgba(165, 115, 60, .2), 0 2px 0 var(--wood-edge), 0 3px 7px rgba(60, 35, 10, .2);
+  border-radius: 13px;
+}
+body.touch .bag-btn.on, body.touch .bag-btn:active, body.touch.chat-open .chat-close:active {
+  background: var(--grain), linear-gradient(180deg, var(--wood-lo), var(--wood) 60%, var(--wood-hi));
+  box-shadow: inset 0 2px 5px rgba(140, 95, 45, .35), 0 1px 3px rgba(60, 35, 10, .2);
+}
+body.touch.chat-open .chat-close { display: flex; }
+body.touch .bag-btn b { background: var(--engrave); color: #fff1d8; }
+/* 가방 버튼: 누르면 제자리에서 살짝 작아졌다 돌아온다 (옆으로 밀리지 않게) */
+.bag-btn { transition: scale .12s ease, filter .15s; }
+.bag-btn:active, .bag-btn.on { transform: translateX(-50%); }
+.bag-btn:active { scale: .93; }
+body.touch .bag-btn:active, body.touch .bag-btn.on { transform: none; }
+@media (max-width: 640px) { body:not(.touch) .bag-btn:active, body:not(.touch) .bag-btn.on { transform: none; } }
+
+/* ✨ 가루 아이콘: 병(음료수처럼 보였다) 대신 소복이 쌓인 가루 더미 + 흩날리는 알갱이. 색은 가루 색 그대로 (모양만 가린다) */
+:root { --powder-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M1.5 21.5c1.2-4.6 4.6-8.4 8.8-8.9 1.2-.2 2.2.4 3 .1 4.4-.9 7.6 3.4 9.2 8.8z'/%3E%3Ccircle cx='6.5' cy='9.5' r='1.25'/%3E%3Ccircle cx='11.5' cy='6' r='1.6'/%3E%3Ccircle cx='17' cy='9' r='1.2'/%3E%3Ccircle cx='14.5' cy='2.8' r='.9'/%3E%3Ccircle cx='8.5' cy='3.4' r='.75'/%3E%3Ccircle cx='19.6' cy='4.6' r='.8'/%3E%3C/svg%3E"); }
+.powder .bag, .bag-list .pw i {
+  -webkit-mask: var(--powder-mask) center / contain no-repeat; mask: var(--powder-mask) center / contain no-repeat;
+  border-radius: 0; box-shadow: none !important;
+}
+.powder .bag { width: 34px; height: 34px; }
+.powder .bag::before { display: none; }
+.bag-list .pw i { width: 18px; height: 18px; }
+.shop-bottle { -webkit-mask: var(--powder-mask) center / contain no-repeat; mask: var(--powder-mask) center / contain no-repeat; border-radius: 0 !important; box-shadow: none !important; }
+.shop-bottle::before, .shop-bottle::after { display: none !important; }
+/* 가운데 정렬(translateX)된 창이 열릴 때 옆에서 미끄러져 들어오지 않게: transform 대신 scale 로 튀어나온다 */
+@keyframes popScale { from { scale: .85; opacity: 0; } to { scale: 1; opacity: 1; } }
+.bag-panel { animation-name: popScale; transform-origin: 50% 100%; }
+/* PC 가운데 창: translateX(-50%) 뒤에 커지므로 커지는 기준점을 상자 왼쪽 끝(= 화면 가운데)에 둔다 */
+body:not(.touch) .bag-panel { transform-origin: 0 100%; }
+@media (max-width: 640px) { body:not(.touch) .bag-panel { transform-origin: 100% 100%; } }
+
+/* 🪵 버튼 나무색을 크림빛 밝은 원목(자작나무 느낌)으로: 크림색 판과 같은 톤 안에서 살짝 볼록하게 (v1.20) */
+:root {
+  --wood-hi: #fdf3df; --wood: #f3e0be; --wood-lo: #e8cc9f; --wood-edge: #c9a06b; --wood-deep: #a87b47;
+  --engrave: #7a5330; --engrave-hi: rgba(255, 252, 244, .9);
+  --grain: repeating-linear-gradient(92deg, rgba(170, 120, 60, .07) 0 1px, rgba(0, 0, 0, 0) 1px 8px, rgba(255, 255, 255, .12) 8px 9px, rgba(0, 0, 0, 0) 9px 16px);
+}
+
+/* 휴대폰에서 앉았을 때 장작 더 넣기 · 곡 고르기도 다른 버튼과 같은 크림 원목 (반투명 갈색 알약이 혼자 튀어 보였어요) */
+body.touch.seated .seat-btns #musicBtn, body.touch.seated .seat-btns #feedBtn {
+  background: var(--grain), linear-gradient(180deg, var(--wood-hi), var(--wood) 55%, var(--wood-lo));
+  border: 1px solid var(--wood-edge); color: var(--engrave); text-shadow: 0 1px 0 var(--engrave-hi);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 2px 0 var(--wood-edge), 0 3px 7px rgba(60, 35, 10, .2);
+}
+body.touch.seated .seat-btns #musicBtn.off { color: var(--engrave); opacity: .85; }
+body.touch.seated .seat-btns #musicBtn:active, body.touch.seated .seat-btns #feedBtn:active { box-shadow: inset 0 2px 5px rgba(140, 95, 45, .35); transform: translateY(1px); }
+/* 알림 두 줄일 때 줄 길이를 고르게 */
+.toast { text-wrap: balance; }
+
+/* 📲 앱으로 설치하기 (v1.20) — 점선 상자 대신 크림 원목 보조 버튼, 안내 창은 번호 단계 + 실제 화면 아이콘 */
+.link-btn {
+  border: 1px solid var(--wood-edge); border-radius: 14px; padding: 9px 12px; flex-wrap: wrap; column-gap: 6px; row-gap: 0;
+  background: var(--grain), linear-gradient(180deg, #fffaf0, #f7ead2); color: var(--engrave); text-shadow: 0 1px 0 var(--engrave-hi);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 2px 0 rgba(201, 160, 107, .7);
+}
+.link-btn:hover { filter: brightness(1.03); }
+.link-btn:active { box-shadow: inset 0 2px 4px rgba(140, 95, 45, .3); transform: translateY(1px); }
+.link-btn .ico { width: 19px; height: 19px; }
+.link-btn small { font-size: 12.5px; color: var(--brown-2); opacity: .9; }
+.link-btn small::before { content: '· '; }
+.ig-title { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.ig-title .ico { width: 26px; height: 26px; color: var(--engrave); }
+.ig-steps { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.ig-steps li { display: flex; align-items: flex-start; gap: 10px; font-size: 16px; line-height: 1.6; text-align: left; }
+.ig-n { flex: none; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-top: 1px;
+  background: var(--grain), linear-gradient(180deg, var(--wood-hi), var(--wood-lo)); border: 1px solid var(--wood-edge); color: var(--engrave); font-size: 14px; }
+.ig-steps .ico-chip, .ig-note .ico-chip { width: 1.7em; height: 1.55em; }
+.ig-perks { margin: 14px 0 4px; padding: 8px 12px; border-radius: 12px; background: #fff3dc; font-size: 14px; color: var(--brown-2); line-height: 1.55; text-align: center; }
+.ig-lead { font-size: 15.5px; line-height: 1.65; color: var(--brown); text-align: center; margin: 0 0 12px; }
+.ig-actions { display: flex; flex-direction: column; gap: 8px; }
+.ig-actions .btn { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; font-size: 17px; padding: 11px 0; }
+.ig-actions .btn .ico { width: 20px; height: 20px; }
+.ig-note { margin-top: 12px; font-size: 13.5px; line-height: 1.6; }
+#installGuide .card > .btn { margin-top: 14px; }
+body.touch .link-btn small { flex-basis: 100%; }
+body.touch .link-btn small::before { content: none; }
+.ig-lead, .ig-note, .ig-perks { word-break: keep-all; text-wrap: balance; }
+.ig-actions .btn.ghost { background: var(--grain), linear-gradient(180deg, #fffaf0, #f7ead2); }
