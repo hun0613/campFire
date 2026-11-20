@@ -383,7 +383,21 @@ initAnalytics();
 fillIcons(); // 버튼 아이콘 (나무에 새긴 선 아이콘)
 $('seatViewBtn').innerHTML = icon('eye'); $('seatViewBtn').title = `1인칭으로 보기${isTouch ? '' : ' (V)'}`; // 처음엔 3인칭 (setView는 카메라 준비 뒤에 쓴다)
 initFullscreen();
-$('mapToggle').onclick = () => document.body.classList.toggle('map-open');
+// 🗺️ 지도 여닫기 (v1.21.1): 휴대폰 · 좁은 창은 기본 닫힘(map-open 으로 열기), 넓은 PC 는 기본 열림(map-closed 로 접기, 기억함)
+const mapFolds = () => isTouch || innerWidth <= 640; // 지도가 접혀 있는 화면
+const mapShown = () => (mapFolds() ? document.body.classList.contains('map-open') : !document.body.classList.contains('map-closed'));
+function setMap(open) {
+  if (mapFolds()) document.body.classList.toggle('map-open', open);
+  else { document.body.classList.toggle('map-closed', !open); store.set('mapClosed', !open); }
+  $('mapToggle').title = open ? '지도 닫기' : '지도 열기';
+  $('mapToggle').classList.toggle('on', open);
+}
+document.body.classList.toggle('map-closed', !!store.get('mapClosed', false));
+setMap(mapShown());
+$('mapToggle').onclick = () => setMap(!mapShown());
+$('mapClose').onclick = () => setMap(false);
+// 휴대폰: 펼친 지도를 한 번 누르면 바로 닫힌다 (☰ 메뉴를 다시 열 필요 없이)
+$('mapPanel').addEventListener('click', () => { if (mapFolds() && mapShown()) setMap(false); });
 $('status').addEventListener('click', () => { if (isTouch) document.body.classList.toggle('quest-open'); });
 $('helpClose').onclick = () => $('help').classList.add('hidden');
 $('soundBtn').onclick = (e) => {
@@ -821,7 +835,7 @@ net.on('pit', (m) => {
     effects.ignite(pit.pos);
     if (m.fed === state.myId) {
       const rem = Math.ceil(pit.remaining(serverNow()) / 1000);
-      UI.toast(`🪵 장작을 넣었어요 · 남은 시간 ${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}`, 2200);
+      UI.toast(`🪵 장작을 넣었어요 · 남은 시간 ${fmtRem(rem)}`, 2200);
       track('fire_feed', { pit: pit.id });
     }
   }
@@ -963,6 +977,8 @@ net.on('tentMusic', (m) => {
   if (m.music) state.tentMusic.set(m.tent, m.music); else state.tentMusic.delete(m.tent);
 });
 
+// 남은 불 시간 (초): 1시간 넘으면 1:05:30, 아니면 12:30 (v1.21.1 최대 2시간)
+function fmtRem(sec) { const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = String(sec % 60).padStart(2, '0'); return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`; }
 const fmtDur = (sec) => (sec ? `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}` : '');
 const escHtml = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const music$ = { left: 0, hasKey: false, resetAt: 0, busy: false };
@@ -2077,13 +2093,13 @@ function updateLocal(dt) {
   const elev = Math.asin(Math.max(-1, Math.min(1, lookDir.y)));
   const lookPitch = view.fp ? elev : Math.max(0, elev); // 3인칭은 늘 내려다보는 카메라라 위로 볼 때만
   me.char.setLook(lookYaw, lookPitch);
-  // 다른 사람 화면에도 같은 방향으로 (5Hz, 바뀌었을 때만)
+  // 다른 사람 화면에도 같은 방향으로 (서버 스냅샷과 같은 10Hz, 바뀌었을 때만. v1.21.1: 5Hz → 10Hz 로 고개가 바로 따라 돌게)
   state.lookT += dt;
-  if (state.lookT >= 0.2) {
+  if (state.lookT >= 0.1) {
     state.lookT = 0;
     const L = state.lastLook;
     const dy = Math.abs(Math.atan2(Math.sin(lookYaw - L.y), Math.cos(lookYaw - L.y)));
-    if (dy > 0.06 || Math.abs(lookPitch - L.p) > 0.06) {
+    if (dy > 0.03 || Math.abs(lookPitch - L.p) > 0.03) {
       net.send({ t: 'look', y: +lookYaw.toFixed(2), p: +lookPitch.toFixed(2) });
       L.y = lookYaw; L.p = lookPitch;
     }
@@ -2410,7 +2426,7 @@ function updateHud() {
   const pit = it?.pit;
   if (pit && pit.state === 'lit') {
     const rem = Math.ceil(pit.remaining(serverNow()) / 1000);
-    UI.setFireTimer(`🔥 남은 장작 ${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}`);
+    UI.setFireTimer(`🔥 남은 장작 ${fmtRem(rem)}`);
   } else UI.setFireTimer(null);
   const mp = myMusicPit();
   let mb = null;
@@ -2449,7 +2465,7 @@ function feedPit() {
   const it = findInteraction();
   const p = it?.pit;
   if (!p || p.state !== 'lit' || state.inv.wood < 1) return null;
-  if (p.remaining(serverNow()) + CFG.FEED_MS > CFG.FIRE_MAX) return null; // 남은 시간은 30분까지
+  if (p.remaining(serverNow()) + CFG.FEED_MS > CFG.FIRE_MAX) return null; // 남은 시간은 2시간까지
   return p;
 }
 function feedFire() {
@@ -2611,4 +2627,4 @@ function frame(now = performance.now()) {
 requestAnimationFrame(frame);
 
 // 디버그용
-window.__game = { scene, pits, state, effects, camera, net, cam, preview, monitors, tentRoom, THREE, renderer, composer, bloom, grade, get me() { return me; } };
+window.__game = { scene, pits, state, effects, camera, net, cam, preview, monitors, tentRoom, THREE, renderer, composer, bloom, grade, remotes, get me() { return me; } };

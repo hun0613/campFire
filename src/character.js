@@ -61,6 +61,7 @@ const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const EMOTE_ACTS = new Set(['wave', 'hop', 'laugh', 'love', 'clap', 'wow', 'sad', 'sleepy']);
 const WORK_ACTS = new Set(['chop', 'place', 'gather', 'throw', 'light']); // 하던 일을 보는 동작
 const LOOK_MAX = 1.4; // 약 80°
+const LOOK_SPEED = 13; // 고개가 보는 방향을 따라가는 빠르기 (클수록 재빠름)
 const LOOK_SWITCH = Math.PI - 0.4; // 바로 뒤(±180°) 근처에서는 고른 어깨를 유지하다가, 이만큼 넘어가면 반대쪽 어깨로
 
 let shadowTex = null;
@@ -599,11 +600,12 @@ export class Character {
     // 고개 · 상체를 보는 방향으로 (일하는 동작 중에는 하던 일을 본다)
     const busyLook = !!A && WORK_ACTS.has(A.name);
     const want = this.#lookTarget(busyLook);
-    this.turn = lerp(this.turn, want, Math.min(1, dt * 6));
+    // v1.21.1: 고개를 더 재빠르게 (6 → 13). 크게 돌릴수록 처음에 휙 돌고 끝에서 부드럽게 멈춘다
+    this.turn = lerp(this.turn, want, Math.min(1, dt * LOOK_SPEED));
     this.body.rotation.y = this.turn * 0.25;
     this.head.rotation.y = this.turn * 0.75;
     const pitch = busyLook || this.lookYaw == null ? 0 : Math.max(-0.3, Math.min(0.5, this.lookPitch));
-    this.head.rotation.x = lerp(this.head.rotation.x, -pitch * 0.8 + nod, Math.min(1, dt * (nod ? 12 : 6)));
+    this.head.rotation.x = lerp(this.head.rotation.x, -pitch * 0.8 + nod, Math.min(1, dt * (nod ? 12 : LOOK_SPEED)));
 
     // 눈 깜빡임
     this.blinkT -= dt;

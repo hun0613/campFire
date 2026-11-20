@@ -65,7 +65,7 @@
     <div id="topright" class="panel small">
       <button id="dockToggle" class="icon-btn dock-toggle touch-only-inline" title="메뉴 펼치기" aria-expanded="false" data-icon="menu"></button>
       <span class="online-dot"></span><span id="online">1</span><span class="online-label">명 캠핑 중</span>
-      <button id="mapToggle" class="icon-btn touch-only-inline" title="지도" data-icon="map"></button>
+      <button id="mapToggle" class="icon-btn" title="지도" data-icon="map"></button>
       <button class="icon-btn install-btn hidden" title="앱으로 설치" data-icon="install"></button>
       <button id="viewBtn" class="icon-btn" title="1인칭으로 보기 (V)" data-icon="eye"></button>
       <button id="shareBtn" class="icon-btn" title="친구 초대" data-icon="mail"></button>
@@ -73,7 +73,7 @@
       <button id="helpBtn" class="icon-btn" title="도움말" data-icon="help"></button>
     </div>
 
-    <div id="mapPanel" class="panel"><canvas id="minimap"></canvas></div>
+    <div id="mapPanel" class="panel"><canvas id="minimap"></canvas><button id="mapClose" class="icon-btn map-close" title="지도 닫기" aria-label="지도 닫기" data-icon="close"></button></div>
     <!-- 걸을 때 잠깐 뜨는 작은 원형 레이더 (모바일 · 좁은 PC 창): 내 주변만, 갈 곳은 테두리 화살표로 -->
     <canvas id="radar" aria-hidden="true"></canvas>
 
@@ -130,7 +130,7 @@
           <li><b>글램핑장 앞 화로</b>에서 <kbd>E</kbd>로 장작을 쌓고, 한 번 더 <kbd>E</kbd>로 불을 붙여요</li>
           <li>타오르는 불 앞에서 <kbd>E</kbd>로 앉아 불멍! <kbd>1</kbd>~<kbd>9</kbd> 로 가루를 뿌려요. 서 있을 때는 아래 <b><span class="ico-chip" data-icon="bag"></span> 가방</b>을 눌러 가진 가루를 볼 수 있어요. 장작이 없어도 빈 화로 의자에 앉아 쉴 수 있어요</li>
           <li>앉은 채로 옆의 <b>💿 LP 플레이어</b>를 누르면(<kbd>M</kbd>) 곡을 검색해서 틀 수 있어요. 기타를 치며 옆 TV로 음악이 나오고, 같은 모닥불에 앉은 사람만 들려요</li>
-          <li>장작은 10분 동안 타요. 타는 중에 <b>🪵 장작 더 넣기</b>(F)로 1개에 2분씩 늘릴 수 있어요 (10분 → 12분 → 14분…, 최대 30분). 다 타면 음악도 멈춰요 🪓</li>
+          <li>장작은 10분 동안 타요. 타는 중에 <b>🪵 장작 더 넣기</b>(F)로 1개에 2분씩 늘릴 수 있어요 (10분 → 12분 → 14분…, 최대 2시간). 다 타면 음악도 멈춰요 🪓</li>
           <li>광장의 <b>📖 방명록</b>에서 한마디를 남기고, 다른 캠퍼들의 방명록도 구경할 수 있어요</li>
           <li>오른쪽 위 <b><span class="ico-chip" data-icon="mail"></span> 버튼</b>으로 친구에게 캠핑장 링크를 보낼 수 있어요. 하루 한 번 <b>🪙 코인 10개</b>를 더 받아요</li>
           <li><b>🪙 코인</b>은 매일 밤 12시에 30개로 채워져요. 루미의 가루 공방에서 <b>✦ 특별한 가루</b>를 10코인에 살 수 있어요</li>

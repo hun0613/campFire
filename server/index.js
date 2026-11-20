@@ -575,14 +575,14 @@ function handle(ws, ctx, m) {
       bump(me, 'light');
       break;
     }
-    case 'feed': { // 타는 불에 장작 1개 더 넣기: 2분 연장 (남은 시간은 30분까지)
+    case 'feed': { // 타는 불에 장작 1개 더 넣기: 2분 연장 (남은 시간은 2시간까지)
       const pit = pits.get(m.pit);
       const def = pitDef.get(m.pit);
       if (!pit || !nearFire(me, def, 2)) return;
       if (pit.state !== 'lit') return;
       if (me.wood < 1) { send(ws, { t: 'toast', text: '넣을 장작이 없어요 🪵 (장작 패는 곳 · 창고에서 가져와요)' }); return; }
-      // 언제든 장작 1개 = 2분 (10분 → 12분 → 14분…). 남은 시간은 30분까지
-      if (pit.endsAt - now + CFG.FEED_MS > CFG.FIRE_MAX) { send(ws, { t: 'toast', text: `불이 이미 넉넉하게 타고 있어요 🔥 (남은 시간은 ${CFG.FIRE_MAX / 60000}분까지 늘릴 수 있어요)` }); return; }
+      // 언제든 장작 1개 = 2분 (10분 → 12분 → 14분…). 남은 시간은 2시간까지
+      if (pit.endsAt - now + CFG.FEED_MS > CFG.FIRE_MAX) { send(ws, { t: 'toast', text: `불이 이미 넉넉하게 타고 있어요 🔥 (남은 시간은 ${CFG.FIRE_MAX / 3_600_000}시간까지 늘릴 수 있어요)` }); return; }
       const ends = pit.endsAt + CFG.FEED_MS;
       me.wood -= 1;
       pit.endsAt = ends;

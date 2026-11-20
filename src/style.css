@@ -1373,3 +1373,21 @@ body.seated .gb-tag, body.lounging .gb-tag, body.seated .beacon, body.lounging .
 }
 /* 길 안내 줄은 늘 한 줄: 방향(동 → 북동) · 거리 자릿수가 바뀌어도 「요」만 다음 줄로 넘어가지 않게 */
 .q-dir { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- 🗺️ 지도 닫기 (v1.21.1): ✕ 버튼 · 휴대폰은 지도를 누르면 닫힘 · PC 도 🗺️ 버튼으로 여닫기 ---------- */
+.map-close { position: absolute; top: -8px; left: -8px; width: 26px; height: 26px; border-radius: 50%; z-index: 1; box-shadow: 0 2px 6px rgba(0, 0, 0, .3); }
+.map-close .ico { width: 13px; height: 13px; }
+body.touch .map-close { width: 30px; height: 30px; top: -9px; left: -9px; } /* 손가락으로 누르기 쉽게 */
+body.touch.map-open #minimap { cursor: pointer; }
+/* 넓은 PC: 접으면 지도 대신 걸을 때만 작은 레이더 */
+body:not(.touch).map-closed #mapPanel { display: none; }
+@media (min-width: 641px) {
+  body:not(.touch).map-closed #radar { display: block; top: 74px; right: 16px; }
+  body:not(.touch).map-closed.map-auto #radar { opacity: 1; visibility: visible; transform: none; transition: opacity .25s ease, transform .25s ease, visibility 0s; }
+}
+/* 좁은 PC 창: 🗺️ 로 연 지도 */
+@media (max-width: 640px) {
+  body:not(.touch).map-open #mapPanel { display: block; }
+  body:not(.touch).map-open #radar { opacity: 0 !important; visibility: hidden !important; }
+}
+#mapToggle.on { background: #ffd9a6; }
