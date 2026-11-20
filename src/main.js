@@ -12,7 +12,7 @@ import { Character } from './character.js';
 import { Particles } from './particles.js';
 import { Effects } from './effects.js';
 import { Net } from './net.js';
-import { UI } from './ui.js';
+import { UI, groupPowders, powderIco } from './ui.js';
 import { Sound } from './audio.js';
 import { icon, fillIcons, EMOJI_ICON } from './icons.js';
 import { Precip } from './precip.js';
@@ -30,7 +30,7 @@ import { NoticeBoard } from './board.js';
 import { LightPool } from './lightpool.js';
 import { TentInterior, TENT_PROPS, TENT_ENTRY, collideTents, roofY } from './tent.js';
 import {
-  CFG, PITS, STUMPS, NPC, KEEPER, BOUNDS, RANGE, LOOKS, GUESTBOOK, BOARD, QUESTS, LEGEND_POWDERS, TENTS, FIRES, tentAt, tentLocal, EGG, kstDay, EMOTES, FENCE, GATES, SPOTS, LOUNGE_SEATS, SUNSET,
+  CFG, PITS, STUMPS, NPC, KEEPER, BOUNDS, RANGE, LOOKS, GUESTBOOK, BOARD, QUESTS, LEGEND_POWDERS, TENTS, FIRES, tentAt, tentLocal, EGG, kstDay, EMOTES, FENCE, GATES, SPOTS, LOUNGE_SEATS, SUNSET, ZONES, zonePath,
 } from '../shared/config.js';
 
 const $ = (id) => document.getElementById(id);
@@ -664,7 +664,7 @@ net.on('npc', (m) => {
     openShop(say);
     return;
   }
-  const chips = (list) => list.map((p) => UI.powderChip(p)).join('');
+  const chips = (list) => UI.powderGrid(list, 'sm');
   if (m.first) {
     pages.push('안녕! 나는 가루 공방의 루미야 ✨\n모닥불 색을 바꾸는 <b>마법 가루</b>를 만들어.');
     pages.push(`가루는 내가 늘 <b>${CFG.BASE_POWDERS}개까지</b> 채워 줄게.\n장작은 필요 없어! 다 쓰면 또 놀러 오렴.`);
@@ -711,7 +711,7 @@ function renderShop() {
     const have = inv.powders.filter((p) => p.effect === id && p.legend).length;
     const can = inv.coins >= CFG.LEGEND_PRICE && !full;
     return `<div class="shop-item">
-      <span class="shop-bottle" style="background:${L.bg};box-shadow:0 0 14px ${L.color}"></span>
+      ${powderIco({ legend: true, effect: id, color: L.color }, 'shop-bottle')}
       <span class="shop-txt"><b>${escHtml(L.name)}</b><small>${escHtml(L.desc)}${have ? ` · 가방에 ${have}개` : ''}</small></span>
       <button class="shop-buy" data-effect="${id}"${can ? '' : ' disabled'}>${icon('coin')} ${CFG.LEGEND_PRICE}</button>
     </div>`;
@@ -728,7 +728,9 @@ function renderShop() {
     $('shopQuest').classList.remove('hidden');
   } else $('shopQuest').classList.add('hidden');
   const legend = inv.powders.filter((p) => p.legend).length;
-  $('shopBag').innerHTML = `🎒 가방에 가루 <b>${inv.powders.length}</b>개${legend ? ` (✦ ${legend}개)` : ''} · 기본 가루는 ${CFG.BASE_POWDERS}개까지 공짜로 채워 줘요`;
+  $('shopBag').innerHTML = `<div class="shop-bag-head">${icon('bag')} 내 가방 <small>가루 ${inv.powders.length}개${legend ? ` · ✦ ${legend}개` : ''}</small></div>`
+    + (inv.powders.length ? UI.powderGrid(inv.powders, 'sm') : '<div class="bag-empty">가방이 비었어요</div>')
+    + `<div class="shop-bag-note">기본 가루는 ${CFG.BASE_POWDERS}개까지 공짜로 채워 줘요</div>`;
   $('shopShare').classList.toggle('hidden', !shareBonusLeft());
 }
 function openShop(say) {
@@ -1233,8 +1235,22 @@ const tag3d = (html, x, y, z) => {
   scene.add(o);
   return el;
 };
-for (const g of GATES) tag3d('<span class="gb-tag-icon">🌲</span><b>숲길</b>', g.x, 3.7, g.z);
-for (const sp of SPOTS) tag3d(`<span class="gb-tag-icon">${sp.icon}</span><b>${sp.name}</b>`, sp.x, world.heightAt(sp.x, sp.z) + 3.4, sp.z);
+// 장소 팻말은 가까이 있을 때만 (멀리 있는 곳은 미니맵이 알려 준다). 쉼터 · 들판은 안에 들어오면 숨긴다 (도착 알림이 뜬다)
+const PLACE_NEAR = { spot: 25, gate: 15 };
+const placeTags = [
+  ...GATES.map((g) => ({ el: tag3d('<span class="gb-tag-icon">🌲</span><b>숲길</b>', g.x, 3.7, g.z), x: g.x, z: g.z, near: PLACE_NEAR.gate, inside: 0 })),
+  ...SPOTS.map((sp) => ({ el: tag3d(`<span class="gb-tag-icon">${sp.icon}</span><b>${sp.name}</b>`, sp.x, world.heightAt(sp.x, sp.z) + 3.4, sp.z), x: sp.x, z: sp.z, near: PLACE_NEAR.spot, inside: sp.r * 0.6 })),
+];
+let placeT = 0;
+function updatePlaceTags(dt) {
+  placeT -= dt;
+  if (placeT > 0 || !me) return;
+  placeT = 0.25;
+  for (const t of placeTags) {
+    const d = Math.hypot(me.x - t.x, me.z - t.z);
+    t.el.classList.toggle('far', d > t.near || d < t.inside);
+  }
+}
 const trailSeen = new Set(); // 이번 접속에서 처음 온 쉼터만 알린다
 let trailT = 0, wasOutside = false;
 function updateTrail(dt) {
@@ -1255,7 +1271,7 @@ function updateTrail(dt) {
     track('trail_spot', { spot: sp.id });
   }
 }
-// 텐트 문 위 「⛺ 2/5」: 지금 안에 몇 명 있는지 (밖에서 가까이 있을 때만)
+// 텐트 문 위 「⛺ 2/5」: 지금 안에 몇 명 있는지 (밖에서 문 가까이 있을 때만)
 const tentTags = new Map(TENTS.map((t) => {
   const el = document.createElement('div');
   el.className = 'lp-tag tent-tag';
@@ -1264,7 +1280,7 @@ const tentTags = new Map(TENTS.map((t) => {
   o.position.set(p.x, 3.15, p.z);
   o.visible = false;
   scene.add(o);
-  return [t.id, { o, el, n: -1 }];
+  return [t.id, { o, el, n: -1, door: p }];
 }));
 let tentTagT = 0;
 let skyDim = 1;
@@ -1276,7 +1292,7 @@ function updateTentTags(dt) {
     const tag = tentTags.get(t.id);
     const n = tentCount(t);
     tentRoom.setOccupancy(t.id, n);
-    const vis = !state.tent && Math.hypot(me.x - t.x, me.z - t.z) < 26;
+    const vis = !state.tent && !state.sitting && !state.lounge && Math.hypot(me.x - tag.door.x, me.z - tag.door.z) < 10; // 문 앞 10m 안에서만 (지나가며 보는 텐트 하나둘)
     tag.o.visible = vis;
     if (vis && tag.n !== n) {
       tag.n = n;
@@ -1356,7 +1372,7 @@ function refreshBag() {
   if ($('bagPanel').classList.contains('hidden')) return;
   const legend = list.filter((p) => p.legend).length;
   $('bagSub').textContent = n ? `마법 가루 ${n}개${legend ? ` · ✦ 특별한 가루 ${legend}개` : ''}` : '';
-  $('bagList').innerHTML = n ? list.map((p) => UI.powderChip(p)).join('')
+  $('bagList').innerHTML = n ? UI.powderGrid(list)
     : `<div class="bag-empty">가루가 없어요.<br>길 건너 <b>루미</b>에게 가면 ${CFG.BASE_POWDERS}개까지 채워 줘요 ✨</div>`;
 }
 function setBag(open) {
@@ -1900,12 +1916,12 @@ addEventListener('keydown', (e) => {
   keys.add(e.code);
   if (e.code === 'KeyM' && !e.repeat && state.sitting) { e.preventDefault(); openMusicModal(); return; }
   if (e.code === 'KeyF' && !e.repeat && feedPit()) { feedFire(); return; }
-  if (e.code === 'KeyV' && !e.repeat) { if (state.sitting) setView(!view.fp); else UI.toast('모닥불이나 텐트 화로에 앉으면 1인칭 · 3인칭을 바꿀 수 있어요', 2000); return; }
+  if (e.code === 'KeyV' && !e.repeat) { if (state.sitting || state.lounge) setView(!view.fp); else UI.toast('모닥불 · 텐트 화로 · 벤치에 앉으면 1인칭 · 3인칭을 바꿀 수 있어요', 2000); return; }
   if (e.code === 'KeyE' && !e.repeat) {
     const it = findInteraction();
     if (it?.type !== 'chop') interact(it);
   }
-  if (/^Digit[1-9]$/.test(e.code)) throwPowder(Number(e.code.slice(5)) - 1);
+  if (/^Digit[1-9]$/.test(e.code)) { const g = groupPowders(state.inv.powders)[Number(e.code.slice(5)) - 1]; if (g) throwPowder(g.idxs[0]); } // 숫자 = 가루 칸 순서 (같은 가루는 한 칸)
   if (e.code === 'Space') e.preventDefault();
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
@@ -2104,6 +2120,21 @@ const focus = new THREE.Vector3();
 const camTarget = new THREE.Vector3();
 const fpPos = new THREE.Vector3(), fpHead = new THREE.Vector3(), fpDir = new THREE.Vector3();
 const lookDir = new THREE.Vector3();
+// 🌸 벚꽃 터널 카메라: 터널 길 가운데에서 4m 안이면 1, 9m 밖이면 0 (입구 · 출구에서 자연스럽게 섞인다)
+const CHERRY_CAM = { dist: 5.4, distPortrait: 7.6, pitch: 0.2, inR: 4, outR: 9 };
+const cherryPts = ZONES.filter((z) => z.kind === 'cherry').flatMap((z) => zonePath(z, 0.02));
+let cherryK = 0, cherryT = 0, cherryGoal = 0;
+function cherryCam(dt) {
+  cherryT -= dt;
+  if (cherryT <= 0 && me) {
+    cherryT = 0.15;
+    let best = Infinity;
+    for (const [x, z] of cherryPts) { const d = (x - me.x) ** 2 + (z - me.z) ** 2; if (d < best) best = d; }
+    cherryGoal = 1 - THREE.MathUtils.smoothstep(Math.sqrt(best), CHERRY_CAM.inR, CHERRY_CAM.outR);
+  }
+  cherryK += (cherryGoal - cherryK) * Math.min(1, dt * 1.6); // 천천히 다가가고 천천히 물러난다
+  return cherryK;
+}
 function updateCamera(dt, t) {
   if (me) me.char.root.visible = !view.fp; // 1인칭이면 내 화면에서만 내 캐릭터를 숨긴다 (다른 사람에겐 보임)
   if (view.fp && me) {
@@ -2157,6 +2188,14 @@ function updateCamera(dt, t) {
     cam.dist = Math.min(cam.dist, 6);
   } else {
     camTarget.set(me.x, 1.0, me.z);
+    // 🌸 벚꽃 터널: 걸어 들어가면 카메라가 어깨 뒤로 낮게 다가가 꽃 지붕 아래에서 걷는 느낌으로. 빠져나오면 원래대로
+    // (내가 정한 거리 · 높이는 그대로 두고, 터널 안에서만 보이는 값을 섞는다)
+    const k = cherryCam(dt);
+    if (k > 0.001) {
+      const cd = innerWidth < innerHeight ? CHERRY_CAM.distPortrait : CHERRY_CAM.dist; // 휴대폰 세로는 화면이 좁아 조금 더 뒤에서
+      dist = THREE.MathUtils.lerp(dist, Math.min(dist, cd), k);
+      pitch = THREE.MathUtils.lerp(pitch, Math.min(pitch, CHERRY_CAM.pitch), k);
+    }
   }
   cam.target.lerp(camTarget, Math.min(1, dt * (me ? 6 : 1)));
   cam.curDist += (dist - cam.curDist) * Math.min(1, dt * 3);
@@ -2344,7 +2383,7 @@ function directionText(t) {
   const dirs = ['북', '북동', '동', '남동', '남', '남서', '서', '북서'];
   const a = (Math.atan2(dx, -dz) + Math.PI * 2) % (Math.PI * 2);
   const name = dirs[Math.round(a / (Math.PI / 4)) % 8];
-  return `<div class="q-dir">🧭 ${t.label}까지 <b>${name}쪽 ${Math.round(d)}m</b> · 미니맵을 참고해요</div>`;
+  return `<div class="q-dir">🧭 ${t.label}까지 <b>${name}쪽 ${Math.round(d)}m</b></div>`; // 늘 한 줄 (방향 · 거리가 바뀌어도 줄이 넘치지 않게)
 }
 
 function updateHud() {
@@ -2352,6 +2391,8 @@ function updateHud() {
   // 모바일: 앉아 있을 때는 UI를 화면 가장자리로 옮겨 모닥불이 잘 보이게 (CSS body.seated)
   const seated = !!state.sitting;
   if (document.body.classList.contains('seated') !== seated) document.body.classList.toggle('seated', seated);
+  // 벤치 · 흔들의자(숲길 · 광장)에 앉았을 때: 시점 버튼을 보여 준다 (CSS body.lounging)
+  if (document.body.classList.contains('lounging') !== !!state.lounge) document.body.classList.toggle('lounging', !!state.lounge);
   const it = findInteraction();
   let [html, dim] = promptFor(it);
   if (isTouch && html) {
@@ -2425,7 +2466,7 @@ function declutterLabels(dt) {
   if (declutterT > 0) return;
   declutterT = 0.25;
   // NPC 이름표(루미 · 보리)도 같은 장소 팻말과 겹치면 정리한다 (캠퍼 이름표 · 말풍선은 건드리지 않는다)
-  const els = [...document.querySelectorAll('.beacon, .gb-tag, .nametag.npc')].filter((el) => !el.classList.contains('here') && !el.classList.contains('near'));
+  const els = [...document.querySelectorAll('.beacon, .gb-tag, .nametag.npc')].filter((el) => !el.classList.contains('here') && !el.classList.contains('near') && !el.classList.contains('far'));
   const items = [];
   for (const el of els) {
     const r = el.getBoundingClientRect();
@@ -2547,6 +2588,7 @@ function frame(now = performance.now()) {
   updateMusicFx(dt);
   updateStumps(dt);
   updateTrail(dt);
+  updatePlaceTags(dt);
   updateChairs(performance.now() / 1000);
   gbStand.update(dt, me);
   board.update(dt, me);

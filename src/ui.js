@@ -1,6 +1,19 @@
 import { CFG, LEGEND_POWDERS } from '../shared/config.js';
+import { pmClass, powderLabel } from './powderIcons.js';
 
 const $ = (id) => document.getElementById(id);
+
+/** 같은 가루끼리 한 칸으로 묶는다 (이름이 같으면 같은 종류). 가방에 들어온 순서대로. idxs = 가방 안 위치들 */
+export function groupPowders(list) {
+  const m = new Map();
+  list.forEach((p, i) => {
+    const k = (p.legend ? 'L:' : '') + p.name;
+    let g = m.get(k);
+    if (!g) m.set(k, (g = { key: k, p, idxs: [] }));
+    g.idxs.push(i);
+  });
+  return [...m.values()];
+}
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -8,7 +21,15 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 function powderBg(p) {
   if (p.legend && LEGEND_POWDERS[p.effect]) return LEGEND_POWDERS[p.effect].bg;
   if (p.effect === 'rainbow') return 'conic-gradient(#ff5f6d, #ffc371, #5dff8f, #55c8ff, #b26bff, #ff5f6d)';
-  return `radial-gradient(circle at 35% 30%, #fff 0%, ${p.color} 45%, ${p.color} 100%)`;
+  const h = String(p.color).replace('#', ''), lum = (0.3 * parseInt(h.slice(0, 2), 16) + 0.59 * parseInt(h.slice(2, 4), 16) + 0.11 * parseInt(h.slice(4, 6), 16)) / 255;
+  const edge = `color-mix(in srgb, ${p.color} ${lum > 0.8 ? 45 : 72}%, #4a2f6a)`; // 밝은 가루(새하얀)는 가장자리를 더 어둡게
+  return `radial-gradient(circle at 35% 28%, #fff 0%, ${p.color} 42%, ${edge} 100%)`; // 가장자리를 살짝 어둡게: 새하얀 가루도 크림 칸 위에서 보이게
+}
+
+/** 가루 아이콘: 뒤에 옅게 흩뿌린 가루 알갱이 + 앞에 효과 문양 (tag/cls 는 바깥 칸) */
+export function powderIco(p, cls = '', tag = 'span') {
+  const bg = powderBg(p);
+  return `<${tag} class="pico ${cls}"><span class="pile" style="background:${bg}"></span><span class="glyph ${pmClass(p.effect)}" style="background:${bg}"></span></${tag}>`;
 }
 
 const tipQueue = [];
@@ -48,14 +69,15 @@ export const UI = {
       return d;
     }));
     const box = $('powders');
-    const prevIds = new Set([...box.children].map((c) => c.dataset.id));
-    box.replaceChildren(...inv.powders.map((p, i) => {
+    const prevKeys = new Set([...box.children].map((c) => c.dataset.key));
+    box.replaceChildren(...groupPowders(inv.powders).map((g, i) => {
+      const p = g.p, n = g.idxs.length;
       const el = document.createElement('div');
-      el.className = `powder${canThrow ? '' : ' disabled'}${prevIds.has(p.id) ? '' : ' new'}${p.legend ? ' legend' : ''}`;
-      el.dataset.id = p.id;
+      el.className = `powder${canThrow ? '' : ' disabled'}${prevKeys.has(g.key) ? '' : ' new'}${p.legend ? ' legend' : ''}`;
+      el.dataset.key = g.key;
       const bg = powderBg(p);
-      el.innerHTML = `${i < 9 ? `<span class="key">${i + 1}</span>` : ''}<span class="bag" style="background:${bg};box-shadow:0 0 12px ${p.color}"></span><span class="tip">${esc(p.name)}</span>`;
-      el.addEventListener('click', () => onThrow(i));
+      el.innerHTML = `${i < 9 ? `<span class="key">${i + 1}</span>` : ''}${powderIco(p, 'bag')}${n > 1 ? `<b class="inv-n">${n}</b>` : ''}<span class="tip">${esc(p.name)}${n > 1 ? ` × ${n}` : ''}</span>`;
+      el.addEventListener('click', () => onThrow(g.idxs[0]));
       return el;
     }));
   },
@@ -148,7 +170,15 @@ export const UI = {
     this._dlg = null;
   },
 
+  /** 인벤토리 칸: 같은 가루는 한 칸에, 오른쪽 아래에 개수 */
+  powderGrid(list, cls = '') {
+    return `<div class="inv-grid${cls ? ' ' + cls : ''}">${groupPowders(list).map((g) => {
+      const p = g.p, n = g.idxs.length, L = powderLabel(p);
+      return `<div class="inv-slot${p.legend ? ' legend' : ''}" title="${esc(p.name)}${n > 1 ? ` × ${n}` : ''}">${powderIco(p, 'inv-ico')}<span class="inv-name"><b>${esc(L.kind)}</b><small>${esc(L.sub)}</small></span>${n > 1 ? `<b class="inv-n">${n}</b>` : ''}</div>`;
+    }).join('')}</div>`;
+  },
+
   powderChip(p) {
-    return `<span class="pw${p.legend ? ' legend' : ''}"><i style="background:${powderBg(p)}"></i>${esc(p.name)}</span>`;
+    return `<span class="pw${p.legend ? ' legend' : ''}">${powderIco(p, '', 'i')}${esc(p.name)}</span>`;
   },
 };

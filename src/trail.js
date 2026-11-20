@@ -701,7 +701,15 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
   // ---------- 들판: 🌸 핑크뮬리 · 🌾 갈대 (숲길이 가운데를 지나간다). 바람에 살랑 — 흔들림은 셰이더에서 (폰 부담 적게)
   const swayTime = { value: 0 };
   updaters.push((t) => { swayTime.value = t; });
-  // 카메라와 내 캐릭터 사이를 가리는 꽃구름은 점점이 비워 속이 보이게 (hole) — 벚꽃 터널이 화면을 덮지 않게
+  // 가리는 부분 비우기: 안쪽은 깨끗하게 완전히 비우고, 가장자리 얇은 띠만 4×4 규칙 무늬(Bayer)로 부드럽게.
+  // (예전엔 넓은 범위를 픽셀마다 무작위로 비워 모래알 같은 노이즈가 보였다)
+  const BAYER4 = `float bayer4(vec2 p) {
+    int i = int(mod(p.x, 4.0)) + int(mod(p.y, 4.0)) * 4;
+    const float m[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
+    return (m[i] + 0.5) / 16.0;
+  }
+`;
+  // 카메라와 내 캐릭터 사이를 가리는 꽃구름은 비워 속이 보이게 (hole) — 벚꽃 터널이 화면을 덮지 않게
   const focusU = { value: new THREE.Vector3(0, -999, 0) };
   const swayMat = (opts, amp, speed, hole = false) => {
     const m = toon('#ffffff', opts);
@@ -715,20 +723,19 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
           transformed.x += w * ${amp.toFixed(3)} * k; transformed.z += w * ${(amp * 0.5).toFixed(3)} * k; }`).replace('#include <project_vertex>', `#include <project_vertex>
         vWp = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;`);
       if (hole) {
-        sh.fragmentShader = 'uniform vec3 uFocus;\nvarying vec3 vWp;\n' + sh.fragmentShader.replace('void main() {', `void main() {
+        sh.fragmentShader = 'uniform vec3 uFocus;\nvarying vec3 vWp;\n' + BAYER4 + sh.fragmentShader.replace('void main() {', `void main() {
           { vec3 a = cameraPosition, b = uFocus + vec3(0.0, 0.8, 0.0), ab = b - a;
             float tt = clamp(dot(vWp - a, ab) / max(dot(ab, ab), 1e-4), 0.0, 1.0);
             float dl = distance(vWp, a + ab * tt);               // 카메라→캐릭터 선까지 거리
             float dc = distance(vWp, cameraPosition);             // 카메라가 꽃구름 속에 있을 때
-            float keep = min(smoothstep(1.2, 3.2, dl) + step(0.97, tt), smoothstep(1.5, 4.0, dc));
-            float n = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453);
-            if (n > keep) discard; }`);
+            float keep = min(smoothstep(1.7, 2.3, dl) + step(0.97, tt), smoothstep(2.6, 3.2, dc));
+            if (keep < 1.0 && bayer4(gl_FragCoord.xy) > keep) discard; }`);
       }
     };
     m.customProgramCacheKey = () => `sway${amp}${speed}${hole}`;
     return m;
   };
-  // 흔들리지 않는 물체(벚나무 줄기 · 가지 · 붉은 문)도 카메라와 캐릭터 사이를 가리면 점점이 비워 속이 보이게
+  // 흔들리지 않는 물체(벚나무 줄기 · 가지 · 붉은 문)도 카메라와 캐릭터 사이를 가리면 비워 속이 보이게
   const holeMat = (m) => {
     m.onBeforeCompile = (sh) => {
       sh.uniforms.uFocus = focusU;
@@ -738,14 +745,13 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
         #else
           vWp = (modelMatrix * vec4(transformed, 1.0)).xyz;
         #endif`);
-      sh.fragmentShader = 'uniform vec3 uFocus;\nvarying vec3 vWp;\n' + sh.fragmentShader.replace('void main() {', `void main() {
+      sh.fragmentShader = 'uniform vec3 uFocus;\nvarying vec3 vWp;\n' + BAYER4 + sh.fragmentShader.replace('void main() {', `void main() {
           { vec3 a = cameraPosition, b = uFocus + vec3(0.0, 0.8, 0.0), ab = b - a;
             float tt = clamp(dot(vWp - a, ab) / max(dot(ab, ab), 1e-4), 0.0, 1.0);
             float dl = distance(vWp, a + ab * tt);
             float dc = distance(vWp, cameraPosition);
-            float keep = min(smoothstep(0.7, 2.2, dl) + step(0.97, tt), smoothstep(1.2, 3.5, dc));
-            float n = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453);
-            if (n > keep) discard; }`);
+            float keep = min(smoothstep(0.9, 1.3, dl) + step(0.97, tt), smoothstep(2.0, 2.6, dc));
+            if (keep < 1.0 && bayer4(gl_FragCoord.xy) > keep) discard; }`);
     };
     m.customProgramCacheKey = () => 'holeMat';
     return m;

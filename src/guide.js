@@ -80,6 +80,8 @@ export class Guide {
       b.ring.material.opacity = 0.15 + 0.22 * on + Math.sin(this.time * 3) * 0.06 * on;
       b.ring.scale.setScalar(1 + Math.sin(this.time * 2.5) * 0.05 * on);
       b.el.classList.toggle('on', !!on);
+      // 지금 할 일이 아닌 길잡이는 가까울 때(20m 안)만 보인다
+      if (me) b.el.classList.toggle('far', !on && Math.hypot(me.x - b.x, me.z - b.z) > 20);
       if (me) {
         const d = Math.round(Math.hypot(me.x - b.x, me.z - b.z));
         if (b._d !== d) {
