@@ -11,7 +11,7 @@ function instanced(geo, mat, list, { cast = false } = {}) {
   const mesh = new THREE.InstancedMesh(geo, mat, list.length);
   list.forEach((it, i) => {
     tmpP.set(it.x, it.y ?? 0, it.z);
-    tmpE.set(it.rx ?? 0, it.ry ?? 0, it.rz ?? 0);
+    tmpE.set(it.rx ?? 0, it.ry ?? 0, it.rz ?? 0, it.order || 'XYZ');
     tmpQ.setFromEuler(tmpE);
     if (typeof it.s === 'number') tmpS.setScalar(it.s); else tmpS.set(it.sx ?? 1, it.sy ?? 1, it.sz ?? 1);
     tmpM.compose(tmpP, tmpQ, tmpS);
@@ -756,7 +756,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
     m.customProgramCacheKey = () => 'holeMat';
     return m;
   };
-  const muhlyMat = swayMat({ vertexColors: true, emissive: new THREE.Color('#5a1d3c'), emissiveIntensity: 0.5, side: THREE.DoubleSide }, 0.12, 1.1);
+  const muhlyMat = swayMat({ vertexColors: true, emissive: new THREE.Color('#5a1d3c'), emissiveIntensity: 0.5, side: THREE.DoubleSide }, 0.12, 1.1); // v1.21.2: 키 큰 풀이 캐릭터를 가려도 그대로 둔다 (비우면 더 어색해서)
   const reedPlumeMat = swayMat({ vertexColors: true, emissive: new THREE.Color('#2e2a20'), emissiveIntensity: 0.45 }, 0.14, 1.3);
   const daisyMat = swayMat({ vertexColors: true, emissive: new THREE.Color('#3a3a30'), emissiveIntensity: 0.55 }, 0.05, 1.6);
   const blossomMat = swayMat({ vertexColors: true, emissive: new THREE.Color('#6a2a4c'), emissiveIntensity: 0.6 }, 0.025, 0.7, true);
@@ -772,7 +772,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
     Math.hypot(x - POND.x, z - POND.z) < POND.r + 1.5 || distToPolyline(x, z, stream, false) < 1.8 ||
     Math.hypot(x - HILL.x, z - HILL.z) < HILL.r + 0.5 ||
     decks.some((d) => inRot(x, z, { ...d, len: d.len + 1, w: d.w + 1 })) ||
-    lanterns.some(([lx, lz]) => (lx - x) ** 2 + (lz - z) ** 2 < 0.5);
+    lanterns.some(([lx, lz]) => (lx - x) ** 2 + (lz - z) ** 2 < 2.2); // v1.21.2: 랜턴 둘레 약 1.5m 는 비워 풀이 빛에 하얗게 타지 않게
   const scatter = (path, count, seedStart, band = BAND) => {
     let seed = seedStart; const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     const out = [];
@@ -785,13 +785,22 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
       if (nearPath(x, z, 0.4) || plantBlocked(x, z)) continue;
       // 길에서 멀수록 듬성듬성 (숲으로 자연스럽게)
       if (off > band * 0.75 && r() < 0.5) continue;
-      out.push([x, z, r(), r(), r()]);
+      out.push([x, z, r(), r(), r(), off, (tz / tl) * side, -(tx / tl) * side]); // 6~8번째: 길 가장자리까지 거리, 길 쪽 방향
     }
     return out;
   };
   const addPatch = (geo, mat, list) => { if (!list.length) return null; const m = instanced(geo, mat, list); m.computeBoundingSphere(); scene.add(m); return m; };
   const lenOf = (path) => path.reduce((a, p, i) => (i ? a + Math.hypot(p[0] - path[i - 1][0], p[1] - path[i - 1][1]) : 0), 0);
   const dens = lowSpec ? 0.5 : 1;
+  // 🌾 길 쪽으로 기울이기 (v1.21.2): 길에 가까울수록 키가 크고 길 위로 휘어 덮는다. order XZY = 제자리에서 돌린 뒤 기울인다
+  const PATH_EDGE = TRAIL.width / 2 + 0.5;
+  const nearK = (off, reach) => Math.max(0, 1 - (off - PATH_EDGE) / reach); // 길 가장자리 1 → reach 밖 0
+  const leanTo = (nx, nz, ang) => ({ rx: ang * nz, rz: -ang * nx, order: 'XZY' });
+  // 저사양(휴대폰)은 들판을 절반만 심지만, 길가 줄(가장자리 3m)은 PC 만큼 채워 길을 덮는 느낌을 지킨다
+  const fieldScatter = (path, perM, seed, band = BAND) => {
+    const L = lenOf(path), list = scatter(path, Math.round(L * perM * dens), seed, band);
+    return lowSpec ? list.concat(scatter(path, Math.round(L * perM * 0.3), seed + 977, PATH_EDGE + 3)) : list;
+  };
   const tuftGeo = muhlyTuft(), reedGeo = reedStem(), daisyGeo = daisyFlower(), kochiaGeo = kochiaBush();
   const kochiaMat = swayMat({ vertexColors: true, emissive: new THREE.Color('#3a1a12'), emissiveIntensity: 0.55 }, 0.025, 0.9);
   const cherryTrees = [];
@@ -799,9 +808,10 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
     const path = zonePaths[zi], L = lenOf(path), seed = 101 + zi * 37;
     if (zn.kind === 'muhly') {
       const tints = ['#ffffff', '#ffe6f1', '#f6d2e4', '#ffeef6'];
-      addPatch(tuftGeo, muhlyMat, scatter(path, Math.round(L * 11 * dens), seed).map(([x, z, a, b, c]) => {
-        const sz = 0.7 + a * 0.5;
-        return { x, y: 0, z, sx: sz * (0.9 + b * 0.3), sy: sz * (0.85 + c * 0.45), sz: sz * (0.9 + c * 0.3), ry: b * 6.28, color: tints[Math.floor(c * tints.length)] };
+      // v1.21.2: 두 배 넘게 빽빽하게, 길 가까이는 사람 키보다 높게(최대 약 2.6m) 길 위로 휘어 분홍 터널처럼
+      addPatch(tuftGeo, muhlyMat, fieldScatter(path, 26, seed).map(([x, z, a, b, c, off, nx, nz]) => {
+        const k = nearK(off, 3.2), w = 0.8 + a * 0.4 + k * 0.4, hy = (0.75 + c * 0.35) * (1 + k); // 키: 먼 곳 0.9~1.3m · 길가 최대 약 2.5m
+        return { x, y: 0, z, sx: w * (1 + b * 0.3), sy: hy, sz: w * (1 + c * 0.3), ry: b * 6.28, ...leanTo(nx, nz, 0.08 + k * 0.3), color: tints[Math.floor(c * tints.length)] };
       }));
       const haze = new THREE.MeshBasicMaterial({ map: radialTexture(), color: '#ff8fc2', transparent: true, opacity: 0.2, depthWrite: false, blending: THREE.AdditiveBlending });
       addPatch(new THREE.PlaneGeometry(1, 1), haze, path.filter((_, i) => i % 6 === 0).flatMap(([x, z]) => [{ x, y: 0.04, z, rx: -Math.PI / 2, sx: BAND * 2, sy: 9 }]));
@@ -816,9 +826,10 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
       addPatch(kochiaGeo, kochiaMat, bushes);
       // 그 뒤로 키 큰 은빛 억새
       const silver = ['#ffffff', '#f6f1e6', '#efe8da', '#fffaf0'];
-      addPatch(reedGeo, reedPlumeMat, scatter(path, Math.round(L * 9 * dens), seed + 3).filter(([x, z]) => !nearPath(x, z, 3.6)).map(([x, z, a, b, c]) => {
-        const h = 1.6 + a * 0.9;
-        return { x, y: 0, z, sx: 1.1, sy: h, sz: 1.1, rx: (b - 0.5) * 0.4, rz: (c - 0.5) * 0.4, ry: c * 6.28, color: silver[Math.floor(b * silver.length)] };
+      // v1.21.2: 더 빽빽하고 키 크게, 밧줄 울타리 너머에서 길 쪽으로 드리운다
+      addPatch(reedGeo, reedPlumeMat, scatter(path, Math.round(L * 16 * dens), seed + 3).filter(([x, z]) => !nearPath(x, z, 2.6)).map(([x, z, a, b, c, off, nx, nz]) => {
+        const k = nearK(off, 4), h = 1.6 + a * 0.6 + k * 0.4;
+        return { x, y: 0, z, sx: 1.15, sy: h, sz: 1.15, ry: c * 6.28, ...leanTo(nx, nz, 0.06 + k * 0.28 + (b - 0.5) * 0.12), color: silver[Math.floor(b * silver.length)] };
       }));
       // 나무 말뚝 + 흰 밧줄 울타리 (길 양옆)
       const posts = [], ropes = [];
@@ -844,9 +855,10 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
       addPatch(new THREE.BoxGeometry(1, 0.025, 0.025), toon('#eeeae2', { emissive: new THREE.Color('#2a2a2a'), emissiveIntensity: 0.5 }), ropes);
     } else if (zn.kind === 'reed') {
       const tints = ['#ffffff', '#f3ead6', '#e8dcc0', '#fff8e8'];
-      addPatch(reedGeo, reedPlumeMat, scatter(path, Math.round(L * 9 * dens), seed).map(([x, z, a, b, c]) => {
-        const h = 1.2 + a * 0.9;
-        return { x, y: 0, z, sx: 1, sy: h, sz: 1, rx: (b - 0.5) * 0.35, rz: (c - 0.5) * 0.35, ry: c * 6.28, color: tints[Math.floor(b * tints.length)] };
+      // v1.21.2: 빽빽하게, 길가는 키가 커지고 길 위로 이삭이 드리운다
+      addPatch(reedGeo, reedPlumeMat, fieldScatter(path, 30, seed).map(([x, z, a, b, c, off, nx, nz]) => {
+        const k = nearK(off, 3.5), h = 1.2 + a * 0.4 + k * 0.5; // 키(이삭까지): 먼 곳 1.7~2.2m · 길가 최대 약 2.9m
+        return { x, y: 0, z, sx: 1.1, sy: h, sz: 1.1, ry: c * 6.28, ...leanTo(nx, nz, 0.05 + k * 0.32 + (b - 0.5) * 0.12), color: tints[Math.floor(b * tints.length)] };
       }));
     } else if (zn.kind === 'daisy') {
       const tints = ['#ffffff', '#fffbe6', '#f4f0ff', '#ffffff', '#fff2f6'];

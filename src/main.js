@@ -235,7 +235,11 @@ const PITCH_MIN = ORBIT_MIN - 1.0;
 // 시점: 'tp' 3인칭 / 'fp' 1인칭 (기기에 기억)
 // 서 있을 때는 늘 3인칭, 모닥불에 앉으면 1인칭으로 바뀐다 (앉은 동안 🎥 버튼 · V로 3인칭 ↔ 1인칭)
 const view = { fp: false };
-const cam = { look: 0, yaw: 0, pitch: 0.78, dist: 15, curDist: 34, target: new THREE.Vector3(0, 0, 0), dragging: false };
+// 휠 · 두 손가락 줌 범위. 처음 들어오면 가장 넓게(멀리) 보여 답답하지 않게 (v1.21.2), 그 뒤로는 사용자가 정한 대로
+const CAM_DIST_MIN = 6, CAM_DIST_MAX = 26;
+const CAM_START_DIST = 20; // 처음 들어왔을 때 카메라 거리 (넓게 보이되 캐릭터가 너무 작지 않게)
+const CAM_START_PITCH = 0.24; // 처음 들어왔을 때 카메라 높이 (낮을수록 하늘이 많이 보인다. 기본 0.78 은 땅만 보였다)
+const cam = { look: 0, yaw: 0, pitch: 0.78, dist: CAM_START_DIST, curDist: 34, target: new THREE.Vector3(0, 0, 0), dragging: false };
 
 // ---------------------------------------------------------------- 입장 화면
 /** 기기마다 고정된 무작위 ID (장작 저장용, 다른 사람에게는 공개되지 않음) */
@@ -502,7 +506,8 @@ net.on('welcome', (m) => {
   me = { char, x: m.me.x, z: m.me.z, ry: m.me.ry, name: m.me.name, tag: m.me.tag };
   char.setOutfit(themeOf(state.theme).outfit);
   if (themeOf(state.theme).toast) setTimeout(() => UI.toast(themeOf(state.theme).toast, 5200), 2600); // 들어오자마자 오늘의 캠핑장 안내
-  cam.yaw = 0;
+  // 첫 시점 (v1.21.2): 가장 넓게 · 낮게 깔아 하늘과 지평선이 보이게, 첫 목적지인 루미의 가루 공방(빛기둥) 쪽을 바라본다. 그 뒤로는 사용자가 정한 대로
+  cam.yaw = Math.atan2(me.x - NPC.x, me.z - NPC.z); cam.pitch = CAM_START_PITCH; cam.dist = CAM_START_DIST;
   $('join').classList.add('hidden');
   preview.dispose();
   $('hud').classList.remove('hidden');
@@ -1970,7 +1975,7 @@ canvas.addEventListener('pointermove', (e) => {
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (ptrs.size === 2) {
     const d = pinchDist();
-    if (pinchD > 0) cam.dist = Math.min(26, Math.max(6, cam.dist * (pinchD / d)));
+    if (pinchD > 0) cam.dist = Math.min(CAM_DIST_MAX, Math.max(CAM_DIST_MIN, cam.dist * (pinchD / d)));
     pinchD = d;
     return;
   }
@@ -1990,7 +1995,7 @@ const ptrEnd = (e) => {
 canvas.addEventListener('pointerup', ptrEnd);
 canvas.addEventListener('pointercancel', ptrEnd);
 canvas.addEventListener('wheel', (e) => {
-  cam.dist = Math.min(26, Math.max(6, cam.dist * (1 + Math.sign(e.deltaY) * 0.08)));
+  cam.dist = Math.min(CAM_DIST_MAX, Math.max(CAM_DIST_MIN, cam.dist * (1 + Math.sign(e.deltaY) * 0.08)));
 }, { passive: true });
 
 // ---------------------------------------------------------------- 업데이트
@@ -2137,19 +2142,30 @@ const camTarget = new THREE.Vector3();
 const fpPos = new THREE.Vector3(), fpHead = new THREE.Vector3(), fpDir = new THREE.Vector3();
 const lookDir = new THREE.Vector3();
 // 🌸 벚꽃 터널 카메라: 터널 길 가운데에서 4m 안이면 1, 9m 밖이면 0 (입구 · 출구에서 자연스럽게 섞인다)
-const CHERRY_CAM = { dist: 5.4, distPortrait: 7.6, pitch: 0.2, inR: 4, outR: 9 };
-const cherryPts = ZONES.filter((z) => z.kind === 'cherry').flatMap((z) => zonePath(z, 0.02));
-let cherryK = 0, cherryT = 0, cherryGoal = 0;
-function cherryCam(dt) {
-  cherryT -= dt;
-  if (cherryT <= 0 && me) {
-    cherryT = 0.15;
-    let best = Infinity;
-    for (const [x, z] of cherryPts) { const d = (x - me.x) ** 2 + (z - me.z) ** 2; if (d < best) best = d; }
-    cherryGoal = 1 - THREE.MathUtils.smoothstep(Math.sqrt(best), CHERRY_CAM.inR, CHERRY_CAM.outR);
+// 🌸🌾 걷는 길 카메라 (v1.21 벚꽃 터널 → v1.21.2 핑크뮬리 · 갈대 · 억새 들판도): 들어서면 어깨 뒤로 낮게 다가가 풀 · 꽃 사이를 걷는 느낌, 빠져나오면 원래대로
+const WALK_CAM = {
+  cherry: { dist: 5.4, distPortrait: 7.6, pitch: 0.2 }, // 꽃 지붕 아래로
+  muhly: { dist: 6.2, distPortrait: 8.2, pitch: 0.3 },  // 사람 키를 넘는 풀 사이로 (꽃 지붕이 없어 조금 더 높게)
+  reed: { dist: 6.2, distPortrait: 8.2, pitch: 0.3 },
+  kochia: { dist: 6.6, distPortrait: 8.6, pitch: 0.34 },
+};
+const WALK_IN = 4, WALK_OUT = 9; // 길에서 이 거리 안이면 완전히, 밖이면 원래 시점
+const walkPts = ZONES.filter((z) => WALK_CAM[z.kind]).flatMap((z) => zonePath(z, 0.02).map(([x, z2]) => [x, z2, WALK_CAM[z.kind]]));
+const walkCur = { ...WALK_CAM.cherry };
+let walkK = 0, walkT = 0, walkGoal = 0, walkSet = WALK_CAM.cherry;
+function walkCam(dt) {
+  walkT -= dt;
+  if (walkT <= 0 && me) {
+    walkT = 0.15;
+    let best = Infinity, set = walkSet;
+    for (const [x, z, c] of walkPts) { const d = (x - me.x) ** 2 + (z - me.z) ** 2; if (d < best) { best = d; set = c; } }
+    walkGoal = 1 - THREE.MathUtils.smoothstep(Math.sqrt(best), WALK_IN, WALK_OUT);
+    walkSet = set;
   }
-  cherryK += (cherryGoal - cherryK) * Math.min(1, dt * 1.6); // 천천히 다가가고 천천히 물러난다
-  return cherryK;
+  const e = Math.min(1, dt * 1.6); // 천천히 다가가고 천천히 물러난다 (들판이 바뀌면 높이도 천천히)
+  walkK += (walkGoal - walkK) * e;
+  for (const key of ['dist', 'distPortrait', 'pitch']) walkCur[key] += (walkSet[key] - walkCur[key]) * e;
+  return walkK;
 }
 function updateCamera(dt, t) {
   if (me) me.char.root.visible = !view.fp; // 1인칭이면 내 화면에서만 내 캐릭터를 숨긴다 (다른 사람에겐 보임)
@@ -2206,11 +2222,11 @@ function updateCamera(dt, t) {
     camTarget.set(me.x, 1.0, me.z);
     // 🌸 벚꽃 터널: 걸어 들어가면 카메라가 어깨 뒤로 낮게 다가가 꽃 지붕 아래에서 걷는 느낌으로. 빠져나오면 원래대로
     // (내가 정한 거리 · 높이는 그대로 두고, 터널 안에서만 보이는 값을 섞는다)
-    const k = cherryCam(dt);
+    const k = walkCam(dt);
     if (k > 0.001) {
-      const cd = innerWidth < innerHeight ? CHERRY_CAM.distPortrait : CHERRY_CAM.dist; // 휴대폰 세로는 화면이 좁아 조금 더 뒤에서
+      const cd = innerWidth < innerHeight ? walkCur.distPortrait : walkCur.dist; // 휴대폰 세로는 화면이 좁아 조금 더 뒤에서
       dist = THREE.MathUtils.lerp(dist, Math.min(dist, cd), k);
-      pitch = THREE.MathUtils.lerp(pitch, Math.min(pitch, CHERRY_CAM.pitch), k);
+      pitch = THREE.MathUtils.lerp(pitch, Math.min(pitch, walkCur.pitch), k);
     }
   }
   cam.target.lerp(camTarget, Math.min(1, dt * (me ? 6 : 1)));
