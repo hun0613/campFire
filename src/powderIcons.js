@@ -33,6 +33,8 @@ const SHAPES = {
   // ✦ 나비 떼: 나비
   // ✦ 위로의 풍등: 떠오르는 등 둘
   lanterns: '<path d="M5.2 9.2h7.6l-1.1 9.2H6.3z"/><path d="M6.4 7.4h5.2v1.2H6.4z"/><path d="M14.6 4h5.4l-.8 6.6h-3.8z"/><path d="M15.4 2.6h3.8v.9h-3.8z"/>' + dots([9, 21, 1], [17.3, 12.6, .8]),
+  // ✦ 축하의 팡팡: 꼬깔 축포에서 터지는 색종이
+  cheers: '<path d="M2.6 21.4l4.6-11.6 7 7z"/>' + `<path ${S} stroke-width="1.8" d="M13.2 9.6l3.4-3.4M16 13l4.2-1.2M11 7.6l.9-4.4"/>` + '<path d="M18.6 2.4l2.6.9-.9 2.6-2.6-.9z"/><path d="M20.4 15.6l2 1.4-1.4 2-2-1.4z"/>' + dots([15.4, 3.4, 1], [21.2, 8.4, .9], [8.6, 4.2, .8]),
   butterflies: '<ellipse cx="7.4" cy="8.6" rx="4.6" ry="5" transform="rotate(-25 7.4 8.6)"/><ellipse cx="16.6" cy="8.6" rx="4.6" ry="5" transform="rotate(25 16.6 8.6)"/><ellipse cx="8.4" cy="16.4" rx="3.3" ry="3.8" transform="rotate(20 8.4 16.4)"/><ellipse cx="15.6" cy="16.4" rx="3.3" ry="3.8" transform="rotate(-20 15.6 16.4)"/>' + `<path ${S} stroke-width="1.6" d="M10.6 3.2L12 6.4l1.4-3.2"/>`,
 };
 

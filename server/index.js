@@ -15,7 +15,7 @@ import * as daily from './daily.js';
 import * as dailyReport from './dailyReport.js';
 import { handleAdmin, adminOn } from './admin.js';
 import * as board from './board.js';
-import { RESIDENTS, ALWAYS, STAMP_GOALS, RESIDENT_RANGE, residentPos, residentActive, residentPowder } from '../shared/residents.js';
+import { RESIDENTS, ALWAYS, STAMP_GOALS, RESIDENT_RANGE, MOODS, residentPos, residentActive, residentPowder } from '../shared/residents.js';
 import { search, searchesLeft, nextReset, videoInfo, known, addRecent, recentList, hasKey, quotaState, restoreQuota } from './youtube.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -532,10 +532,16 @@ function handle(ws, ctx, m) {
       const already = me.resMet.includes(r.id);
       let reward = null, full = false;
       const bonus = [];
-      if (!already) {
+      const md = MOODS.find((x) => x.id === m.mood);
+      if (r.kind === 'comfort') { // 찻집 할머니: 기분을 고를 때마다 (하루 제한 없이) 힘든 마음엔 ✦ 위로의 풍등, 좋은 마음엔 ✦ 축하의 팡팡
+        if (!md) return;
+        if (me.powders.length >= CFG.MAX_POWDERS) full = true;
+        else { reward = legendPowder(md.pos ? 'cheers' : 'lanterns'); me.powders.push(reward); }
+        if (!already) me.resMet.push(r.id);
+      } else if (!already) {
         if (me.powders.length >= CFG.MAX_POWDERS) full = true;
         else {
-          reward = r.kind === 'comfort' ? legendPowder('lanterns') : residentPowder(r, randomPowder); // 찻집 할머니는 ✦ 위로의 풍등 가루
+          reward = residentPowder(r, randomPowder);
           me.powders.push(reward);
           me.resMet.push(r.id);
           const n = ALWAYS.filter((a) => me.resMet.includes(a.id)).length;
@@ -548,7 +554,7 @@ function handle(ws, ctx, m) {
           }
         }
       }
-      const mood = typeof m.mood === 'string' ? m.mood.slice(0, 12) : null;
+      const mood = md ? md.id : null;
       send(ws, { t: 'talk', id: r.id, reward, bonus, already, full, met: me.resMet, mood });
       send(ws, inv(me));
       break;

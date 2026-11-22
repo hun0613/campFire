@@ -2428,15 +2428,15 @@ function openTea(e) {
   e.ch.emote('love', '🥰');
 }
 function comfortReply(m) {
-  const md = MOODS.find((x) => x.id === m.mood) || MOODS[MOODS.length - 1];
+  const md = MOODS.find((x) => x.id === m.mood) || MOODS[0];
   const pages = [md.replies[Math.floor(Math.random() * md.replies.length)]];
   if (m.reward) {
-    pages.push(`이 마음, 가루에 담아 줄게요.\n모닥불에 뿌리면 따뜻한 풍등이 하늘로 떠올라요.\n${UI.powderGrid([m.reward], 'sm')}`);
+    pages.push(md.pos ? `좋은 일엔 축하가 빠질 수 없죠!\n모닥불에 뿌리면 팡팡 터져요.\n${UI.powderGrid([m.reward], 'sm')}`
+      : `이 마음, 가루에 담아 줄게요.\n모닥불에 뿌리면 따뜻한 풍등이 하늘로 떠올라요.\n${UI.powderGrid([m.reward], 'sm')}`);
     let el = document.getElementById('warmGlow');
     if (!el) { el = document.createElement('div'); el.id = 'warmGlow'; document.body.appendChild(el); }
     el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
   } else if (m.full) pages.push('가방이 가득 찼네요. 가루 조금 뿌리고 또 와요.');
-  else pages.push('오늘 준 풍등 가루는 모닥불에 뿌려 봐요.\n내일 또 와요. 기다릴게요.');
   return pages;
 }
 function updateResidents(dt) {

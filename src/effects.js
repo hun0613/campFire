@@ -65,7 +65,7 @@ export class Effects {
       this.g.spawn({ x: c.x, y: c.y + 0.6, z: c.z, vx: Math.cos(a) * sp, vy: R(1.5, 4), vz: Math.sin(a) * sp, color: i % 3 ? hi : pale, size: R(0.15, 0.3), life: R(0.6, 1.2), drag: 2.2, grav: -0.5 });
     }
     const durations = { sparkle: 8, spiral: 10, pillar: 7, rings: 10, fireflies: 12, stars: 8, hearts: 10, rainbow: 12,
-      aurora: 14, fireworks: 13, petals: 13, galaxy: 14, butterflies: 14, lanterns: 15 }; // 아래 줄은 ✦ 특별한 가루
+      aurora: 14, fireworks: 13, petals: 13, galaxy: 14, butterflies: 14, lanterns: 15, cheers: 12 }; // 아래 줄은 ✦ 특별한 가루
     const e = { type, c: c.clone(), color, hi, pale, t: 0, dur: durations[type] || 8, acc: 0, n: 0 };
     this.emitters.push(e);
     if (type === 'sparkle') {
@@ -318,6 +318,24 @@ export class Effects {
         }
         case 'butterflies': {
           if (e.t < e.dur - 5 && rate(1.2)) this.#butterfly(e);
+          break;
+        }
+        case 'cheers': { // 축하의 팡팡: 모닥불 둘레 낮은 곳에서 알록달록한 작은 축포가 팡팡 터지고 색종이가 내려앉는다
+          e.pacc = (e.pacc || 0) + dt;
+          if (e.t < e.dur - 2.5 && (e.n === 0 || e.pacc > 0.42)) {
+            e.pacc = 0; e.n++;
+            const a = Math.random() * 6.28, r = R(1.2, 3), bx = c.x + Math.cos(a) * r, bz = c.z + Math.sin(a) * r, by = R(1.8, 3.6);
+            const col = tmp.setHSL([0.95, 0.13, 0.52, 0.3, 0.8][e.n % 5] + R(-0.03, 0.03), 0.95, 0.62).clone().multiplyScalar(2), col2 = col.clone().lerp(WHITE, 0.55);
+            for (let k = 0; k < 64; k++) { // 팡! 작은 공 모양으로 퍼진다
+              const th = Math.random() * 6.28, ph = Math.acos(R(-1, 1)), sp = R(2.6, 3.6);
+              this.g.spawn({ x: bx, y: by, z: bz, vx: Math.sin(ph) * Math.cos(th) * sp, vy: Math.cos(ph) * sp + 0.6, vz: Math.sin(ph) * Math.sin(th) * sp,
+                grav: 2.4, drag: 2.2, color: k % 3 ? col : col2, size: R(0.14, 0.24), life: R(0.7, 1.1), shape: k % 7 === 0 ? 1 : 0 });
+            }
+            for (let k = 0; k < 10; k++) { // 색종이: 천천히 빙글빙글 내려온다
+              tmp.setHSL(Math.random(), 0.9, 0.62).multiplyScalar(1.5);
+              this.g.spawn({ x: bx, y: by, z: bz, vx: R(-1.4, 1.4), vy: R(0.6, 1.8), vz: R(-1.4, 1.4), grav: 1.1, drag: 1.6, color: tmp.clone(), size: R(0.12, 0.18), life: R(2.2, 3), shape: 1, spin: R(-5, 5) });
+            }
+          }
           break;
         }
         case 'lanterns': { // 위로의 풍등: 종이 풍등이 하나둘 모닥불에서 떠올라 천천히 흔들리며 밤하늘로, 먼 하늘엔 작은 풍등 불빛이 가득
