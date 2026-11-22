@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import {
-  CFG, FIRES, seatsOf, STUMPS, EMOTES, LOUNGE_SEATS, NPC, KEEPER, QUESTS, LEGEND_POWDERS, legendPowder, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
+  CFG, FIRES, seatsOf, STUMPS, EMOTES, LOUNGE_SEATS, NPC, KEEPER, QUESTS, LEGEND_POWDERS, SHOP_LEGENDS, legendPowder, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
   TENTS, tentAt, tentLocal, kstDay, EGG,
 } from '../shared/config.js';
 import * as guestbook from './guestbook.js';
@@ -15,6 +15,7 @@ import * as daily from './daily.js';
 import * as dailyReport from './dailyReport.js';
 import { handleAdmin, adminOn } from './admin.js';
 import * as board from './board.js';
+import { RESIDENTS, ALWAYS, STAMP_GOALS, RESIDENT_RANGE, residentPos, residentActive, residentPowder } from '../shared/residents.js';
 import { search, searchesLeft, nextReset, videoInfo, known, addRecent, recentList, hasKey, quotaState, restoreQuota } from './youtube.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -121,7 +122,7 @@ const pitOwnerKey = new Map(); // pitId -> pid (공개되지 않음)
 const sign = (pid, data) => crypto.createHmac('sha256', SAVE_SECRET).update(`${pid}|${data}`).digest('base64url');
 
 function snapshotOf(p) {
-  return { wood: p.wood, stored: p.stored, chops: p.chops, powders: p.powders, quest: p.quest, coins: p.coins, coinDay: p.coinDay, shareDay: p.shareDay, eggDay: p.eggDay || '' };
+  return { wood: p.wood, stored: p.stored, chops: p.chops, powders: p.powders, quest: p.quest, coins: p.coins, coinDay: p.coinDay, shareDay: p.shareDay, eggDay: p.eggDay || '', resDay: p.resDay || '', resMet: p.resMet || [] };
 }
 // 차단용 공개 표식: 기기 식별값(pid)에서 만든 짧은 값. pid 자체는 드러나지 않고, 다시 접속해도 같은 값이라 차단이 이어진다
 const tagOf = (pid) => (pid ? crypto.createHmac('sha256', SAVE_SECRET).update(`tag|${pid}`).digest('base64url').slice(0, 12) : null);
@@ -138,7 +139,7 @@ function refreshCoins(p) {
 }
 function remember(p) {
   if (!p.pid) return;
-  saves.set(p.pid, { ...snapshotOf(p), powders: [...p.powders], quest: { ...p.quest }, x: p.x, z: p.z, at: Date.now() });
+  saves.set(p.pid, { ...snapshotOf(p), powders: [...p.powders], quest: { ...p.quest }, resMet: [...(p.resMet || [])], x: p.x, z: p.z, at: Date.now() });
 }
 function validSnapshot(s) {
   if (!s || typeof s !== 'object') return null;
@@ -153,7 +154,10 @@ function validSnapshot(s) {
   const coinDay = typeof s.coinDay === 'string' && DAY.test(s.coinDay) ? s.coinDay : '';
   const shareDay = typeof s.shareDay === 'string' && DAY.test(s.shareDay) ? s.shareDay : '';
   const eggDay = typeof s.eggDay === 'string' && DAY.test(s.eggDay) ? s.eggDay : '';
-  return { wood, stored, chops, powders, quest: validQuest(s.quest), coins, coinDay, shareDay, eggDay };
+  // 주민 도장: 오늘 만난 주민 id (예전 백업에는 없어서 빈 목록)
+  const resDay = typeof s.resDay === 'string' && DAY.test(s.resDay) ? s.resDay : '';
+  const resMet = Array.isArray(s.resMet) ? [...new Set(s.resMet.filter((id) => RESIDENTS.some((r) => r.id === id)))] : [];
+  return { wood, stored, chops, powders, quest: validQuest(s.quest), coins, coinDay, shareDay, eggDay, resDay, resMet };
 }
 // 루미의 부탁 진행 상태: i 몇 번째 부탁, p 진행 수, done 마쳤는지(루미에게 받으러 가기 전), lap 몇 바퀴째, met 루미를 만난 적 있는지
 function validQuest(q) {
@@ -370,6 +374,7 @@ function handle(ws, ctx, m) {
       anim: 'idle', seat: null, ly: null, lp: 0, // ly · lp: 보는 방향(월드 기준 좌우 · 위아래). 다른 사람 화면에서 고개를 돌리는 데 쓴다
       wood: saved?.wood ?? 0, stored: saved?.stored ?? 0, chops: saved?.chops ?? 0, powders: saved?.powders ?? [], quest: saved?.quest ?? validQuest(null),
       coins: saved?.coins ?? 0, coinDay: saved?.coinDay ?? '', shareDay: saved?.shareDay ?? '', eggDay: saved?.eggDay ?? '',
+      resDay: saved?.resDay ?? '', resMet: saved?.resMet ?? [],
       tag: tagOf(pid), tent: null,
       lastChop: 0, lastChat: 0, joinedAt: Date.now(),
     };
@@ -507,7 +512,7 @@ function handle(ws, ctx, m) {
       const today = kstDay();
       if (me.eggDay === today) { send(ws, { t: 'toast', text: '오늘은 이미 찾았어요. 내일 밤 다시 와 봐요 ✨' }); return; }
       if (me.powders.length >= CFG.MAX_POWDERS) { send(ws, { t: 'toast', text: '가방이 가루로 꽉 찼어요. 모닥불에 좀 뿌리고 와요' }); return; }
-      const keys = Object.keys(LEGEND_POWDERS);
+      const keys = SHOP_LEGENDS;
       const powder = legendPowder(keys[Math.floor(Math.random() * keys.length)]);
       me.eggDay = today;
       me.powders.push(powder);
@@ -515,9 +520,42 @@ function handle(ws, ctx, m) {
       send(ws, inv(me));
       break;
     }
+    case 'talk': { // 🏡 캠핑장 주민에게 말 걸기: 주민마다 하루 한 번 그 주민의 가루, 늘 있는 주민 6명 · 12명을 만나면 ✦ 특별한 가루
+      const r = RESIDENTS.find((x) => x.id === m.id);
+      if (!r || !residentActive(r, weather.currentTheme(), now)) return;
+      const at = residentPos(r, now);
+      if (dist(me, at.x, at.z) > RESIDENT_RANGE + 2) return;
+      if (now - (me.lastTalk || 0) < 600) return;
+      me.lastTalk = now;
+      const today = kstDay(now);
+      if (me.resDay !== today) { me.resDay = today; me.resMet = []; }
+      const already = me.resMet.includes(r.id);
+      let reward = null, full = false;
+      const bonus = [];
+      if (!already) {
+        if (me.powders.length >= CFG.MAX_POWDERS) full = true;
+        else {
+          reward = r.kind === 'comfort' ? legendPowder('lanterns') : residentPowder(r, randomPowder); // 찻집 할머니는 ✦ 위로의 풍등 가루
+          me.powders.push(reward);
+          me.resMet.push(r.id);
+          const n = ALWAYS.filter((a) => me.resMet.includes(a.id)).length;
+          if (r.kind === 'always' && STAMP_GOALS.includes(n) && me.powders.length < CFG.MAX_POWDERS) {
+            const keys = SHOP_LEGENDS;
+            const pw = legendPowder(keys[Math.floor(Math.random() * keys.length)]);
+            me.powders.push(pw);
+            bonus.push(pw);
+            if (n === ALWAYS.length) broadcast({ t: 'sys', text: `🏅 ${me.name}님이 오늘 캠핑장 주민 ${n}명을 모두 만났어요` });
+          }
+        }
+      }
+      const mood = typeof m.mood === 'string' ? m.mood.slice(0, 12) : null;
+      send(ws, { t: 'talk', id: r.id, reward, bonus, already, full, met: me.resMet, mood });
+      send(ws, inv(me));
+      break;
+    }
     case 'buy': { // 루미 상점: ✦ 특별한 가루를 코인으로
       if (dist(me, NPC.x, NPC.z) > RANGE.npc + 2.5) return;
-      if (!LEGEND_POWDERS[m.effect] || now - (me.lastBuy || 0) < 300) return;
+      if (!SHOP_LEGENDS.includes(m.effect) || now - (me.lastBuy || 0) < 300) return;
       me.lastBuy = now;
       refreshCoins(me);
       if (me.coins < CFG.LEGEND_PRICE) { send(ws, { t: 'buyFail', reason: 'coins' }); return; }

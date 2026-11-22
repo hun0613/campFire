@@ -31,6 +31,8 @@ const SHAPES = {
   // ✦ 은하수: 소용돌이 원반
   galaxy: `<path ${S} stroke-width="2.4" d="M12 12c2.6-3.6 8.4-2.4 9 1.6M12 12c-2.6 3.6-8.4 2.4-9-1.6"/><ellipse ${S} stroke-width="1.6" cx="12" cy="12" rx="9.5" ry="4" transform="rotate(-25 12 12)"/>` + dots([12, 12, 3], [4.5, 4, 1], [19.5, 20, 1]),
   // ✦ 나비 떼: 나비
+  // ✦ 위로의 풍등: 떠오르는 등 둘
+  lanterns: '<path d="M5.2 9.2h7.6l-1.1 9.2H6.3z"/><path d="M6.4 7.4h5.2v1.2H6.4z"/><path d="M14.6 4h5.4l-.8 6.6h-3.8z"/><path d="M15.4 2.6h3.8v.9h-3.8z"/>' + dots([9, 21, 1], [17.3, 12.6, .8]),
   butterflies: '<ellipse cx="7.4" cy="8.6" rx="4.6" ry="5" transform="rotate(-25 7.4 8.6)"/><ellipse cx="16.6" cy="8.6" rx="4.6" ry="5" transform="rotate(25 16.6 8.6)"/><ellipse cx="8.4" cy="16.4" rx="3.3" ry="3.8" transform="rotate(20 8.4 16.4)"/><ellipse cx="15.6" cy="16.4" rx="3.3" ry="3.8" transform="rotate(-20 15.6 16.4)"/>' + `<path ${S} stroke-width="1.6" d="M10.6 3.2L12 6.4l1.4-3.2"/>`,
 };
 

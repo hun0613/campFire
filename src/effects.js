@@ -2,12 +2,54 @@ import * as THREE from 'three';
 
 const R = (a, b) => a + Math.random() * (b - a);
 const WHITE = new THREE.Color('#ffffff');
+const LANTERN = {}; // 풍등 모양 (한 번만 만든다)
 
 export class Effects {
-  constructor(glowParticles, softParticles) {
+  constructor(glowParticles, softParticles, scene = null) {
     this.g = glowParticles;
     this.s = softParticles;
+    this.scene = scene;
     this.emitters = [];
+    this.lanterns = []; // ✦ 위로의 풍등: 종이 풍등 모형 (입자가 아니라 작은 등을 띄운다)
+  }
+
+  /** 종이 풍등 하나: 위가 둥근 원통형 한지 등(아래가 뚫려 있고, 아래쪽 불꽃 때문에 아래가 더 밝게 빛남) + 철사 테 + 불꽃 */
+  #lantern(c) {
+    if (!this.scene) return;
+    if (!LANTERN.geo) {
+      // 옆모습: 아래 테(조금 좁음) → 위로 살짝 넓어지다 → 둥근 어깨 → 평평한 머리
+      const prof = [[0.15, -0.26], [0.165, -0.12], [0.18, 0.04], [0.19, 0.15], [0.182, 0.21], [0.16, 0.245], [0.1, 0.262], [0, 0.266]]
+        .map(([r, y]) => new THREE.Vector2(r, y));
+      const geo = new THREE.LatheGeometry(prof, 14);
+      const col = [], pos = geo.attributes.position;
+      const lo = new THREE.Color('#ffe0a0').multiplyScalar(1.3), mid = new THREE.Color('#ffc477').multiplyScalar(1.05), hi = new THREE.Color('#b8622c').multiplyScalar(0.8);
+      const t = new THREE.Color();
+      for (let i = 0; i < pos.count; i++) { // 아래(불꽃 쪽)는 거의 흰 금빛, 위로 갈수록 주황 → 어둑하게
+        const k = (pos.getY(i) + 0.26) / 0.526;
+        if (k < 0.45) t.copy(lo).lerp(mid, k / 0.45); else t.copy(mid).lerp(hi, (k - 0.45) / 0.55);
+        col.push(t.r, t.g, t.b);
+      }
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      LANTERN.geo = geo;
+      LANTERN.rim = new THREE.TorusGeometry(0.15, 0.008, 4, 14);
+      LANTERN.flame = new THREE.SphereGeometry(0.045, 8, 6);
+      LANTERN.core = new THREE.SphereGeometry(0.11, 8, 6);
+      LANTERN.rimMat = new THREE.MeshBasicMaterial({ color: '#3a2418' });
+    }
+    const mat = new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color().setHSL(R(0.08, 0.12), 0.6, R(0.85, 0.95)), transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false });
+    const flameMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff4c0').multiplyScalar(3.2), transparent: true, opacity: 1, depthWrite: false });
+    const coreMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffb24a').multiplyScalar(1.4), transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending });
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(LANTERN.geo, mat);
+    const rim = new THREE.Mesh(LANTERN.rim, LANTERN.rimMat); rim.rotation.x = Math.PI / 2; rim.position.y = -0.26;
+    const flame = new THREE.Mesh(LANTERN.flame, flameMat); flame.scale.set(1, 1.5, 1); flame.position.y = -0.2;
+    const core = new THREE.Mesh(LANTERN.core, coreMat); core.position.y = -0.14; // 등 안쪽을 채우는 은은한 불빛
+    g.add(body, rim, flame, core);
+    const a = Math.random() * 6.28, r = R(0.2, 1.3), s = R(0.95, 1.45);
+    g.scale.setScalar(s);
+    g.position.set(c.x + Math.cos(a) * r, c.y + 1.0, c.z + Math.sin(a) * r);
+    this.scene.add(g);
+    this.lanterns.push({ g, mats: [mat, flameMat, coreMat], t: 0, life: R(13, 16), vy: R(0.38, 0.58), dx: R(-0.18, 0.18), dz: R(-0.18, 0.18), ph: Math.random() * 6.28, sw: R(0.12, 0.25) });
   }
 
   /** 가루를 뿌렸을 때의 연출. center: 화로 바닥 위치 */
@@ -23,7 +65,7 @@ export class Effects {
       this.g.spawn({ x: c.x, y: c.y + 0.6, z: c.z, vx: Math.cos(a) * sp, vy: R(1.5, 4), vz: Math.sin(a) * sp, color: i % 3 ? hi : pale, size: R(0.15, 0.3), life: R(0.6, 1.2), drag: 2.2, grav: -0.5 });
     }
     const durations = { sparkle: 8, spiral: 10, pillar: 7, rings: 10, fireflies: 12, stars: 8, hearts: 10, rainbow: 12,
-      aurora: 14, fireworks: 13, petals: 13, galaxy: 14, butterflies: 14 }; // 아래 줄은 ✦ 특별한 가루
+      aurora: 14, fireworks: 13, petals: 13, galaxy: 14, butterflies: 14, lanterns: 15 }; // 아래 줄은 ✦ 특별한 가루
     const e = { type, c: c.clone(), color, hi, pale, t: 0, dur: durations[type] || 8, acc: 0, n: 0 };
     this.emitters.push(e);
     if (type === 'sparkle') {
@@ -278,9 +320,36 @@ export class Effects {
           if (e.t < e.dur - 5 && rate(1.2)) this.#butterfly(e);
           break;
         }
+        case 'lanterns': { // 위로의 풍등: 종이 풍등이 하나둘 모닥불에서 떠올라 천천히 흔들리며 밤하늘로, 먼 하늘엔 작은 풍등 불빛이 가득
+          e.lacc = (e.lacc || 0) + dt; // 각자 따로 센다 (rate 는 하나의 시계를 나눠 쓴다)
+          e.dacc = (e.dacc || 0) + dt;
+          if (e.t < e.dur - 6 && e.lacc > 0.6) { e.lacc -= 0.6; this.#lantern(c); }
+          while (e.t < e.dur - 3 && e.dacc > 0.07) { // 멀리 높이 떠 있는 작은 풍등 불빛 (점)
+            e.dacc -= 0.07;
+            const a = Math.random() * 6.28, r = R(2.5, 11);
+            this.g.spawn({ x: c.x + Math.cos(a) * r, y: R(4, 12), z: c.z + Math.sin(a) * r, vx: R(-0.08, 0.08), vy: R(0.25, 0.5), vz: R(-0.08, 0.08), color: Math.random() < 0.5 ? e.hi : e.pale, size: R(0.09, 0.2), life: R(7, 10) });
+          }
+          if (rate(4)) { // 등 사이로 내려앉는 따뜻한 빛가루
+            const a = Math.random() * 6.28, r = R(0.5, 2.6);
+            this.g.spawn({ x: c.x + Math.cos(a) * r, y: R(2, 4.5), z: c.z + Math.sin(a) * r, vy: -0.25, color: e.pale, size: R(0.05, 0.09), life: R(2, 3) });
+          }
+          break;
+        }
         default:
       }
     }
     this.emitters = this.emitters.filter((e) => e.t < e.dur);
+    // 풍등: 위로 떠오르며 살랑 흔들리고, 마지막 2초 동안 하늘에 녹아 사라진다
+    for (const L of this.lanterns) {
+      L.t += dt;
+      const p = L.g.position;
+      p.y += L.vy * dt; p.x += (L.dx + Math.cos(L.t * 0.9 + L.ph) * L.sw) * dt; p.z += (L.dz + Math.sin(L.t * 0.7 + L.ph) * L.sw) * dt;
+      L.g.rotation.z = Math.sin(L.t * 1.1 + L.ph) * 0.06; L.g.rotation.x = Math.cos(L.t * 0.9 + L.ph) * 0.05;
+      const fade = Math.min(1, L.t / 0.8) * Math.min(1, (L.life - L.t) / 2);
+      const flick = 0.85 + 0.15 * Math.sin(L.t * 11 + L.ph) * Math.sin(L.t * 7.3);
+      L.mats[0].opacity = 0.9 * fade; L.mats[1].opacity = fade * flick; L.mats[2].opacity = 0.35 * fade * flick;
+      if (L.t >= L.life) { L.g.removeFromParent(); for (const m of L.mats) m.dispose(); }
+    }
+    this.lanterns = this.lanterns.filter((L) => L.t < L.life);
   }
 }

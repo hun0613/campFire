@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { toon, glow, radialTexture } from './toon.js';
+import { RESIDENTS } from '../shared/residents.js';
 import { TRAIL, GATES, SPOTS, ZONES, LAKE, POND, STREAM, HILL, BOUNDS, FENCE, HILL_BENCH, HILL_CAT, LAKE_BENCH, SUNSET, WINDMILL, hillHeight, trailCurve, zonePath } from '../shared/config.js';
 
 const tmpM = new THREE.Matrix4(), tmpP = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpE = new THREE.Euler(), tmpS = new THREE.Vector3();
@@ -765,6 +766,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
   const zonePaths = ZONES.map((z) => zonePath(z));
   const BAND = 8.5; // 길 가운데에서 양옆으로 이만큼까지 심는다
   // 들판에 심지 않는 곳: 캠핑장 울타리 · 맵 끝 · 물 · 언덕 · 데크 · 랜턴
+  const RES_CLEAR = RESIDENTS.filter((r) => r.area === 'trail' && !r.walk).map((r) => [r.x, r.z, (r.clear || 2) ** 2]);
   const plantBlocked = (x, z) =>
     (Math.abs(x) < FENCE.maxX + 3 && Math.abs(z) < FENCE.maxZ + 3) ||
     x < BOUNDS.minX + 0.8 || x > BOUNDS.maxX - 0.8 || z < BOUNDS.minZ + 0.8 || z > BOUNDS.maxZ - 0.8 ||
@@ -772,7 +774,8 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
     Math.hypot(x - POND.x, z - POND.z) < POND.r + 1.5 || distToPolyline(x, z, stream, false) < 1.8 ||
     Math.hypot(x - HILL.x, z - HILL.z) < HILL.r + 0.5 ||
     decks.some((d) => inRot(x, z, { ...d, len: d.len + 1, w: d.w + 1 })) ||
-    lanterns.some(([lx, lz]) => (lx - x) ** 2 + (lz - z) ** 2 < 2.2); // v1.21.2: 랜턴 둘레 약 1.5m 는 비워 풀이 빛에 하얗게 타지 않게
+    lanterns.some(([lx, lz]) => (lx - x) ** 2 + (lz - z) ** 2 < 2.2) || // v1.21.2: 랜턴 둘레 약 1.5m 는 비워 풀이 빛에 하얗게 타지 않게
+    RES_CLEAR.some(([rx, rz, r2]) => (rx - x) ** 2 + (rz - z) ** 2 < r2); // v1.22.0: 숲길 주민 둘레 2m 는 비워 소품 · 몸이 풀에 묻히지 않게
   const scatter = (path, count, seedStart, band = BAND) => {
     let seed = seedStart; const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     const out = [];

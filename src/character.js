@@ -487,6 +487,18 @@ export class Character {
       lean = Math.max(lean, 0.02) - 0.04;
     }
 
+    // 주민(NPC)마다 다른 몸짓: 낚시 · 그림 · 사진 찍기 등 (src/residents.js). 기본 자세 위에 필요한 값만 덮어쓴다
+    if (this.poseFn) {
+      const P = this.poseFn(this.time, this.anim);
+      if (P) {
+        if (P.aL != null) aL = P.aL; if (P.aR != null) aR = P.aR;
+        if (P.lL != null) lL = P.lL; if (P.lR != null) lR = P.lR;
+        if (P.zL != null) zL = P.zL; if (P.zR != null) zR = P.zR;
+        if (P.bodyY != null) bodyY = P.bodyY; if (P.lean != null) lean = P.lean;
+        if (P.headTilt != null) headTilt = P.headTilt; if (P.nod != null) nod = P.nod;
+      }
+    }
+
     // 단발 동작
     const A = this.action;
     if (A) {

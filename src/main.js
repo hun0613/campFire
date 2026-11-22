@@ -13,6 +13,8 @@ import { Particles } from './particles.js';
 import { Effects } from './effects.js';
 import { Net } from './net.js';
 import { UI, groupPowders, powderIco } from './ui.js';
+import { createResidents } from './residents.js';
+import { MOODS, ALWAYS, STAMP_GOALS, RESIDENT_RANGE } from '../shared/residents.js';
 import { Sound } from './audio.js';
 import { icon, fillIcons, EMOJI_ICON } from './icons.js';
 import { Precip } from './precip.js';
@@ -142,7 +144,7 @@ const pits = new Map(FIRES.map((d) => [d.id, new FirePit(d, scene, shared)])); /
 const pitList = [...pits.values()];
 const glowFx = new Particles(scene, shared, { max: 5000, additive: true });
 const softFx = new Particles(scene, shared, { max: 1500, additive: false });
-const effects = new Effects(glowFx, softFx);
+const effects = new Effects(glowFx, softFx, scene);
 const sound = new Sound();
 const guide = new Guide(scene);
 
@@ -195,6 +197,7 @@ function applyTheme(id, { announce = true } = {}) {
   precip.setShelters(shel);
   sound.setAmbience(th.ambience);
   for (const ch of [npc, keeper, me?.char, ...[...remotes.values()].map((r) => r.ch)]) ch?.setOutfit(th.outfit);
+  residents.setOutfit(th.outfit);
   document.body.dataset.theme = th.id;
   if (announce && changed && th.toast && me) UI.toast(th.toast, 5200);
 }
@@ -209,6 +212,9 @@ const keeper = new Character({ skin: '#f6c9a0', hair: '#6b4a2b', shirt: '#5f8a45
 keeper.root.position.set(KEEPER.x, 0, KEEPER.z);
 keeper.root.rotation.y = KEEPER.ry;
 scene.add(keeper.root);
+
+// 🏡 캠핑장 주민 (v1.22.0): 숲길 8명 · 캠핑장 4명 · 날씨 · 밤 주민 · 찻집 할머니
+const residents = createResidents(scene);
 
 // ---------------------------------------------------------------- 상태
 const state = {
@@ -574,6 +580,7 @@ net.on('inv', (m) => {
   state.inv = {
     wood: m.wood, stored: m.stored || 0, chops: m.chops, powders: m.powders, quest: m.quest || null,
     coins: m.coins ?? 0, coinDay: m.coinDay || '', shareDay: m.shareDay || '', eggDay: m.eggDay || '',
+    resDay: m.resDay || '', resMet: m.resMet || [],
   };
   world.egg.visible = state.inv.eggDay !== kstDay(); // 오늘 이미 주웠으면 내 화면에서는 숨긴다
   if (storeIsOpen()) renderStore(prev);
@@ -726,7 +733,7 @@ function renderShop() {
   const inv = state.inv;
   $('shopCoins').textContent = inv.coins;
   const full = inv.powders.length >= CFG.MAX_POWDERS;
-  $('shopShelf').innerHTML = Object.entries(LEGEND_POWDERS).map(([id, L]) => {
+  $('shopShelf').innerHTML = Object.entries(LEGEND_POWDERS).filter(([, L]) => !L.gift).map(([id, L]) => {
     const have = inv.powders.filter((p) => p.effect === id && p.legend).length;
     const can = inv.coins >= CFG.LEGEND_PRICE && !full;
     return `<div class="shop-item">
@@ -1437,6 +1444,8 @@ function findInteraction() {
   }
   const dk = Math.hypot(me.x - KEEPER.x, me.z - KEEPER.z);
   if (dk < RANGE.keeper && dk < bestD) { best = { type: 'keeper' }; bestD = dk; }
+  const rs = residents.nearest(me); // 🏡 캠핑장 주민
+  if (rs && rs.d - 0.8 < bestD) { best = { type: 'resident', e: rs.e }; bestD = rs.d - 0.8; } // 화로 · 의자보다 주민을 먼저 (모닥불 옆 주민에게 말 걸기 쉽게)
   const dg = Math.hypot(me.x - GUESTBOOK.x, me.z - GUESTBOOK.z);
   if (dg < RANGE.guestbook && dg < bestD) { best = { type: 'guestbook' }; bestD = dg; }
   const db = Math.hypot(me.x - BOARD.x, me.z - BOARD.z);
@@ -1461,6 +1470,7 @@ function promptFor(it) {
     return woodcut.stateOf(it.idx) === 'empty' ? ['<kbd>E</kbd> 통나무 올리기 <small>(꾹 누르면 계속 패요)</small>'] : ['<kbd>E</kbd> 장작 패기 <small>(꾹 누르기)</small>'];
   }
   if (it.type === 'npc') return ['<kbd>E</kbd> 루미와 이야기하기'];
+  if (it.type === 'resident') return [`<kbd>E</kbd> ${it.e.r.name}에게 말 걸기 ${it.e.r.icon}`];
   if (it.type === 'keeper') return [`<kbd>E</kbd> 장작 창고 열기 📦 <small>(맡긴 장작 ${inv.stored}개)</small>`];
   if (it.type === 'guestbook') return ['<kbd>E</kbd> 방명록 펼쳐 보기 📖'];
   if (it.type === 'board') return ['<kbd>E</kbd> 캠핑장 소식 보기 📌'];
@@ -1495,6 +1505,7 @@ function promptFor(it) {
 function interact(it) {
   if (!it || !me) return;
   if (it.type === 'chop') tryChop(it);
+  else if (it.type === 'resident') talkTo(it.e);
   else if (it.type === 'npc') {
     net.send({ t: 'npc' });
     // NPC가 나를 바라보도록
@@ -1735,6 +1746,7 @@ function actionFor(it) {
   if (!it) return null;
   if (it.type === 'chop') return woodcut.stateOf(it.idx) === 'empty' ? { icon: '🪵', label: '통나무 올리기' } : { icon: '🪓', label: '꾹 패기' };
   if (it.type === 'npc') return { icon: '💬', label: '대화' };
+  if (it.type === 'resident') return { icon: '💬', label: '말 걸기' };
   if (it.type === 'keeper') return { icon: '📦', label: '창고' };
   if (it.type === 'guestbook') return { icon: '📖', label: '방명록' };
   if (it.type === 'board') return { icon: '📌', label: '소식' };
@@ -2356,7 +2368,7 @@ function updateNpc(dt) {
     npc.root.rotation.y = lerpAngle(npc.root.rotation.y, target, Math.min(1, dt * 4));
     if (d < 6 && !npc._greeted) { npc._greeted = true; npc.play('wave'); }
     if (d > 10) npc._greeted = false;
-    if (d > RANGE.npc + 2.5 && UI.dialogOpen()) UI.dialogClose();
+    if (d > RANGE.npc + 2.5 && UI.dialogOwner() === 'lumi') UI.dialogClose();
     if (d > RANGE.npc + 2.5 && shopIsOpen()) closeShop();
     const can = state.inv.powders.length < CFG.BASE_POWDERS || !!state.inv.quest?.done || (state.inv.quest && !state.inv.quest.met);
     npc.markEl.style.display = can ? '' : 'none';
@@ -2372,6 +2384,67 @@ function updateNpc(dt) {
   }
   npc.update(dt);
   keeper.update(dt);
+}
+
+// ---------------------------------------------------------------- 🏡 캠핑장 주민 (v1.22.0)
+const tidy = (id) => (id === 'christmas' ? 'snow' : id);
+function residentLine(r) {
+  const extra = r.lines[tidy(state.theme)];
+  const pool = extra?.length && Math.random() < 0.6 ? extra : r.lines.base;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+function stampLine(met = state.inv.resMet || []) {
+  const n = ALWAYS.filter((a) => met.includes(a.id)).length, all = ALWAYS.length;
+  const next = n < STAMP_GOALS[0] ? `${STAMP_GOALS[0]}명을 만나면 ✦ 특별한 가루!` : n < all ? `${all}명을 다 만나면 ✦ 하나 더!` : '오늘 주민을 모두 만났어요 🎉';
+  return `🏅 오늘의 주민 도장 <b>${n}/${all}</b> <small>${next}</small>`;
+}
+function talkTo(e) {
+  faceTo(e.pos.x, e.pos.z);
+  if (e.r.kind === 'comfort') { openTea(e); return; }
+  net.send({ t: 'talk', id: e.r.id });
+}
+net.on('talk', (m) => {
+  const e = residents.get(m.id);
+  if (!e) return;
+  const r = e.r, chips = (list) => UI.powderGrid(list, 'sm');
+  if (r.kind === 'comfort') { UI.dialog(comfortReply(m), null, { name: `${r.icon} ${r.name}`, owner: r.id }); return; }
+  const pages = [residentLine(r)];
+  if (m.reward) {
+    pages.push(`${r.gift}\n${chips([m.reward])}`);
+    pages.push(r.kind === 'always' ? stampLine(m.met || []) : `✨ <b>숨은 도장</b>을 찾았어요!\n<small>${r.kind === 'night' ? '깊은 밤에만' : '이런 날씨에만'} 만날 수 있는 주민이에요</small>`);
+  } else if (m.full) pages.push('가방이 가루로 꽉 찼네요. 모닥불에 좀 뿌리고 또 와요.');
+  if (m.bonus?.length) pages.push(`🏅 주민 도장을 채운 선물이에요!\n${chips(m.bonus)}`);
+  e.ch.emote('happy', '😊');
+  UI.dialog(pages, null, { name: `${r.icon} ${r.name}`, owner: r.id });
+  track('npc_talk', { npc: r.id });
+});
+/** 🫖 찻집 할머니: 오늘 마음을 고르면 위로의 말과 함께 ✦ 위로의 풍등 가루 (하루 한 번) */
+function openTea(e) {
+  UI.dialog([{
+    html: '어서 와요. 오늘 하루 어땠어요?',
+    choices: MOODS.map((md) => `${md.icon} ${md.label}`),
+    pick: (i) => { net.send({ t: 'talk', id: 'grandma', mood: MOODS[i].id }); track('npc_talk', { npc: `grandma_${MOODS[i].id}` }); return []; },
+  }], null, { name: '🫖 찻집 할머니', owner: 'grandma' });
+  e.ch.emote('love', '🥰');
+}
+function comfortReply(m) {
+  const md = MOODS.find((x) => x.id === m.mood) || MOODS[MOODS.length - 1];
+  const pages = [md.replies[Math.floor(Math.random() * md.replies.length)]];
+  if (m.reward) {
+    pages.push(`이 마음, 가루에 담아 줄게요.\n모닥불에 뿌리면 따뜻한 풍등이 하늘로 떠올라요.\n${UI.powderGrid([m.reward], 'sm')}`);
+    let el = document.getElementById('warmGlow');
+    if (!el) { el = document.createElement('div'); el.id = 'warmGlow'; document.body.appendChild(el); }
+    el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
+  } else if (m.full) pages.push('가방이 가득 찼네요. 가루 조금 뿌리고 또 와요.');
+  else pages.push('오늘 준 풍등 가루는 모닥불에 뿌려 봐요.\n내일 또 와요. 기다릴게요.');
+  return pages;
+}
+function updateResidents(dt) {
+  const now = serverNow();
+  residents.update(dt, { me, theme: state.theme, now, met: state.inv.resDay === kstDay(now) ? state.inv.resMet || [] : [], camPos: camera.position, inTent: !!state.tent, talkingId: UI.dialogOwner() });
+  // 이야기하던 주민에게서 멀어지면 대화창을 닫는다 (걸어 다니는 주민은 조금 더 넉넉하게)
+  const own = UI.dialogOwner(), e = own && own !== 'lumi' ? residents.get(own) : null;
+  if (e && me && Math.hypot(me.x - e.pos.x, me.z - e.pos.z) > RESIDENT_RANGE + (e.r.walk || e.r.patrol ? 6 : 3)) UI.dialogClose();
 }
 
 function questText() {
@@ -2521,6 +2594,11 @@ function updateLabels() {
     const vis = d < 48;
     if (ch._labelVis !== vis) { ch._labelVis = vis; ch.labelEl.style.visibility = vis ? 'visible' : 'hidden'; }
   }
+  // 주민 이름표는 가까이(24m) 와야 보인다. 주민이 많아서 멀리까지 띄우면 화면이 복잡하다
+  for (const { ch } of residents.list) {
+    const vis = camera.position.distanceTo(ch.root.position) < 24;
+    if (ch._labelVis !== vis) { ch._labelVis = vis; ch.labelEl.style.visibility = vis ? 'visible' : 'hidden'; }
+  }
 }
 
 function updateStumps(dt) {
@@ -2605,6 +2683,7 @@ function frame(now = performance.now()) {
   me?.char.update(dt);
   updateRemotes(dt);
   updateNpc(dt);
+  updateResidents(dt);
   updateCamera(dt, t);
   // 불꽃 입자 크기 기준: 텐트 안 3인칭은 화각을 넓혀서(84°) 그대로 두면 입자가 2배 넘게 커져 하얗게 뭉친다 → 실제 화각으로 맞춘다
   // (바깥은 지금 보이는 불 모양 그대로 둔다)

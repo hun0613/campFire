@@ -1391,3 +1391,19 @@ body:not(.touch).map-closed #mapPanel { display: none; }
   body:not(.touch).map-open #radar { opacity: 0 !important; visibility: hidden !important; }
 }
 #mapToggle.on { background: #ffd9a6; }
+
+/* ---------- 🏡 캠핑장 주민 (v1.22.0): 고르는 대화 · 할머니 가루를 받을 때 화면이 잠깐 따뜻하게 ---------- */
+.dchoices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.dchoices:empty { display: none; }
+.dchoice {
+  font: inherit; font-size: 16px; color: var(--brown); background: #fffaf0; border: 2px solid #ecd6aa; border-radius: 999px;
+  padding: 7px 14px; cursor: pointer; box-shadow: 0 3px 0 #e2c58f; transition: transform .1s;
+}
+.dchoice:hover { background: #fff3dc; }
+.dchoice:active { transform: translateY(2px); box-shadow: 0 1px 0 #e2c58f; }
+#dialog.choosing { cursor: default; }
+#dialog.choosing .dnext { display: none; }
+body.touch .dchoice { font-size: 15px; padding: 8px 13px; }
+#warmGlow { position: fixed; inset: 0; z-index: 6; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 50% 70%, rgba(255, 170, 90, .28), rgba(255, 130, 60, .1) 60%, transparent 85%); }
+#warmGlow.on { animation: warmGlow 4.5s ease-out forwards; }
+@keyframes warmGlow { 0% { opacity: 0; } 18% { opacity: 1; } 100% { opacity: 0; } }

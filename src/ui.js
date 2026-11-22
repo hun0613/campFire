@@ -123,15 +123,40 @@ export const UI = {
   // ---------------- NPC 대화
   _dlg: null,
   dialogOpen() { return !!this._dlg; },
-  dialog(pages, onClose) {
+  /** 지금 대화창을 연 쪽 ('lumi' 또는 주민 id) — 멀어지면 그쪽 대화만 닫는다 */
+  dialogOwner() { return this._dlg?.owner || null; },
+  /** pages: 글(html) 또는 { html, choices: [버튼 글], pick(i) → 이어질 글 목록 }. opts.name: 말하는 사람 (기본 루미) */
+  dialog(pages, onClose, opts = {}) {
     const box = $('dialog');
     box.classList.remove('hidden');
+    box.querySelector('.dname').textContent = opts.name || '루미';
     const text = box.querySelector('.dtext');
+    let ch = box.querySelector('.dchoices');
+    if (!ch) { ch = document.createElement('div'); ch.className = 'dchoices'; text.after(ch); }
+    pages = [...pages];
     let page = 0;
     let timer = null;
     const show = () => {
-      const html = pages[page];
+      const pg = pages[page];
+      const html = typeof pg === 'string' ? pg : pg.html;
       clearInterval(timer);
+      if (!this._dlg) return;
+      ch.replaceChildren();
+      box.classList.toggle('choosing', !!pg.choices);
+      // 고르는 칸: 버튼을 누르면 그 대답이 다음 장으로 이어진다
+      if (pg.choices) pg.choices.forEach((label, i) => {
+        const b = document.createElement('button');
+        b.className = 'dchoice'; b.textContent = label;
+        b.onclick = (ev) => {
+          ev.stopPropagation();
+          const more = pg.pick(i) || [];
+          pages.splice(page + 1, 0, ...more);
+          box.classList.remove('choosing');
+          if (!more.length) { pages[page] = ''; this._dlg.finish = () => false; next(); return; } // 이어질 글이 없으면 (서버 대답을 기다릴 때) 닫는다
+          page++; show();
+        };
+        ch.appendChild(b);
+      });
       // 타자기 효과 (태그는 한 번에)
       const tokens = html.match(/<[^>]+>[^<]*<\/[^>]+>|<[^>]+>|[^<]/g) || [];
       let i = 0;
@@ -148,17 +173,20 @@ export const UI = {
     };
     const next = () => {
       if (this._dlg.finish()) return;
+      if (pages[page]?.choices) return; // 고를 때까지 기다린다
       page++;
       if (page >= pages.length) {
         box.classList.add('hidden');
+        box.classList.remove('choosing');
         box.onclick = null;
+        ch.replaceChildren();
         this._dlg = null;
         onClose?.();
         return;
       }
       show();
     };
-    this._dlg = { next, finish: () => false };
+    this._dlg = { next, finish: () => false, owner: opts.owner || 'lumi' };
     box.onclick = next;
     show();
   },
@@ -166,6 +194,7 @@ export const UI = {
   dialogClose() {
     if (!this._dlg) return;
     $('dialog').classList.add('hidden');
+    $('dialog').classList.remove('choosing');
     $('dialog').onclick = null;
     this._dlg = null;
   },

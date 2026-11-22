@@ -293,7 +293,11 @@ export const LEGEND_POWDERS = {
   petals: { name: '✦ 꽃잎 회오리 가루', desc: '분홍 꽃잎이 휘돌며 올라가 흩날려요', color: '#ff8fc8', bg: 'radial-gradient(circle at 35% 30%, #fff, #ffc2dd 40%, #ff6fb8)' },
   galaxy: { name: '✦ 은하수 가루', desc: '모닥불 위에 별 원반이 천천히 돌아요', color: '#8f9bff', bg: 'radial-gradient(circle at 40% 40%, #fff 0%, #b9c4ff 18%, #5b4bd6 55%, #1b1650)' },
   butterflies: { name: '✦ 나비 떼 가루', desc: '알록달록한 나비들이 모닥불 주위를 날아요', color: '#ffb35c', bg: 'linear-gradient(135deg, #ffd447, #ff8f3a 50%, #ff6fb8)' },
+  // 찻집 할머니만 주는 가루 (가루 공방 · 무작위 선물에는 없다)
+  lanterns: { name: '✦ 위로의 풍등 가루', desc: '따뜻한 풍등이 모닥불에서 천천히 밤하늘로 떠올라요', color: '#ffb066', bg: 'radial-gradient(circle at 50% 38%, #fff3c4, #ffb066 45%, #d9603a)', gift: true },
 };
+/** 가루 공방에서 팔고 무작위 선물로 나오는 ✦ 특별한 가루 (선물 전용 가루는 뺀다) */
+export const SHOP_LEGENDS = Object.keys(LEGEND_POWDERS).filter((k) => !LEGEND_POWDERS[k].gift);
 export function legendPowder(effect) {
   const L = LEGEND_POWDERS[effect];
   return { id: Math.random().toString(36).slice(2, 10), color: L.color, effect, name: L.name, legend: true };
