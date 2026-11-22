@@ -172,7 +172,7 @@ export class Guide {
         g.beginPath(); g.moveTo(6 * pulse, 0); g.lineTo(-4, -5); g.lineTo(-4, 5); g.closePath(); g.fill();
         g.restore();
         const m = Math.round(Math.hypot(target.x - me.x, target.z - me.z));
-        g.font = '9px Jua, sans-serif'; g.fillStyle = '#fff3dc';
+        g.font = '9px Moneygraphy, sans-serif'; g.fillStyle = '#fff3dc';
         g.fillText(`${m}m`, C + ux * (R - 19), C + uy * (R - 19));
       }
     }
@@ -184,7 +184,7 @@ export class Guide {
     g.beginPath(); g.moveTo(6, 0); g.lineTo(-4, -4); g.lineTo(-2, 0); g.lineTo(-4, 4); g.closePath(); g.fill(); g.stroke();
     g.restore();
     // 북쪽 표시
-    { const nx = -rz, ny = fz; const nd = Math.hypot(nx, ny) || 1; g.font = '9px Jua, sans-serif'; g.fillStyle = 'rgba(255, 243, 220, .85)'; g.fillText('N', C + (nx / nd) * (R - 6), C - (-ny / nd) * (R - 6)); }
+    { const nx = -rz, ny = fz; const nd = Math.hypot(nx, ny) || 1; g.font = '9px Moneygraphy, sans-serif'; g.fillStyle = 'rgba(255, 243, 220, .85)'; g.fillText('N', C + (nx / nd) * (R - 6), C - (-ny / nd) * (R - 6)); }
     // 테두리
     g.strokeStyle = 'rgba(255, 248, 232, .55)'; g.lineWidth = 2; g.beginPath(); g.arc(C, C, R, 0, Math.PI * 2); g.stroke();
   }
@@ -248,7 +248,7 @@ export class Guide {
       g.fillStyle = 'rgba(255,248,232,0.95)';
       g.beginPath(); g.arc(X(x), Z(z), 9, 0, Math.PI * 2); g.fill();
       g.fillText(icon, X(x), Z(z) + 1);
-      g.font = '11px Jua, sans-serif';
+      g.font = '11px Moneygraphy, sans-serif';
       g.fillStyle = '#fff3dc';
       g.fillText(label, X(x), Z(z) + 18);
       g.font = '15px sans-serif';
@@ -289,7 +289,7 @@ export class Guide {
       g.restore();
     }
     // 방위
-    g.fillStyle = 'rgba(255,243,220,0.7)'; g.font = '10px Jua, sans-serif';
+    g.fillStyle = 'rgba(255,243,220,0.7)'; g.font = '10px Moneygraphy, sans-serif';
     g.fillText('N', W / 2, 7);
   }
 }

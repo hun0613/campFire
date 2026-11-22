@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { toon, glow, radialTexture, textTexture, mulberry32 } from './toon.js';
 import { createSky } from './sky.js';
+import { fingerpost, hangingSign } from './signs.js';
 import { CFG, TENTS, PITS, STUMPS, NPC, KEEPER, WOODYARD, BOUNDS, FENCE, GATES, SUNSET, TENT_WH, TENT_RH, EGG } from '../shared/config.js';
 import { buildTrail } from './trail.js';
 
@@ -544,29 +545,13 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     }
   }
 
-  // ---------- 표지판
-  function sign(x, z, text, { ry = 0, w = 2.2, h = 0.7, color } = {}) {
-    const g = new THREE.Group();
-    g.position.set(x, 0, z);
-    g.rotation.y = ry;
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.5, 0.12), toon('#6b4a2b'));
-    post.position.y = 0.75;
-    post.castShadow = true;
-    const board = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.08), [
-      toon('#a8794a'), toon('#a8794a'), toon('#a8794a'), toon('#a8794a'),
-      toon('#ffffff', { map: textTexture(text, { w: 512, h: Math.round(512 * h / w), size: 54, ...(color ? { bg: color } : {}) }), emissive: new THREE.Color('#3a2a1a'), emissiveIntensity: 0.15 }),
-      toon('#a8794a'),
-    ]);
-    board.position.y = 1.55;
-    board.castShadow = true;
-    g.add(post, board);
-    scene.add(g);
-    addCol(x, z, 0.3);
-  }
-  sign(WOODYARD.x - 8, WOODYARD.z + 1, '🪓 장작 패는 곳', { ry: -Math.PI / 2 }); // 광장 쪽(서쪽)을 본다
-  sign(NPC.x - 6, NPC.z - 2.4, '✨ 루미의 마법 가루', { ry: -Math.PI / 2 });
-  sign(-8.5, 9.5, '🏕️ 불멍 캠핑장 광장', { w: 2.4 });
-  sign(KEEPER.x - 4.4, KEEPER.z + 2.0, '📦 장작 창고'); // 오두막 서쪽 앞 (광장에서 오면 먼저 보인다)
+  // ---------- 이정표 · 간판 (v1.22.2): 원목 화살표 이정표 + 광장 입구의 매달린 검은 간판
+  const post = (x, z, arms) => { fingerpost(scene, x, z, arms); addCol(x, z, 0.3); };
+  post(WOODYARD.x - 8, WOODYARD.z + 1, [{ text: '장작 패는 곳', to: WOODYARD }, { text: '장작 창고', to: KEEPER }]);
+  post(NPC.x - 6, NPC.z - 2.4, [{ text: '루미의 가루 공방', to: NPC }, { text: '장작 패는 곳', to: WOODYARD }]);
+  post(KEEPER.x - 4.4, KEEPER.z + 2.0, [{ text: '장작 창고', to: KEEPER }]); // 오두막 서쪽 앞 (광장에서 오면 먼저 보인다)
+  hangingSign(scene, -8.5, 9.5, 0, { title: ['불멍', '캠핑장'], small: ['BULMEONG', 'CAMP'], lines: [{ text: '숲길 산책로', dir: 'l' }, { text: '장작 마당 · 루미', dir: 'r' }] });
+  addCol(-8.5, 9.5, 0.3);
 
   // ---------- 장작 창고 (장작 패는 곳 북서쪽). 앞이 트인 나무 오두막에 장작이 가득, 창고지기 보리가 앞에 선다
   {

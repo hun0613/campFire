@@ -2,7 +2,7 @@
 // - always: 늘 있는 주민 12명. 말을 걸면 하루 한 번 그 주민의 가루 1개, 주민 도장 1칸
 // - weather: 날씨 테마일 때만 (우중 · 설산/크리스마스). 만나면 「숨은 도장」
 // - night: 밤 11시 ~ 새벽 3시(한국 시각)에만. 만나면 「숨은 도장」
-// - comfort: 찻집 할머니. 가루 대신 위로의 말과 따뜻한 차 한 잔 (몇 번이든)
+// - comfort: 찻집 할머니. 마음을 고를 때마다 따뜻한 말 + ✦ 위로의 풍등 / ✦ 축하의 팡팡 가루
 // 서버(보상 · 거리 확인)와 화면(모습 · 대사)이 같은 목록을 쓴다. 걸어 다니는 주민의 위치도 시각으로 똑같이 계산한다
 import { curveAt, TRAIL, PITS, TENTS, HILL_BENCH, LAKE, POND, POWDER_COLORS, POWDER_EFFECTS, kstDay } from './config.js';
 
@@ -205,7 +205,7 @@ export const RESIDENTS = [
   },
   // ---------- 🫖 위로해 주는 주민
   {
-    id: 'grandma', kind: 'comfort', area: 'camp', name: '찻집 할머니', title: '따뜻한 차 한 잔', icon: '🫖', x: -22, z: 9, ry: 0, pose: 'rock', seat: 'rocker',
+    id: 'grandma', kind: 'comfort', area: 'camp', name: '찻집 할머니', title: '따뜻한 말 한마디', icon: '🫖', x: -22, z: 9, ry: 0, pose: 'rock', seat: 'rocker',
     look: { skin: '#f0cfb5', hair: '#e8e4dc', shirt: '#b5654a', pants: '#5a4a40', hat: 'none' },
     powder: null,
     lines: { base: ['어서 와요. 오늘 하루 어땠어요?'] },

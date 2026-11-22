@@ -86,7 +86,7 @@ export class NoticeBoard {
     scene.add(this.tag);
 
     this.draw();
-    document.fonts?.ready.then(() => this.draw()); // Jua 글꼴을 받은 뒤 다시 그린다
+    document.fonts?.ready.then(() => this.draw()); // 머니그라피 글꼴을 받은 뒤 다시 그린다
   }
 
   /** @param {{kind:string,title:string,text:string,reply?:string}[]} items */
@@ -112,7 +112,7 @@ export class NoticeBoard {
     g.fillStyle = '#6b4a2b';
     g.fillRect(0, 0, W, 78);
     g.fillStyle = '#fff3dc';
-    g.font = '44px Jua, sans-serif';
+    g.font = '44px Moneygraphy, sans-serif';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText('📌 캠핑장 소식', W / 2, 42);
@@ -132,12 +132,12 @@ export class NoticeBoard {
     // 멀리서도 읽히게 큰 제목, 그 아래 내용 한두 줄 (자세한 내용은 가까이 가서 「소식 보기」)
     g.textAlign = 'left';
     g.fillStyle = '#3e2c1c';
-    g.font = '70px Jua, sans-serif';
+    g.font = '70px Moneygraphy, sans-serif';
     const tl = wrap(g, it.title || it.text || '', 620, 2);
     tl.forEach((ln, i) => g.fillText(ln, 70, 200 + i * 84));
     if (it.title && it.text) {
       g.fillStyle = '#6a5038';
-      g.font = '38px Jua, sans-serif';
+      g.font = '38px Moneygraphy, sans-serif';
       wrap(g, it.text, 620, tl.length > 1 ? 1 : 2).forEach((ln, i) => g.fillText(ln, 70, 200 + tl.length * 84 + 8 + i * 50));
     }
     // 쪽 번호 점
@@ -190,13 +190,13 @@ export class NoticeBoard {
     // 로고 글자
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.font = '86px Jua, sans-serif';
+    g.font = '86px Moneygraphy, sans-serif';
     g.lineWidth = 10;
     g.strokeStyle = 'rgba(40,20,10,0.55)';
     g.strokeText('불멍 캠핑장', cx, H - 92);
     g.fillStyle = '#ffe9c2';
     g.fillText('불멍 캠핑장', cx, H - 92);
-    g.font = '30px Jua, sans-serif';
+    g.font = '30px Moneygraphy, sans-serif';
     g.fillStyle = 'rgba(255,233,194,0.75)';
     g.fillText('오늘 밤도 따뜻하게 쉬어 가요', cx, H - 34);
   }

@@ -1,3 +1,5 @@
+/* 글꼴: 머니그라피 Rounded (© Viva Republica). 원본 파일을 수정 없이 그대로 제공해요 (수정 · 재배포 금지) */
+@font-face { font-family: 'Moneygraphy'; src: url('/fonts/Moneygraphy-Rounded.otf') format('opentype'); font-display: swap; }
 /* 캠핑장 관리실 — 게임과 같은 따뜻한 색 */
 :root {
   --bg: #f6efe2;
@@ -36,7 +38,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 .hidden { display: none !important; }
-h1, h2, .brand b { font-family: 'Jua', sans-serif; font-weight: 400; }
+h1, h2, .brand b { font-family: 'Moneygraphy', sans-serif; font-weight: 400; }
 h2 { font-size: 17px; margin: 18px 0 8px; }
 h2:first-child { margin-top: 0; }
 small { color: var(--sub); font-weight: 400; }

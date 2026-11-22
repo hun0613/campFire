@@ -46,7 +46,7 @@ initPWA();
 fillIcons();
 
 // 간판 글꼴이 준비된 뒤 월드를 만든다
-await Promise.race([document.fonts.load('64px Jua'), new Promise((r) => setTimeout(r, 2500))]);
+await Promise.race([document.fonts.load('64px Moneygraphy'), new Promise((r) => setTimeout(r, 2500))]);
 
 // ---------------------------------------------------------------- 렌더러
 if (isTouch) document.body.classList.add('touch');

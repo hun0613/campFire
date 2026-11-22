@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { toon, glow, textTexture, radialTexture } from './toon.js';
+import { darkPlateTexture } from './signs.js';
 
 export class GuestbookStand {
   /** @param {{x:number,z:number}} pos */
@@ -84,7 +85,7 @@ export class GuestbookStand {
     // 표지판
     const sign = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.36, 0.05), [
       dark, dark, dark, dark,
-      toon('#ffffff', { map: textTexture('📖 방명록', { w: 384, h: 126, size: 58 }), emissive: new THREE.Color('#3a2a1a'), emissiveIntensity: 0.15 }),
+      (() => { const t = darkPlateTexture('방명록'); return toon('#ffffff', { map: t, emissiveMap: t, emissive: new THREE.Color('#ffffff'), emissiveIntensity: 0.28 }); })(),
       dark,
     ]);
     sign.position.set(0.05, 1.95, -0.05);

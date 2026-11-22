@@ -67,7 +67,7 @@ export function textTexture(text, { w = 512, h = 160, bg = '#f6e3bf', fg = '#6b4
   g.lineWidth = 10;
   g.strokeRect(5, 5, w - 10, h - 10);
   g.fillStyle = fg;
-  g.font = `${size}px Jua, sans-serif`;
+  g.font = `${size}px Moneygraphy, sans-serif`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText(text, w / 2, h / 2 + 4);
