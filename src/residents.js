@@ -231,7 +231,7 @@ const POSES = {
   roast: () => (t) => ({ aR: -1.2 + Math.sin(t * 0.8) * 0.05, zR: -0.1, aL: -0.55 }),
   pour: () => (t) => ({ aR: -1.15 + Math.sin(t * 2) * 0.06, zR: -0.25 + Math.cos(t * 2) * 0.08, aL: -0.3, nod: 0.3 }),
   ranger: () => (t, anim) => ({ aR: -0.75 + (anim === 'walk' ? Math.sin(t * 2) * 0.05 : 0), zR: 0.08 }),
-  rock: () => (t) => ({ aL: -0.7, aR: -0.7, zL: 0.3, zR: -0.3, headTilt: Math.sin(t * 0.5) * 0.06 }),
+  rock: () => (t) => ({ aL: -0.7, aR: -0.7, zL: 0.3, zR: -0.3, headTilt: Math.sin(t * 0.5) * 0.06, lean: 0.04 + Math.sin(t * 1.3) * 0.048 }), // 흔들의자와 같은 박자로 상체가 앞뒤로 (소품 쪽 props.rock 과 같은 sin(t*1.3))
   snowman: () => (t) => ({ aL: -1.25, aR: -1.25, zL: 0.2, zR: -0.2, lean: 0.32 + Math.sin(t * 1.4) * 0.04, bodyY: -0.03 }),
   blanket: () => (t) => ({ aL: -0.5, aR: -1.0, zR: -0.15, headTilt: Math.sin(t * 0.4) * 0.08 + 0.05, nod: 0.12 }),
 };
@@ -306,7 +306,7 @@ export function createResidents(scene) {
         // 소품 움직임
         const t = ch.time;
         if (props.flash) props.flash.visible = (t % 7) > 6.6 && (t % 7) < 6.72;
-        if (props.rock) { const a = Math.sin(t * 1.3) * 0.08; props.rock.rotation.x = a; ch.body.rotation.x += a * 0.6; }
+        if (props.rock) { const a = Math.sin(t * 1.3) * 0.08; props.rock.rotation.x = a; } // 상체는 POSES.rock 의 lean 으로 (매 프레임 더하면 lerp 와 싸워 드드득 떨림)
         if (props.thing?.userData.snail) props.thing.position.x = 0.05 + Math.sin(t * 0.15) * 0.15;
         if (props.roll) { const k = (t % 30) / 30; props.roll.scale.setScalar(0.6 + k * 0.6); props.roll.position.y = 0.2 * (0.6 + k * 0.6); props.roll.rotation.x = t * 0.8; }
         if (props.puff) { const k = (t * 0.5) % 1; props.puff.position.y = 1.0 + k * 0.4; props.puff.material.opacity = 0.35 * (1 - k); props.puff.scale.setScalar(0.7 + k); }

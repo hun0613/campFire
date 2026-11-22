@@ -2231,7 +2231,7 @@ function updateCamera(dt, t) {
     cam.pitch = Math.min(Math.max(cam.pitch, 0.25), 1.05);
     cam.dist = Math.min(cam.dist, 6);
   } else {
-    camTarget.set(me.x, 1.0, me.z);
+    camTarget.set(me.x, 1.0 + world.heightAt(me.x, me.z), me.z); // 언덕 위에서도 캐릭터를 본다 (지형 높이만큼 올린다)
     // 🌸 벚꽃 터널: 걸어 들어가면 카메라가 어깨 뒤로 낮게 다가가 꽃 지붕 아래에서 걷는 느낌으로. 빠져나오면 원래대로
     // (내가 정한 거리 · 높이는 그대로 두고, 터널 안에서만 보이는 값을 섞는다)
     const k = walkCam(dt);

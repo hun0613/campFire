@@ -289,7 +289,7 @@ async function loadDaily() {
     if (!d.on) { $('dailyBody').innerHTML = ''; return; }
     const rows = d.rows || [];
     const avg = (r) => (r.joins ? dur(Math.round((r.stayMin * 60) / r.joins)) : '–');
-    const dayLabel = (s) => { const [, m, dd] = s.split('-'); const w = '일월화수목금토'[new Date(`${s}T00:00:00+09:00`).getUTCDay()]; return `${Number(m)}/${Number(dd)} (${w})`; };
+    const dayLabel = (s) => { const [y, m, dd] = s.split('-').map(Number); const w = '일월화수목금토'[new Date(Date.UTC(y, m - 1, dd)).getUTCDay()]; return `${m}/${dd} (${w})`; }; // 날짜 글자 그대로의 요일 (한국 0시를 UTC 로 바꾸면 하루 앞 요일이 나온다)
     $('dailyBody').innerHTML = `<div class="card">
       <h2>🗒️ 서버 기록 <small>최근 14일 · 한국 날짜</small>${help('게임 서버가 직접 센 숫자예요. GA4와 따로 세기 때문에 광고 차단 앱을 쓰는 사람도 빠지지 않고, GA4가 하루를 놓쳐도 남아요. 노션 「일별 이용 기록」에 10분마다 저장돼요. 방문자는 같은 기기를 하루 1명으로, 입장은 새로 고침 · 재접속까지 모두 세요. 이 기록은 v1.16.3부터 쌓여요. 매일 00:05에 전날 숫자를 GA4 숫자 · 방명록 수와 함께 확정하고, 「보기」를 누르면 하루 리포트가 HTML 새 창으로 열려요 (그 창에서 「HTML 저장」으로 파일도 받을 수 있어요). 12:00에 GA4를 한 번 더 집계하는데 숫자가 줄면 먼저 찍어 둔 값을 유지해요.')}</h2>
       ${rows.length ? `<div class="daily-wrap"><table class="daily">
