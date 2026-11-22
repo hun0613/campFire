@@ -519,8 +519,8 @@ export class Character {
         if (this.anim === 'sit') lean = 0.1;
         if (!A.hit && p >= 0.55) { A.hit = true; A.impact?.(); }
       } else if (A.name === 'wave') {
-        aR = -2.7;
-        zR = 0.4 + Math.sin(p * Math.PI * 6) * 0.35;
+        if (this.waveLeft) { aL = -2.7; zL = -(0.4 + Math.sin(p * Math.PI * 6) * 0.35); } // 오른손에 뭘 든 주민(김 반장 손전등)은 왼손으로
+        else { aR = -2.7; zR = 0.4 + Math.sin(p * Math.PI * 6) * 0.35; }
       } else if (A.name === 'place') {
         // 허리 숙여 통나무 들기 → 가슴 높이로 → 앞으로 내밀어 그루터기에 올리기
         const L = this.handLog;

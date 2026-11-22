@@ -52,12 +52,16 @@ function rocker() { // 흔들의자: rock 그룹을 앞뒤로 기울인다
 function inHand(ch, obj, side = 1) { obj.position.add(new THREE.Vector3(0, -0.33, 0)); ch.arms[side === 1 ? 1 : 0].add(obj); return obj; }
 
 const PROPS = {
-  photo(r, ch) {
+  photo(r, ch) { // 두 손으로 턱 앞에 든 카메라 (머리가 커서 얼굴 높이에 대면 머리에 묻힌다)
     const cam = new THREE.Group();
-    cam.add(box(0.2, 0.13, 0.1, metal), at(cyl(0.05, 0.05, 0.08, toon('#22252c'), 8), 0, 0, 0.08));
-    cam.children[1].rotation.x = Math.PI / 2;
-    cam.position.set(0, 1.42, 0.34); ch.body.add(cam);
-    const flash = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), glow('#fff6dd', 6)); flash.position.set(0.06, 0.08, 0.02); flash.visible = false; cam.add(flash);
+    cam.add(box(0.26, 0.16, 0.11, metal));                                            // 몸체
+    cam.add(at(box(0.07, 0.035, 0.05, toon('#22252c')), -0.07, 0.095, 0));            // 셔터 쪽 손잡이
+    cam.add(at(box(0.05, 0.03, 0.03, toon('#e8e2d6')), 0.08, 0.06, 0.06));            // 뷰파인더 창
+    const lens = at(cyl(0.06, 0.065, 0.09, toon('#22252c'), 10), 0.01, -0.005, 0.095); lens.rotation.x = Math.PI / 2; cam.add(lens);
+    const glass = at(cyl(0.042, 0.042, 0.01, toon('#6a8fb3'), 10), 0.01, -0.005, 0.142); glass.rotation.x = Math.PI / 2; cam.add(glass);
+    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.012, 4, 12, Math.PI), toon('#7a3b2e')); strap.rotation.z = Math.PI; strap.position.set(0, 0.0, -0.02); cam.add(strap);
+    cam.position.set(0, 0.98, 0.4); cam.rotation.x = -0.12; ch.body.add(cam);
+    const flash = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), glow('#fff6dd', 6)); flash.position.set(0.09, 0.1, 0.03); flash.visible = false; cam.add(flash);
     return { flash };
   },
   farmer(r, ch) {
@@ -104,9 +108,10 @@ const PROPS = {
   read(r, ch) {
     const b = bench(); ch.root.add(b);
     const book = new THREE.Group();
-    for (const s of [-1, 1]) { const pg = at(box(0.15, 0.2, 0.012, cream), s * 0.075, 0, 0); pg.rotation.y = -s * 0.35; book.add(pg); }
-    book.add(at(box(0.31, 0.21, 0.01, toon('#7a4ab5')), 0, 0, -0.03));
-    book.position.set(0, 0.78, 0.32); book.rotation.x = -0.6; ch.body.add(book);
+    // 책장은 읽는 사람 쪽(-z)을 보고, 표지는 바깥(+z)을 본다. 위쪽이 앞으로 기울어 무릎 위에서 펼쳐 든 모양
+    for (const s of [-1, 1]) { const pg = at(box(0.15, 0.2, 0.012, cream), s * 0.075, 0, 0); pg.rotation.y = s * 0.35; book.add(pg); }
+    book.add(at(box(0.31, 0.21, 0.01, toon('#7a4ab5')), 0, 0, 0.03));
+    book.position.set(0, 0.72, 0.34); book.rotation.x = 0.93; ch.body.add(book);
     return { book };
   },
   paint(r, ch) {
@@ -173,7 +178,7 @@ const PROPS = {
     const beamMat = new THREE.MeshBasicMaterial({ color: '#fff1c0', transparent: true, opacity: 0.08, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
     const beam = new THREE.Mesh(new THREE.ConeGeometry(0.7, 3.2, 12, 1, true), beamMat); beam.position.y = -1.7; fl.add(beam);
     // 팔을 앞으로 든 각도(-0.75)와 합쳐 불빛(-y 쪽)이 앞 · 살짝 아래 땅을 비추게
-    fl.rotation.x = -0.45; fl.position.set(0, -0.36, 0.06); ch.arms[1].add(fl);
+    fl.rotation.x = -0.45; fl.position.set(0, -0.36, 0.06); ch.arms[1].add(fl); ch.waveLeft = true; // 손전등은 오른손, 인사는 왼손으로
     return {};
   },
   rock(r, ch) { // 찻집: 흔들의자 + 찻상 + 등불
