@@ -10,8 +10,8 @@ export const PALETTE = {
   },
   stone: {
     base: '#8d8a94', // 화로 돌 (보랏빛 도는 회색)
-    light: '#a3a0aa',
-    dark: '#7b7884',
+    light: '#a3a0aa', // 밝은 화로 돌
+    dark: '#7b7884', // 짙은 화로 돌
   },
   metal: {
     dark: '#3b3229', // 가로등 기둥 · 갓 (짙은 고동빛 쇠)

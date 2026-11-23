@@ -69,8 +69,8 @@ export function createGraph(overrides = {}) {
 
 /** 놓은 파일 이름 → 요소 폴더의 경로 ('plank.js' → 'src/elements/atoms/plank.js'). 폴더 이름까지 있으면 더 정확히 */
 export function matchPath(name) {
-  const base = name.split(/[\\/]/).pop();
-  const hits = Object.keys(SOURCES).filter((k) => k.endsWith(`/${base}`));
+  const base = name.split(/[\\/]/).pop().replace(/\s*\(\d+\)(?=\.js$)/, ''); // 「bench (1).js」 처럼 다운로드 번호가 붙어도
+  const hits = Object.keys(SOURCES).filter((k) => k.toLowerCase().endsWith(`/${base.toLowerCase()}`)); // 대소문자 무시 (Bench.js)
   if (hits.length === 1) return hits[0];
   if (!hits.length) throw new Error(`「${base}」는 요소 폴더에 없는 파일 이름이에요. 원래 파일 이름(예: bench.js, plank.js) 그대로 보내 주세요`);
   throw new Error(`「${base}」 이름의 파일이 여러 개예요: ${hits.join(', ')}`);
