@@ -72,6 +72,7 @@ export function fingerpost(scene, x, z, arms, { height = 2.5 } = {}) {
     arm.add(body, face(false), face(true));
     g.add(arm);
   });
+  g.userData.ds = 'fingerpost'; // 디자인 시스템 이름표
   scene.add(g);
   return g;
 }
@@ -153,6 +154,7 @@ export function hangingSign(scene, x, z, ry, content, { w = 1.15, h = 1.45, heig
   const fm = mat(false); fm.emissiveMap = fm.map;
   const bm = mat(true); bm.emissiveMap = bm.map;
   add(new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.05), [edge, edge, edge, edge, fm, bm]), cx, top - chain - h / 2, 0);
+  g.userData.ds = 'hanging-sign';
   scene.add(g);
   return g;
 }

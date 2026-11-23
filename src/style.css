@@ -1,16 +1,6 @@
 /* 글꼴: 머니그라피 Rounded (© Viva Republica). 원본 파일을 수정 없이 그대로 제공해요 (수정 · 재배포 금지) */
 @font-face { font-family: 'Moneygraphy'; src: url('/fonts/Moneygraphy-Rounded.otf') format('opentype'); font-display: swap; }
-:root {
-  --cream: #fff8e8;
-  --cream-2: #fbeed3;
-  --brown: #6b4a2b;
-  --brown-2: #9a6f45;
-  --orange: #ff9d3c;
-  --orange-2: #f0782a;
-  --green: #79b35a;
-  --shadow: 0 6px 0 rgba(90, 60, 30, 0.18), 0 12px 30px rgba(0, 0, 0, 0.35);
-  --radius: 22px;
-}
+/* 색 · 그림자 · 둥근 정도 같은 UI 토큰은 src/tokens.css (index.html 에서 이 파일보다 먼저 읽는다) */
 
 * { box-sizing: border-box; }
 html, body {
@@ -1109,11 +1099,7 @@ body.touch.chat-open .emote-item:active { background: rgba(255, 248, 232, .18); 
    🪵 나무 버튼 테마 (v1.20): 버튼은 모두 밝은 나무판 + 아이콘 · 글씨를 새긴(음각) 느낌으로 통일.
    감정 표현 이모지 말고 버튼에는 이모지를 쓰지 않는다 (아이콘은 src/icons.js)
    ================================================================ */
-:root {
-  --wood-hi: #ecc893; --wood: #d9a96d; --wood-lo: #c38b51; --wood-edge: #8c5a31; --wood-deep: #6e4424;
-  --engrave: #5b391c; --engrave-hi: rgba(255, 238, 206, .75);
-  --grain: repeating-linear-gradient(92deg, rgba(120, 72, 32, .07) 0 2px, rgba(0, 0, 0, 0) 2px 9px, rgba(255, 236, 200, .06) 9px 10px, rgba(0, 0, 0, 0) 10px 17px);
-}
+/* 나무판 색(--wood-*) · 새김 색(--engrave*) · 나뭇결(--grain)은 src/tokens.css */
 .ico { width: 1.18em; height: 1.18em; flex: none; vertical-align: -0.2em; overflow: visible;
   filter: drop-shadow(0 1px 0 var(--engrave-hi)) drop-shadow(0 -0.6px 0 rgba(70, 38, 14, .45)); }
 
@@ -1232,12 +1218,7 @@ body.touch .bag-btn:active, body.touch .bag-btn.on { transform: none; }
 body:not(.touch) .bag-panel { transform-origin: 0 100%; }
 @media (max-width: 640px) { body:not(.touch) .bag-panel { transform-origin: 100% 100%; } }
 
-/* 🪵 버튼 나무색을 크림빛 밝은 원목(자작나무 느낌)으로: 크림색 판과 같은 톤 안에서 살짝 볼록하게 (v1.20) */
-:root {
-  --wood-hi: #fdf3df; --wood: #f3e0be; --wood-lo: #e8cc9f; --wood-edge: #c9a06b; --wood-deep: #a87b47;
-  --engrave: #7a5330; --engrave-hi: rgba(255, 252, 244, .9);
-  --grain: repeating-linear-gradient(92deg, rgba(170, 120, 60, .07) 0 1px, rgba(0, 0, 0, 0) 1px 8px, rgba(255, 255, 255, .12) 8px 9px, rgba(0, 0, 0, 0) 9px 16px);
-}
+/* 🪵 버튼 나무색(크림빛 밝은 원목)은 src/tokens.css */
 
 /* 휴대폰에서 앉았을 때 장작 더 넣기 · 곡 고르기도 다른 버튼과 같은 크림 원목 (반투명 갈색 알약이 혼자 튀어 보였어요) */
 body.touch.seated .seat-btns #musicBtn, body.touch.seated .seat-btns #feedBtn {

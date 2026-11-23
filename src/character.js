@@ -84,6 +84,7 @@ export class Character {
   constructor(look, { name = '', kind = 'other' } = {}) {
     this.look = look;
     this.root = new THREE.Group();
+    this.root.userData.ds = 'character'; // 디자인 시스템 이름표 (주민 · NPC 는 만든 쪽에서 바꾼다)
     this.root.rotation.order = 'YXZ'; // 흔들의자에서 앞뒤로 흔들 때 몸 방향 기준으로
     this.body = new THREE.Group();
     this.root.add(this.body);

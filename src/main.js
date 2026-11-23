@@ -1,11 +1,7 @@
 import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
+import { createRender } from './render.js';
 import { buildWorld } from './world.js';
 import { FirePit } from './fire.js';
 import { Character } from './character.js';
@@ -50,24 +46,6 @@ await Promise.race([document.fonts.load('64px Moneygraphy'), new Promise((r) => 
 
 // ---------------------------------------------------------------- 렌더러
 if (isTouch) document.body.classList.add('touch');
-// 화면 배율: 레티나 같은 고해상도 화면에서 2~3배로 그리면 GPU가 몇 배로 일해서 기기가 뜨거워진다.
-// 배율은 최대 1.5배, 그리고 전체 픽셀 수가 예산(PC 320만 · 폰 220만)을 넘지 않게 맞춘다
-const MAX_PR = 1.5;
-const PIXEL_BUDGET = isTouch ? 2.2e6 : 3.2e6;
-const renderPR = (w = innerWidth, h = innerHeight) => Math.max(0.75, Math.min(devicePixelRatio, MAX_PR, Math.sqrt(PIXEL_BUDGET / (w * h))));
-// alpha: TV 화면 자리만 투명하게 뚫어서, 캔버스 '뒤'에 있는 유튜브 영상이 보이게 한다 (앞의 물체가 영상을 제대로 가림)
-// antialias 는 끈다: 장면은 composer 의 별도 버퍼에 그려서 캔버스 안티에일리어싱은 효과 없이 메모리·대역폭만 쓴다
-// powerPreference 는 기본값: 'high-performance' 는 외장 GPU를 강제로 깨워 노트북을 뜨겁게 한다
-const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
-renderer.setClearColor(0x000000, 1);
-renderer.setPixelRatio(renderPR());
-renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap; // (PCFSoft 는 three r187 에서 없어져 PCF 로 동작)
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
-$('app').appendChild(renderer.domElement);
-
 const labelRenderer = new CSS2DRenderer();
 labelRenderer.setSize(innerWidth, innerHeight);
 labelRenderer.domElement.className = 'label-layer';
@@ -77,56 +55,15 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.Fog('#1a1c44', 40, 150);
 const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 1500);
 
-// 계단 현상(모자 · 울타리 · 나무 가장자리)을 줄이는 멀티샘플 안티에일리어싱: PC 4배, 폰 2배 (폰 GPU는 타일 방식이라 2배는 거의 공짜)
-const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(innerWidth * renderPR(), innerHeight * renderPR(), { type: THREE.HalfFloatType, samples: isTouch ? 2 : 4 }));
-composer.addPass(new RenderPass(scene, camera));
-// 빛 번짐 전에 픽셀 값 정리: 아주 드물게 생기는 NaN · 무한대 픽셀(멀티샘플 + HDR)이 블룸에 번지면 화면 전체가 까매진다
-// (노을 언덕 벤치에서 캠핑장 쪽으로 고개를 돌릴 때 재현) → 그런 픽셀은 0으로, 지나치게 밝은 값은 잘라 둔다
-const sanitize = new ShaderPass({
-  uniforms: { tDiffuse: { value: null } },
-  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
-    void main(){
-      vec4 c = texture2D(tDiffuse, vUv);
-      if (any(isnan(c)) || any(isinf(c))) c = vec4(0.0, 0.0, 0.0, 1.0);
-      gl_FragColor = vec4(clamp(c.rgb, 0.0, 64.0), clamp(c.a, 0.0, 1.0));
-    }`,
-});
-composer.addPass(sanitize);
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.42, 0.32, 0.85);
-composer.addPass(bloom);
-// 빛 번짐(블룸)은 원래 흐릿한 효과라 절반 해상도로 계산해도 티가 거의 안 난다 — GPU 부담은 크게 준다
-{ const set = bloom.setSize.bind(bloom); bloom.setSize = (w, h) => set(Math.round(w / 2), Math.round(h / 2)); }
-// 블룸을 더할 때 투명도(알파)는 건드리지 않게 → TV 화면 구멍이 블룸에 메워지지 않는다
-Object.assign(bloom.blendMaterial, {
-  blending: THREE.CustomBlending,
-  blendEquation: THREE.AddEquation, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor,
-  blendEquationAlpha: THREE.AddEquation, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
-});
-// 마무리 색감: 화면 가장자리를 살짝 어둡게(비네팅) + 채도를 조금 올려 따뜻한 밤 느낌. 투명도(TV 화면 구멍)는 그대로 둔다
-const grade = new ShaderPass({
-  uniforms: { tDiffuse: { value: null }, uVig: { value: 0.32 }, uSat: { value: 1.07 } },
-  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float uVig, uSat; varying vec2 vUv;
-    void main(){
-      vec4 c = texture2D(tDiffuse, vUv);
-      float l = dot(c.rgb, vec3(.2126, .7152, .0722));
-      c.rgb = max(mix(vec3(l), c.rgb, uSat), 0.0);
-      vec2 d = vUv - .5; d.x *= 1.15;
-      c.rgb *= 1.0 - uVig * smoothstep(.28, .82, length(d) * 1.25);
-      gl_FragColor = c;
-    }`,
-});
-composer.addPass(grade);
-composer.addPass(new OutputPass());
+// 렌더러 + 후처리(픽셀 정리 → 빛 번짐 → 색감)는 src/render.js — 실험실(lab)과 같은 설정
+const view3d = createRender({ scene, camera, lowSpec: isTouch });
+const { renderer, composer, bloom, grade } = view3d;
+$('app').appendChild(renderer.domElement);
 
 const shared = { uTime: { value: 0 }, uScale: { value: 600 } };
 function resize() {
   const w = innerWidth, h = innerHeight;
-  renderer.setSize(w, h);
-  renderer.setPixelRatio(renderPR(w, h));
-  composer.setPixelRatio(renderPR(w, h));
-  composer.setSize(w, h);
+  view3d.resize(w, h);
   labelRenderer.setSize(w, h);
   music?.setSize(w, h);
   camera.aspect = w / h;
@@ -205,12 +142,14 @@ function applyTheme(id, { announce = true } = {}) {
 const npc = new Character({ skin: '#ffe0c7', hair: '#c9a2ff', shirt: '#6a4bb5', pants: '#3a2f5a', hat: 'wizard' }, { name: '✨ 루미 · 가루 상인', kind: 'npc' });
 npc.root.position.set(NPC.x, 0, NPC.z);
 npc.root.rotation.y = NPC.ry;
+npc.root.userData.ds = 'npc-lumi'; // 디자인 시스템 이름표
 scene.add(npc.root);
 
 // NPC 보리 (장작 창고지기)
 const keeper = new Character({ skin: '#f6c9a0', hair: '#6b4a2b', shirt: '#5f8a45', pants: '#5a4330', hat: 'beanie' }, { name: '📦 보리 · 장작 창고지기', kind: 'npc' });
 keeper.root.position.set(KEEPER.x, 0, KEEPER.z);
 keeper.root.rotation.y = KEEPER.ry;
+keeper.root.userData.ds = 'npc-bori'; // 디자인 시스템 이름표
 scene.add(keeper.root);
 
 // 🏡 캠핑장 주민 (v1.22.0): 숲길 8명 · 캠핑장 4명 · 날씨 · 밤 주민 · 찻집 할머니

@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { Character } from './character.js';
 import { toon, glow } from './toon.js';
+import { create as createBench } from './elements/bench.js';
 import { hillHeight } from '../shared/config.js';
 import { RESIDENTS, residentPos, residentActive, RESIDENT_RANGE } from '../shared/residents.js';
 
@@ -26,13 +27,6 @@ function stool() {
   const g = new THREE.Group();
   g.add(at(cyl(0.2, 0.2, 0.06, wood, 8), 0, 0.4, -0.05));
   for (const [x, z] of [[-0.12, -0.15], [0.12, -0.15], [0, 0.08]]) g.add(at(cyl(0.025, 0.03, 0.4, woodDark, 5), x, 0.2, z));
-  return g;
-}
-function bench() {
-  const g = new THREE.Group();
-  g.add(at(box(1.3, 0.07, 0.38, wood), 0, 0.42, -0.06));
-  for (const x of [-0.55, 0.55]) g.add(at(box(0.08, 0.42, 0.32, woodDark), x, 0.21, -0.06));
-  g.add(at(box(1.3, 0.28, 0.05, wood), 0, 0.68, -0.27));
   return g;
 }
 function rocker() { // 흔들의자: rock 그룹을 앞뒤로 기울인다
@@ -106,7 +100,7 @@ const PROPS = {
     return { dog, tail, legs, leash, head };
   },
   read(r, ch) {
-    const b = bench(); ch.root.add(b);
+    const b = createBench({ style: 'small' }).group; ch.root.add(b);
     const book = new THREE.Group();
     // 책장은 읽는 사람 쪽(-z)을 보고, 표지는 바깥(+z)을 본다. 위쪽이 앞으로 기울어 무릎 위에서 펼쳐 든 모양
     for (const s of [-1, 1]) { const pg = at(box(0.15, 0.2, 0.012, cream), s * 0.075, 0, 0); pg.rotation.y = s * 0.35; book.add(pg); }
@@ -246,7 +240,10 @@ export function createResidents(scene) {
     ch.root.position.set(p.x, hillHeight(p.x, p.z), p.z);
     ch.root.rotation.y = p.ry;
     ch.setAnim(r.pose === 'guitar' ? 'guitar' : SITTERS.has(r.pose) ? 'sit' : 'idle');
+    ch.root.userData.ds = `resident-${r.id}`; // 디자인 시스템 이름표 (소품도 함께)
+    const n0 = scene.children.length;
     const props = PROPS[r.pose]?.(r, ch, scene) || {};
+    for (let k = n0; k < scene.children.length; k++) scene.children[k].userData.ds ??= `resident-${r.id}`; // 장면에 따로 놓는 소품 (강아지 등)
     ch.poseFn = POSES[r.pose]?.(r);
     if (r.outfit) ch.setOutfit(r.outfit);
     scene.add(ch.root);

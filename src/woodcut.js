@@ -27,6 +27,7 @@ export function makeHalf() {
   face.position.x = 0.001;
   g.add(bk, face);
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  g.userData.ds = 'split-log'; // 디자인 시스템 이름표 (쪼갠 장작: 그루터기 · 품 · 손)
   return g;
 }
 /** 통짜 통나무 (손에 들고 옮길 때) */
@@ -52,6 +53,7 @@ export class Woodcut {
       const crack = new THREE.Mesh(crackGeo, crackMat);
       crack.position.y = H + 0.004;
       root.add(L, Rh, crack);
+      root.userData.ds = 'woodyard'; // 디자인 시스템 이름표 (그루터기 위 통나무)
       scene.add(root);
       return { s, root, L, R: Rh, crack, state: 'log', hits: 0, gap: 0, bounce: 0, anim: null };
     });

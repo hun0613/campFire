@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <title>불멍 디자인 시스템</title>
+  <link rel="preload" href="/fonts/Moneygraphy-Rounded.otf" as="font" type="font/otf" crossorigin />
+  <!-- 게임 UI 와 같은 토큰 · 스타일 (버튼 · 아이콘 미리보기용). 실험실 배치는 lab.css 가 덮는다 -->
+  <link rel="stylesheet" href="/src/tokens.css" />
+  <link rel="stylesheet" href="/src/style.css" />
+  <link rel="stylesheet" href="/src/lab/lab.css" />
+</head>
+<body class="lab">
+  <header class="lab-top">
+    <div class="lab-brand">🔥 불멍 디자인 시스템 <small>Atomic Design · 게임 요소 카탈로그</small></div>
+    <input id="labSearch" class="lab-search" type="search" placeholder="요소 찾기 (예: 벤치, lamp)" />
+    <div class="lab-legend"><span class="st st-none">미점검</span><span class="st st-ok">괜찮음</span><span class="st st-review">검토 필요</span><span class="st st-design">디자인 필요</span></div>
+  </header>
+  <nav id="labNav" class="lab-nav"></nav>
+  <main class="lab-main">
+    <div id="labStage" class="lab-stage">
+      <div id="labView" class="lab-view"></div>
+      <div id="labHtml" class="lab-html hidden"></div>
+      <div id="labPicker" class="lab-picker hidden"></div>
+      <div id="labLoading" class="lab-loading">게임 월드를 만드는 중…</div>
+    </div>
+    <section id="labInfo" class="lab-info"></section>
+  </main>
+  <aside id="labSide" class="lab-side"></aside>
+  <script type="module" src="/src/lab/lab.js"></script>
+</body>
+</html>

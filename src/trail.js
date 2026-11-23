@@ -6,6 +6,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { toon, glow, radialTexture } from './toon.js';
 import { fingerpost } from './signs.js';
 import { RESIDENTS } from '../shared/residents.js';
+import { create as createBench } from './elements/bench.js';
+import { tag } from './ds/tag.js';
 import { TRAIL, GATES, SPOTS, ZONES, LAKE, POND, STREAM, HILL, BOUNDS, FENCE, HILL_BENCH, HILL_CAT, LAKE_BENCH, SUNSET, WINDMILL, hillHeight, trailCurve, zonePath } from '../shared/config.js';
 
 const tmpM = new THREE.Matrix4(), tmpP = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpE = new THREE.Euler(), tmpS = new THREE.Vector3();
@@ -150,7 +152,7 @@ const inRot = (x, z, r) => {
   return Math.abs(along) <= r.len / 2 && Math.abs(side) <= r.w / 2;
 };
 
-export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = false }) {
+export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = false, placeEl, T }) {
   const loop = trailCurve(TRAIL.loop, true, 1.5);
   const spurs = TRAIL.spurs.map((s) => trailCurve(s, false, 1.2));
   const stream = trailCurve(STREAM, false, 1.5);
@@ -160,6 +162,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
   const lanterns = []; // 랜턴 자리 (들판 풀이 겹치지 않게)
 
   // ---------- 흙길
+  T.set('trail-path');
   const { map, alpha } = dirtTextures();
   const pathMat = toon('#ffffff', { map, alphaMap: alpha, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
   const addRibbon = (pts, closed, w = TRAIL.width) => {
@@ -171,6 +174,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
   for (const s of spurs) addRibbon(s, false, TRAIL.width - 0.3);
 
   // ---------- 물 (호수 · 연못 · 개울)
+  T.set('water');
   // 밤 정원 연못 느낌: 짙은 남색 물 위에 별빛 같은 반짝임, 잉어 · 분수 둘레로 퍼지는 가는 물결 고리, 물가 석등 불빛이 보는 쪽으로 길게 비친다
   const LANTERNS = [
     ...[2.45, -0.75].map((a) => [POND.x + Math.cos(a) * (POND.r + 1.0), POND.z + Math.sin(a) * (POND.r + 1.0)]),
@@ -265,6 +269,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
     scene.add(instanced(new THREE.ConeGeometry(0.06, 1.0, 4), toon('#ffffff'), reeds));
   }
   // ---------- 분수 (호숫가 · 개울 다리 연못): 돌 수반에서 물줄기가 솟고 물방울이 흩어진다.
+  T.set('fountain');
   // 물 밑에서 은은한 조명이 비추고, 빛 색은 금빛 → 장밋빛 → 물빛 → 라일락으로 천천히 바뀐다 (가까이 가면 실제 조명도 켜진다)
   const GLOW = ['#ffc77a', '#ff9ec8', '#8fe3ff', '#c8a8ff'].map((c) => new THREE.Color(c));
   const glowNow = new THREE.Color('#ffc77a');
@@ -368,6 +373,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
   }
   // (물결 반짝임은 물 셰이더가 직접 그린다)
   // ---------- 밤 정원 연못: 둥근 바위 · 석등 · 연잎 · 떠 있는 꽃잎 · 헤엄치는 비단잉어
+  T.set('garden-pond');
   {
     let seed = 313; const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     const deckAng = Math.atan2(SPOTS.find((q) => q.id === 'lake').z - LAKE.z, SPOTS.find((q) => q.id === 'lake').x - LAKE.x);
@@ -448,6 +454,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
   }
 
   // ---------- 나무다리 · 데크 (올라서는 곳)
+  T.set('deck');
   const plankMat = toon('#8a5d3b'), railMat = toon('#6e472b');
   function deck({ x, z, ang, len, w, h, rails = true, cap = false }) {
     decks.push({ x, z, ang, len, w, h });
@@ -484,7 +491,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
     const len = 7.5, cx = lakeSpot.x + Math.cos(ang) * (len / 2 - 1.2), cz = lakeSpot.z + Math.sin(ang) * (len / 2 - 1.2);
     deck({ x: cx, z: cz, ang, len, w: 2.6, h: 0.3, cap: true });
     const ex = lakeSpot.x + Math.cos(ang) * (len - 2.6), ez = lakeSpot.z + Math.sin(ang) * (len - 2.6);
-    scene.add(bench(LAKE_BENCH.x, LAKE_BENCH.z, LAKE_BENCH.y, LAKE_BENCH.ry)); // 앉을 수 있는 벤치 (config LOUNGE_SEATS)
+    placeEl(createBench({ style: 'trail', lowSpec }), LAKE_BENCH.x, LAKE_BENCH.y, LAKE_BENCH.z, LAKE_BENCH.ry); // 앉을 수 있는 벤치 (config LOUNGE_SEATS)
   }
 
   // ---------- 물가는 못 들어간다 (데크 · 다리 위는 비운다)
@@ -501,6 +508,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
   for (let i = 0; i < stream.length; i++) water(stream[i][0], stream[i][1], 1.0);
 
   // ---------- 숲 경계 울타리: 걸어 다닐 수 있는 맵 끝 (여기서 더는 못 나간다는 게 보이게)
+  T.set('fence');
   {
     const posts = [], rails = [];
     const x0 = BOUNDS.minX - 0.8, x1 = BOUNDS.maxX + 0.8, z0 = BOUNDS.minZ - 0.8, z1 = BOUNDS.maxZ + 0.8;
@@ -526,6 +534,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
   }
 
   // ---------- 풍차: 북쪽 숲 경계 너머, 노을 하늘을 배경으로 천천히 도는 날개
+  T.set('windmill');
   {
     const W = WINDMILL, H = 26, white = toon('#e9e6ef'), g = new THREE.Group();
     g.position.set(W.x, 0, W.z); g.rotation.y = Math.atan2(-W.x, -W.z); // 캠핑장 쪽을 본다
@@ -544,6 +553,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
 
   const hazeMats = []; // 흐리거나 비 · 눈 오는 날엔 옅게
   // ---------- 🌅 노을 쪽 숲 너머 낮게 깔린 분홍 · 보랏빛 안개 (나무가 검은 실루엣으로 보이게)
+  T.set('sunset-haze');
   {
     // 위아래 · 좌우 가장자리가 모두 부드럽게 사라지는 안개 결 (판 모서리가 네모로 보이지 않게)
     const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64;
@@ -569,6 +579,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
   }
 
   // ---------- 노을 지는 언덕
+  T.set('hill');
   {
     const R = HILL.r, seg = 28;
     const geo = new THREE.PlaneGeometry(R * 2, R * 2, seg, seg);
@@ -580,16 +591,8 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
     const hill = new THREE.Mesh(geo, hillMat); hill.position.set(HILL.x, 0, HILL.z); hill.receiveShadow = true; scene.add(hill);
     // 꼭대기: 노을을 바라보는 등받이 없는 나무 벤치 하나 + 한쪽 끝에 앉은 고양이 (노을 앞 실루엣)
     {
-      const B = HILL_BENCH, g = new THREE.Group();
-      g.position.set(B.x, hillHeight(B.x, B.z), B.z); g.rotation.y = B.ry;
-      const wood = toon('#5a3b26'), dark = toon('#3e2819');
-      const seat = new THREE.Mesh(new THREE.BoxGeometry(B.len, 0.09, 0.42), wood); seat.position.y = 0.5; seat.castShadow = true; g.add(seat);
-      for (const sx of [-B.len / 2 + 0.3, B.len / 2 - 0.3]) {
-        for (const sz of [-0.15, 0.15]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.48, 0.08), dark); l.position.set(sx, 0.24, sz); g.add(l); }
-        const br = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.62, 0.05), dark); br.position.set(sx + (sx < 0 ? 0.24 : -0.24), 0.25, 0); br.rotation.z = sx < 0 ? -0.75 : 0.75; g.add(br); // 비스듬한 버팀대
-      }
-      scene.add(g);
-      addCol(B.x, B.z, 0.25);
+      const B = HILL_BENCH;
+      placeEl(createBench({ style: 'long', length: B.len, lowSpec }), B.x, hillHeight(B.x, B.z), B.z, B.ry);
       // 고양이: 벤치 끝에 앉아 노을을 본다. 꼬리를 살랑이고 이따금 고개를 돌린다
       const C = HILL_CAT, cat = new THREE.Group();
       cat.position.set(C.x, hillHeight(B.x, B.z) + 0.545, C.z); cat.rotation.y = B.ry;
@@ -602,7 +605,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
       for (const sx of [-0.06, 0.06]) { const paw = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 4), fur); paw.position.set(sx, 0.02, 0.1); cat.add(paw); }
       const tail = new THREE.Group(); tail.position.set(0.02, 0.05, -0.16); cat.add(tail);
       const tl = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.028, 0.32, 6), fur); tl.geometry.translate(0, 0.16, 0); tl.rotation.x = -1.2; tail.add(tl);
-      scene.add(cat);
+      scene.add(tag(cat, 'hill-cat'));
       updaters.push((t) => {
         tail.rotation.z = Math.sin(t * 1.4) * 0.35 + Math.sin(t * 3.1) * 0.08;
         const look = Math.sin(t * 0.21) > 0.75 ? Math.sin(t * 0.6) * 0.9 : 0; // 가끔 옆을 돌아본다
@@ -615,6 +618,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
   }
 
   // ---------- 출입구: 나무 아치 + 랜턴
+  T.set('trail-gate');
   const archMat = toon('#7a5233');
   const lampHead = glow('#ffcf85', 3.2);
   for (const gt of GATES) {
@@ -630,6 +634,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
   }
 
   // ---------- 갈림길 표지판 (v1.19.1): 숲길에서 캠핑장 출입구로 꺾이는 곳마다 「🔥 불멍존」 화살표 팻말
+  T.set(null);
   //   팻말 끝이 출입구 쪽을 가리킨다. 숲길을 따라 어느 쪽에서 와도 읽히게 앞뒤 양면 (뒷면은 화살표 방향을 반대로)
   for (const sp of TRAIL.spurs) {
     const [jx, jz] = sp[sp.length - 1], [px, pz] = sp[sp.length - 2];
@@ -641,6 +646,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
   }
 
   // ---------- 숲길 랜턴: 길을 따라 듬성듬성, 언덕 근처는 별이 잘 보이게 비운다
+  T.set('trail-lantern');
   {
     const posts = [], heads = [], pools = [];
     let side = 1;
@@ -672,6 +678,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
   }
 
   // ---------- 들판: 🌸 핑크뮬리 · 🌾 갈대 (숲길이 가운데를 지나간다). 바람에 살랑 — 흔들림은 셰이더에서 (폰 부담 적게)
+  T.set(null);
   const swayTime = { value: 0 };
   updaters.push((t) => { swayTime.value = t; });
   // 가리는 부분 비우기: 안쪽은 깨끗하게 완전히 비우고, 가장자리 얇은 띠만 4×4 규칙 무늬(Bayer)로 부드럽게.
@@ -781,6 +788,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
   const cherryTrees = [];
   ZONES.forEach((zn, zi) => {
     const path = zonePaths[zi], L = lenOf(path), seed = 101 + zi * 37;
+    T.set(`field-${zn.kind}`);
     if (zn.kind === 'muhly') {
       const tints = ['#ffffff', '#ffe6f1', '#f6d2e4', '#ffeef6'];
       // v1.21.2: 두 배 넘게 빽빽하게, 길 가까이는 사람 키보다 높게(최대 약 2.6m) 길 위로 휘어 분홍 터널처럼
@@ -886,6 +894,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
     }
   });
   // 벚나무: 길 위로 휜 굵은 줄기 · 가지 + 크고 밝은 꽃구름, 가지 끝에 매달린 종이 등불
+  T.set('cherry-tree');
   if (cherryTrees.length) {
     const trunks = [], branches = [], blooms = [], lanterns2 = [], strings = [];
     const bloomColors = ['#ffc0d9', '#ffb0cf', '#ffd6e6', '#f7a6c6', '#ffe4ee', '#ffcbe0'];
@@ -929,6 +938,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
       for (const l of lanterns2) { const sp = new THREE.Sprite(glowMat); sp.position.set(l.x, l.y, l.z); sp.scale.setScalar(1.1); scene.add(sp); }
     }
     // 흩날리는 꽃잎 (밝게) + 떠다니는 따뜻한 불티
+    T.set('cherry-petal');
     const PN = lowSpec ? 110 : 230, fall = [];
     const pm = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.08, 0.06), new THREE.MeshBasicMaterial({ color: '#ff9fc6', side: THREE.DoubleSide, transparent: true, opacity: 0.95 }), PN);
     pm.frustumCulled = false; scene.add(pm);
@@ -964,6 +974,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
   }
 
   // 나무를 심지 않을 곳 (길 · 물 · 언덕 · 데크 · 들판)
+  T.set('tree');
   function treeBlocked(x, z) {
     if (distToPolyline(x, z, loop, true) < TRAIL.width / 2 + 4.2) return true; // 카메라가 나무 속에 묻히지 않게 넉넉히
     for (const s of spurs) if (distToPolyline(x, z, s, false) < TRAIL.width / 2 + 1.8) return true;
@@ -986,6 +997,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
     return hillHeight(x, z);
   }
   // 🌧 비 오는 날: 랜턴 옆 길 위 물웅덩이 (짙은 물빛 + 랜턴 불빛이 길게 비친다). 평소에는 숨김
+  T.set('puddle');
   const puddles = new THREE.Group(); puddles.visible = false; scene.add(puddles);
   {
     let ps = 31; const pr = () => ((ps = (ps * 16807) % 2147483647) / 2147483647);
@@ -1014,6 +1026,7 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
     updaters.push((t) => { if (puddles.visible) gm.material.opacity = 0.7 + 0.15 * Math.sin(t * 5.3) * Math.sin(t * 3.1); });
   }
 
+  T.set(null);
   return {
     treeBlocked, heightAt, loop, spurs, chairs,
     /** 흔들의자 흔들기 (a: 기울기 rad) */
@@ -1040,12 +1053,3 @@ export function buildTrail(scene, { addCol, updaters, lightSpots, lowSpec = fals
   };
 }
 
-/** 등받이 나무 벤치 (ry: 앉은 사람이 보는 방향) */
-function bench(x, z, y, ry) {
-  const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = ry;
-  const wood = toon('#8b5a35'), leg = toon('#5c3b22');
-  const seat = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.1, 0.5), wood); seat.position.y = 0.45; seat.castShadow = true; g.add(seat);
-  const back = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.45, 0.08), wood); back.position.set(0, 0.78, -0.24); back.rotation.x = -0.12; g.add(back);
-  for (const sx of [-0.75, 0.75]) for (const sz of [-0.18, 0.18]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.45, 0.08), leg); l.position.set(sx, 0.22, sz); g.add(l); }
-  return g;
-}

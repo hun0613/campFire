@@ -64,6 +64,7 @@ export class Precip {
       }));
       this.rain.frustumCulled = false;
       this.rain.visible = false;
+      this.rain.userData.ds = 'fx-rain'; // 디자인 시스템 이름표
       scene.add(this.rain);
     }
     // 눈: 둥근 점. 천천히 흔들리며 내린다
@@ -94,6 +95,7 @@ export class Precip {
       }));
       this.snow.frustumCulled = false;
       this.snow.visible = false;
+      this.snow.userData.ds = 'fx-snow';
       scene.add(this.snow);
     }
   }

@@ -101,12 +101,14 @@ export class GuestbookStand {
     root.add(bar, post2, sign);
     root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
+    root.userData.ds = 'guestbook'; // 디자인 시스템 이름표
     scene.add(root);
 
     // 바닥에 따뜻한 빛 웅덩이
     const pool = new THREE.Mesh(new THREE.PlaneGeometry(5, 5), new THREE.MeshBasicMaterial({ map: radialTexture(), color: '#ffb766', transparent: true, opacity: 0.32, depthWrite: false, blending: THREE.AdditiveBlending }));
     pool.rotation.x = -Math.PI / 2;
     pool.position.set(pos.x, 0.03, pos.z);
+    pool.userData.ds = 'guestbook';
     scene.add(pool);
     this.pool = pool;
     // 실제 조명 (독서대와 주변을 비춘다)

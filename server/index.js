@@ -15,6 +15,7 @@ import * as daily from './daily.js';
 import * as dailyReport from './dailyReport.js';
 import { handleAdmin, adminOn } from './admin.js';
 import * as board from './board.js';
+import { handleDs } from './dscheck.js';
 import { RESIDENTS, ALWAYS, STAMP_GOALS, RESIDENT_RANGE, MOODS, residentPos, residentActive, residentPowder } from '../shared/residents.js';
 import { search, searchesLeft, nextReset, videoInfo, known, addRecent, recentList, hasKey, quotaState, restoreQuota } from './youtube.js';
 
@@ -53,10 +54,12 @@ server.on('request', (req, res) => {
 // 관리자 페이지: /admin → admin.html, /api/admin/* → 관리자 API
 server.on('request', (req, res) => {
   if (req.url === '/admin' || req.url === '/admin/') req.url = '/admin.html';
+  if (req.url === '/lab' || req.url === '/lab/') req.url = '/lab.html'; // 불멍 디자인 시스템
+  if (!isProd && req.url?.startsWith('/api/ds/')) handleDs(req, res); // 불멍 디자인 시스템의 디자인 점검 → 노션 (로컬 서버에서만)
   if (req.url?.startsWith('/api/admin/')) handleAdmin(req, res, () => ({ players: players.size }), { onBoardChange: () => broadcast({ t: 'boardUpdate' }) });
 });
 const passThrough = (handler) => (req, res) => {
-  if (req.url !== '/api/info' && !req.url?.startsWith('/api/admin/')) handler(req, res);
+  if (req.url !== '/api/info' && !req.url?.startsWith('/api/admin/') && !(!isProd && req.url?.startsWith('/api/ds/'))) handler(req, res);
 };
 
 if (!isProd) {

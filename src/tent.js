@@ -98,6 +98,7 @@ export class TentInterior {
     this.cur = null;
     this.g = new THREE.Group();
     this.g.visible = false;
+    this.g.userData.ds = 'tent-interior'; // 디자인 시스템 이름표
     scene.add(this.g);
     const g = this.g;
     this.bulbs = []; // 카메라가 바짝 붙으면 숨길 빛나는 것들 (줄전구 · 무드등)

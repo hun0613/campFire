@@ -103,6 +103,7 @@ export class Monitor {
     this.root.add(this.lp);
     this.root.traverse((o) => { if (o.isMesh && o !== this.screen && o !== this.hit) { o.castShadow = true; o.receiveShadow = true; } });
 
+    this.root.userData.ds = 'tv-monitor'; // 디자인 시스템 이름표
     scene.add(this.root);
     this.root.updateMatrixWorld(true);
     this.lpPos = this.lp.localToWorld(new THREE.Vector3(0, 0, 0));

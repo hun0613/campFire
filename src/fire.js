@@ -96,6 +96,7 @@ export class FirePit {
     const g = new THREE.Group();
     g.position.copy(this.pos);
     if (this.stove) g.position.y = 0.15; // 텐트 데크 위
+    g.userData.ds = this.stove ? 'tent-stove' : 'campfire'; // 디자인 시스템 이름표 (부품은 아래에서 따로)
     scene.add(g);
     this.group = g;
 
@@ -109,12 +110,14 @@ export class FirePit {
       s.rotation.set(Math.random() * 3, Math.random() * 3, 0);
       s.scale.set(1.1 + Math.random() * 0.3, 0.8 + Math.random() * 0.3, 1.0 + Math.random() * 0.3);
       s.castShadow = true;
+      s.userData.ds = 'fire-ring';
       g.add(s);
     }
     if (!this.stove) {
       const ash = new THREE.Mesh(new THREE.CircleGeometry(0.62, 20), toon('#3a302b'));
       ash.rotation.x = -Math.PI / 2;
       ash.position.y = 0.025;
+      ash.userData.ds = 'fire-ring';
       g.add(ash);
     }
 
@@ -141,12 +144,14 @@ export class FirePit {
     this.logs.visible = false;
     this.logK = 1;
     if (this.stove) this.logs.position.y = BOWL_TOP - 0.06;
+    this.logs.userData.ds = 'log-pile';
     g.add(this.logs);
 
     // 불꽃
     this.flames = flamePoints(120, { size: 0.42, rise: 1.5, spread: 0.4, speed: 1.05, core: '#ffd98a', tip: '#ff4a10', bright: 0.75 }, shared);
     this.cores = flamePoints(40, { size: 0.3, rise: 0.7, spread: 0.2, speed: 1.6, core: '#fff3c8', tip: '#ffb84a', bright: 0.8 }, shared);
     this.embers = flamePoints(45, { size: 0.07, rise: 4.5, spread: 0.9, speed: 0.22, core: '#ffd38a', tip: '#ff7a2a', bright: 3.0 }, shared);
+    for (const f of [this.flames, this.cores, this.embers]) f.userData.ds = 'fire-flame';
     g.add(this.flames, this.cores, this.embers);
     this.lift = 0; // 불꽃 바닥 높이 (텐트 화로는 그릇 위)
     this.brightK = 1; // 텐트 화로도 바깥 모닥불과 같은 불 (밝기 · 빛무리 · 바닥 불빛 모두 같다)
@@ -157,10 +162,12 @@ export class FirePit {
     this.halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTexture(), color: '#ff8a3a', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
     this.halo.position.y = 0.8;
     this.halo.scale.setScalar(3.2);
+    this.halo.userData.ds = 'fire-flame';
     g.add(this.halo);
     this.groundGlow = new THREE.Mesh(new THREE.PlaneGeometry(7, 7), new THREE.MeshBasicMaterial({ map: radialTexture(), color: '#ff8a3a', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
     this.groundGlow.rotation.x = -Math.PI / 2;
     this.groundGlow.position.y = 0.04;
+    this.groundGlow.userData.ds = 'fire-flame';
     g.add(this.groundGlow);
 
     // 좌석
@@ -170,6 +177,7 @@ export class FirePit {
       this.seatPos.push(s);
       if (this.stove) continue; // 텐트 화로 자리는 둥근 소파 (tent.js)
       const seat = def.kind === 'tent' ? this.#chair(i) : this.#stump();
+      seat.userData.ds = def.kind === 'tent' ? 'camp-chair' : 'stump-seat';
       seat.position.set(s.x - def.x, 0, s.z - def.z);
       seat.rotation.y = s.ry;
       g.add(seat);

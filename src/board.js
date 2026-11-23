@@ -65,6 +65,7 @@ export class NoticeBoard {
     this.halo = halo;
     root.add(lantern, halo);
     root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    root.userData.ds = 'notice-board'; // 디자인 시스템 이름표
     scene.add(root);
 
     // 실제 조명은 LightPool 이 가까이 있을 때만 켠다

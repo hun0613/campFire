@@ -27,6 +27,7 @@ function makeBeacon(scene, { x, z, color, icon, title, sub }) {
   });
   const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.3, 26, 20, 1, true), mat);
   pillar.position.set(x, 13, z);
+  pillar.userData.ds = 'guide-beacon'; // 디자인 시스템 이름표
   scene.add(pillar);
 
   const ring = new THREE.Mesh(
@@ -35,6 +36,7 @@ function makeBeacon(scene, { x, z, color, icon, title, sub }) {
   );
   ring.rotation.x = -Math.PI / 2;
   ring.position.set(x, 0.05, z);
+  ring.userData.ds = 'guide-beacon'; // 디자인 시스템 이름표
   scene.add(ring);
 
   // 바깥 div 는 CSS2DRenderer 가 transform 으로 위치를 잡으므로, 애니메이션은 안쪽(.beacon)에만 건다
@@ -47,6 +49,7 @@ function makeBeacon(scene, { x, z, color, icon, title, sub }) {
   wrap.appendChild(el);
   const label = new CSS2DObject(wrap);
   label.position.set(x, 3.8, z);
+  label.userData.ds = 'guide-beacon'; // 디자인 시스템 이름표
   scene.add(label);
   return { x, z, mat, ring, el, distEl: el.querySelector('.b-dist') };
 }

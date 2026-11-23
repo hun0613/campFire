@@ -80,6 +80,7 @@ export class Particles {
     this.points = new THREE.Points(geo, mat);
     this.points.frustumCulled = false;
     this.points.renderOrder = additive ? 5 : 4;
+    this.points.userData.ds = 'fx-particles'; // 디자인 시스템 이름표
     scene.add(this.points);
   }
 

@@ -2,8 +2,11 @@ import * as THREE from 'three';
 import { toon, glow, radialTexture, textTexture, mulberry32 } from './toon.js';
 import { createSky } from './sky.js';
 import { fingerpost, hangingSign } from './signs.js';
-import { CFG, TENTS, PITS, STUMPS, NPC, KEEPER, WOODYARD, BOUNDS, FENCE, GATES, SUNSET, TENT_WH, TENT_RH, EGG } from '../shared/config.js';
+import { CFG, TENTS, PITS, STUMPS, NPC, KEEPER, WOODYARD, BOUNDS, FENCE, GATES, SUNSET, TENT_WH, TENT_RH, EGG, PLAZA_BENCHES } from '../shared/config.js';
 import { buildTrail } from './trail.js';
+import { create as createBench } from './elements/bench.js';
+import { placeElement } from './elements/place.js';
+import { tag, tagAdds } from './ds/tag.js';
 
 const W = { minX: -60, maxX: 60, minZ: -42, maxZ: 42 };
 const tmpM = new THREE.Matrix4();
@@ -175,13 +178,19 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   // 카메라와 보는 곳 사이에 서면 반투명해지는 기둥들 (main.js 에서 처리)
   const occluders = [];
   const addCol = (x, z, r) => colliders.push({ x, z, r });
+  // 떼어 낸 요소(src/elements/)를 놓는다. 놓은 요소는 매 프레임 update · 테마가 바뀌면 setTheme
+  const elements = [];
+  const placeEl = (el, x, y, z, ry) => placeElement(scene, el, x, y, z, ry, { addCol, list: elements });
   const rand = mulberry32(42);
+  const T = tagAdds(scene); // 디자인 시스템 이름표: 아래 구역마다 T.set('요소') — 그 뒤에 scene.add 한 물체에 붙는다 (src/ds)
 
   // ---------- 하늘 (sky.js). 예전 별 배치가 쓰던 난수를 그대로 소비해서 나머지 배치(나무 등)가 바뀌지 않게 한다
+  T.set('sky');
   for (let i = 0; i < 2200; i++) { rand(); rand(); rand(); if (!(rand() < 0.08)) rand(); }
   const sky = createSky(scene, { lowSpec });
 
   // ---------- 조명
+  T.set('light');
   const hemi = new THREE.HemisphereLight('#6f7fd8', '#1a2418', 0.45);
   scene.add(hemi);
   const ambient = new THREE.AmbientLight('#3a3f7a', 0.18);
@@ -202,6 +211,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   const sunsetOffset = new THREE.Vector3(SUNSET.x, 0.18, SUNSET.z).normalize().multiplyScalar(60);
 
   // ---------- 지면
+  T.set('ground');
   const groundTex = { grass: groundTexture() };
   const groundMat = toon('#ffffff', { map: groundTex.grass });
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(W.maxX - W.minX, W.maxZ - W.minZ), groundMat);
@@ -219,9 +229,11 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   scene.add(outer);
 
   // ---------- 🌲 숲길 (둘레길) · 쉼터
-  const trail = buildTrail(scene, { addCol, updaters, lightSpots, lowSpec });
+  T.set(null);
+  const trail = buildTrail(scene, { addCol, updaters, lightSpots, lowSpec, placeEl, T });
 
   // ---------- 울타리
+  T.set('fence');
   {
     const posts = [];
     const rails = [];
@@ -254,7 +266,8 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
 
   // ---------- 가로등
   const lampHeadMat = glow('#ffcf85', 4);
-  function lamp(x, z, withLight, color = '#ffb565', intensity = 9) {
+  function lamp(x, z, withLight, color = '#ffb565', intensity = 9) { T.with('lamp', () => lampBody(x, z, withLight, color, intensity)); }
+  function lampBody(x, z, withLight, color, intensity) {
     const g = new THREE.Group();
     g.position.set(x, 0, z);
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 2.8, 8), toon('#3b3229'));
@@ -286,6 +299,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   for (const t of TENTS) if (Math.abs(t.x) > 1) lamp(t.x + 1.9, Math.sign(t.z) * 9.5, false);
 
   // ---------- 광장 전구 줄 (가운데 기둥에서 방사형)
+  T.set('string-lights');
   {
     const center = new THREE.Vector3(0, 5.2, 0);
     const cpole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 5.4, 8), toon('#6b4a2b'));
@@ -322,6 +336,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   }
 
   // ---------- 글램핑 텐트
+  T.set('tent');
   const canvasMat = toon('#f2e6cf', { emissive: new THREE.Color('#6a4520'), emissiveIntensity: 0.55, side: THREE.DoubleSide });
   const roofMat = toon('#eadbbd', { emissive: new THREE.Color('#5a3a18'), emissiveIntensity: 0.4, side: THREE.DoubleSide });
   const deckMat = toon('#9b6a43', {}); // 따로 만든 재질 (테마에서 색을 바꿔도 다른 나무 소품에 번지지 않게)
@@ -465,6 +480,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   }
 
   // ---------- 장작 패는 곳
+  T.set('woodyard');
   const stumpMeshes = [];
   {
     const barkMat = toon('#6e4529');
@@ -508,22 +524,10 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   }
 
   // ---------- 광장 꾸미기: 가장자리 벤치 4개(가운데를 바라봄) + 방명록 · 게시판 옆 꽃 화분
+  T.set('bench');
   {
-    const seatMat = toon('#a8743f'), legMat = toon('#5e4129');
-    const seatGeo = new THREE.BoxGeometry(2.0, 0.09, 0.55), backGeo = new THREE.BoxGeometry(2.0, 0.42, 0.08), legGeo = new THREE.BoxGeometry(0.1, 0.45, 0.5);
-    for (const a of [Math.PI * 0.25, Math.PI * 0.75, Math.PI * 1.25, Math.PI * 1.75]) {
-      const r = 8.6, x = Math.cos(a) * r, z = Math.sin(a) * r;
-      const b = new THREE.Group();
-      b.position.set(x, 0, z);
-      b.rotation.y = Math.atan2(-x, -z); // 광장 가운데를 본다
-      const seat = new THREE.Mesh(seatGeo, seatMat); seat.position.y = 0.47;
-      const back = new THREE.Mesh(backGeo, seatMat); back.position.set(0, 0.78, -0.27); back.rotation.x = -0.12;
-      b.add(seat, back);
-      for (const s of [-0.85, 0.85]) { const l = new THREE.Mesh(legGeo, legMat); l.position.set(s, 0.22, 0); b.add(l); }
-      b.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-      scene.add(b);
-      addCol(x, z, 1.0);
-    }
+    for (const b of PLAZA_BENCHES) placeEl(createBench({ style: 'plaza', lowSpec }), b.x, 0, b.z, b.ry); // 광장 가운데를 본다 (자리는 config 의 PLAZA_BENCHES: 앉는 자리와 같은 값)
+    T.set('flower-pot');
     const potMat = toon('#9b6a43'), soil = toon('#4a3324');
     const flowerCols = ['#ff8fb1', '#ffd36b', '#b8a2ff', '#ffffff', '#ff9f6b'];
     for (const [px, pz] of [[-5.9, 4.2], [5.9, 4.2], [0, 4.4]]) {
@@ -546,6 +550,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   }
 
   // ---------- 이정표 · 간판 (v1.22.2): 원목 화살표 이정표 + 광장 입구의 매달린 검은 간판
+  T.set(null);
   const post = (x, z, arms) => { fingerpost(scene, x, z, arms); addCol(x, z, 0.3); };
   post(WOODYARD.x - 8, WOODYARD.z + 1, [{ text: '장작 패는 곳', to: WOODYARD }, { text: '장작 창고', to: KEEPER }]);
   post(NPC.x - 6, NPC.z - 2.4, [{ text: '루미의 가루 공방', to: NPC }, { text: '장작 패는 곳', to: WOODYARD }]);
@@ -554,6 +559,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   addCol(-8.5, 9.5, 0.3);
 
   // ---------- 장작 창고 (장작 패는 곳 북서쪽). 앞이 트인 나무 오두막에 장작이 가득, 창고지기 보리가 앞에 선다
+  T.set('wood-shed');
   {
     const cx = KEEPER.x, cz = KEEPER.z - 2.6; // 오두막 가운데 (보리 뒤)
     const W2 = 2.8, D2 = 1.6, H = 2.5;          // 반폭 · 반깊이 · 처마 높이
@@ -598,6 +604,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   }
 
   // ---------- NPC 가루 공방 (동쪽 장작 마당, 큰길 남쪽, 광장 쪽을 본다)
+  T.set('lumi-shop');
   {
     const g = new THREE.Group();
     g.position.set(NPC.x, 0, NPC.z);
@@ -666,6 +673,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     for (const [dx, dz, r] of [[1.25, -1.1, 0.75], [1.25, 0, 0.75], [1.25, 1.1, 0.75], [-1.2, 0, 1.4], [-1.2, -1.6, 0.8], [-1.2, 1.6, 0.8]]) addCol(...at(dx, dz), r);
   }
   // ---------- 우중캠핑장: 바깥 모닥불마다 비를 막는 천막 (평소에는 숨김)
+  T.set('rain-tarp');
   // 불 위에 천이 바로 닿지 않게: 높이 4.1m, 한가운데는 뚫어서 열기 · 연기가 빠지고, 그 위에 작은 지붕을 띄워 비만 막는다 (이중 지붕)
   // 카메라가 위에서 내려다보면 불이 가리지 않게 반투명해진다 (update)
   const TARP_H = 4.1;
@@ -704,6 +712,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   }
 
   // ---------- 숨겨진 가루병 (이스터에그): 루미 공방 뒤 선반 너머 풀숲에 쓰러진 작은 병. 가까이 가야 반짝임이 보인다
+  T.set('secret');
   let egg;
   {
     egg = new THREE.Group();
@@ -736,6 +745,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   }
 
   // ---------- 나무
+  T.set('tree');
   {
     const pines = [];
     const rounds = [];
@@ -799,6 +809,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     const capMesh = instanced(new THREE.SphereGeometry(1, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), snowMat, caps, { cast: false });
     capMesh.visible = false; scene.add(capMesh); themeParts.snow.push(capMesh);
     // 크리스마스: 바늘잎나무마다 색색 전구 (캠핑장 안 · 가까운 숲만)
+    T.set('xmas-tree-lights');
     const lights = [];
     const lr = mulberry32(99);
     for (const t of pines) {
@@ -821,8 +832,10 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   }
 
   // ---------- 🎄 크리스마스: 광장 큰 트리 (가운데 전구 기둥을 감싼다) · 텐트 문 둘레 전구 줄과 리스 (평소에는 숨김)
+  T.set('xmas-tree');
   {
     const g = new THREE.Group();
+    const TG = tagAdds(g); // 크리스마스 소품은 한 그룹 안: 그룹 안에서도 이름표를 나눠 단다
     g.visible = false;
     scene.add(g);
     themeParts.xmas.push(g);
@@ -881,6 +894,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     colliders.push({ x: 0, z: 0, r: 2.3, theme: 'christmas' }); // 크리스마스 테마일 때만 부딪힌다 (main.js)
 
     // 텐트 문 둘레 색색 전구 줄 + 문 위 리스
+    T.set('xmas-tent-deco'); TG.set('xmas-tent-deco');
     const tb = [];
     const wreathGeo = new THREE.TorusGeometry(0.42, 0.13, 8, 20), bowGeo = new THREE.SphereGeometry(0.12, 8, 6);
     const wreathMat = toon('#2a6e3e'), bowMat = toon('#d8283b');
@@ -909,6 +923,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     g.add(bm);
     themeParts.xmasTwinkle.push({ mesh: bm, base: tb.map((b) => new THREE.Color(b.color).multiplyScalar(2.6)) });
     // 작은 트리: 텐트 문 앞 데크 양쪽 모서리 + 바깥 모닥불마다 TV 반대편에 두 그루 (모두 한 번에 그리도록 인스턴스로)
+    T.set('xmas-small-tree'); TG.set('xmas-small-tree');
     {
       const spots = [];
       const mr = mulberry32(31);
@@ -974,6 +989,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   }
 
   // ---------- 덤불, 풀, 꽃, 바위
+  T.set('bush');
   {
     const bushes = [];
     const tufts = [];
@@ -1011,19 +1027,20 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
       if (isPath(x, z)) continue;
       rocks.push({ x, y: 0.1, z, s: 0.25 + rand() * 0.4, rx: rand(), ry: rand() * 6, color: ['#8d8a94', '#a19ea8', '#77747f'][i % 3] });
     }
-    scene.add(instanced(new THREE.IcosahedronGeometry(1, 1), toon('#ffffff'), bushes));
+    scene.add(tag(instanced(new THREE.IcosahedronGeometry(1, 1), toon('#ffffff'), bushes), 'bush'));
     const tuftMesh = instanced(new THREE.ConeGeometry(0.07, 0.34, 3), toon('#ffffff'), tufts, { cast: false });
     const flowerMesh = instanced(new THREE.IcosahedronGeometry(0.07, 0), toon('#ffffff', { emissive: new THREE.Color('#3a3a55'), emissiveIntensity: 0.6 }), flowers, { cast: false });
-    scene.add(tuftMesh, flowerMesh);
+    scene.add(tag(tuftMesh, 'grass'), tag(flowerMesh, 'flower'));
     themeParts.grass.push(tuftMesh, flowerMesh); // 눈이 쌓이면 풀 · 꽃은 덮인다
     // 덤불 위 눈
     const bushCaps = instanced(new THREE.SphereGeometry(1, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), toon('#f4f7fd', { emissive: new THREE.Color('#2a3350'), emissiveIntensity: 0.35 }),
       bushes.map((b) => ({ x: b.x, y: b.y + b.s * 0.38, z: b.z, sx: b.s * 0.95, sy: b.s * 0.55, sz: b.s * 0.95 })), { cast: false });
     bushCaps.visible = false; scene.add(bushCaps); themeParts.snow.push(bushCaps);
-    scene.add(instanced(new THREE.DodecahedronGeometry(1, 0), toon('#ffffff'), rocks));
+    scene.add(tag(instanced(new THREE.DodecahedronGeometry(1, 0), toon('#ffffff'), rocks), 'rock'));
   }
 
   // ---------- 전구 (인스턴스)
+  T.set('bulb');
   {
     const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.075, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffffff' }), bulbs.length);
     const c = new THREE.Color();
@@ -1057,6 +1074,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   }
 
   // ---------- 반딧불이 (GPU 애니메이션)
+  T.set('firefly');
   {
     const n = 220;
     const anchor = new Float32Array(n * 3);
@@ -1101,6 +1119,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     return trail.heightAt(x, z); // 언덕 · 다리 · 데크
   }
 
+  T.set(null); // 여기부터 scene 에 더하는 물체(화로 · 주민 · 효과)는 각자 이름표를 단다
   return {
     tents,
     colliders,
@@ -1131,6 +1150,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
       roofMat.color.set(kind === 'snow' ? '#f6f8fc' : '#eadbbd'); // 텐트 지붕에도 눈
       deckMat.color.set(kind === 'wet' ? '#7d5537' : '#9b6a43');
       trail.setTheme(kind);
+      for (const el of elements) el.setTheme?.(th.id);
       sunsetLight.intensity = th.sky?.stars > 0.5 ? 0.3 : 0.08; // 흐린 날엔 노을빛도 거의 없다
     },
     update(t, dt, camera, focus, shared) {
@@ -1139,6 +1159,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
       sunsetLight.position.copy(focus).add(sunsetOffset); sunsetLight.target.position.copy(focus);
       if (shared) shared.focus = focus; // 숲길 벚꽃 터널: 캐릭터 쪽을 가리지 않게
       for (const u of updaters) u(t, dt, shared);
+      for (const el of elements) el.update?.(dt, t);
       // 천막: 카메라가 천막 위 높은 곳에서 가까이 내려다보면 반투명하게 (불이 가리지 않게)
       for (const tp of themeParts.tarps) {
         if (!tp.g.visible) continue;
