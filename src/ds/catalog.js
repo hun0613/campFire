@@ -4,6 +4,7 @@
 //   view: 3D 가 아닌 화면 (palette · materials · tokens · icons · font · ui-*)
 import { WOODYARD, NPC, KEEPER, LAKE_BENCH, HILL_BENCH, SPOTS, POND } from '../../shared/config.js';
 import { RESIDENTS } from '../../shared/residents.js';
+import { PARTS } from '../elements/atoms/index.js';
 
 export const LEVELS = [
   { id: 'atom', name: '원자', en: 'Atoms', desc: '더 나눌 수 없는 가장 작은 단위: 색 · 재질 · 글꼴 · 아이콘' },
@@ -19,16 +20,16 @@ const lake = SPOTS.find((s) => s.id === 'lake') || LAKE_BENCH;
 /** @type {Array<{id:string,name:string,level:string,area:'3d'|'ui',group?:string,desc?:string,where?:string,tags?:string[],parts?:string[],extracted?:string,view?:string,region?:object,camera?:object,hidden?:boolean}>} */
 export const CATALOG = [
   // ───────────── 원자 ─────────────
-  { id: 'palette', name: '색', level: 'atom', area: '3d', group: '색 · 재질', view: 'palette', where: 'src/palette.js · 각 파일에 직접 적힌 색', desc: '3D 요소가 쓰는 색. 공용 팔레트(palette.js)에 옮긴 색과, 아직 코드에 직접 적힌 색을 함께 본다' },
-  { id: 'materials', name: '재질', level: 'atom', area: '3d', group: '색 · 재질', view: 'materials', where: 'src/toon.js', desc: '셀 셰이딩(toon) · 빛나는(glow) · 투명 · 셰이더 재질이 어디에 얼마나 쓰이는지' },
-  { id: 'parts', name: '기본 부품', level: 'atom', area: '3d', group: '부품', view: 'parts', where: 'src/elements/ (떼어 낼 때 생김)', desc: '판자 · 다리 · 통나무 · 돌 · 전구 · 천. 요소를 떼어 낼 때 공용 부품으로 다시 조립하면서 생긴다' },
+  { id: 'palette', name: '색', level: 'atom', area: '3d', group: '색 · 재질', view: 'palette', where: 'src/elements/atoms/palette.js · 각 파일에 직접 적힌 색', desc: '3D 요소가 쓰는 색. 공용 팔레트(palette.js)에 옮긴 색과, 아직 코드에 직접 적힌 색을 함께 본다' },
+  { id: 'materials', name: '재질', level: 'atom', area: '3d', group: '색 · 재질', view: 'materials', where: 'src/elements/atoms/material.js · src/toon.js', desc: '셀 셰이딩(toon) · 빛나는(glow) · 투명 · 셰이더 재질이 어디에 얼마나 쓰이는지' },
+  ...PARTS.map((p) => ({ id: p.id, name: p.name, level: 'atom', area: '3d', group: '기본 부품', where: p.file, extracted: p.file, api: p.api, desc: `${p.desc}. 요소(분자)는 이 부품으로 조립한다`, sample: true })),
   { id: 'tokens', name: 'UI 토큰', level: 'atom', area: 'ui', group: 'UI', view: 'tokens', where: 'src/tokens.css', desc: '카드 · 나무 버튼의 색 · 그림자 · 둥근 정도' },
   { id: 'icons', name: '아이콘', level: 'atom', area: 'ui', group: 'UI', view: 'icons', where: 'src/icons.js', desc: '버튼에 새긴 솔리드 아이콘 (크기 · 가운데 맞춤 표 NORM)' },
   { id: 'powder-icons', name: '가루 아이콘', level: 'atom', area: 'ui', group: 'UI', view: 'powder-icons', where: 'src/powderIcons.js', desc: '가루 효과마다 다른 그림' },
   { id: 'font', name: '글꼴', level: 'atom', area: 'ui', group: 'UI', view: 'font', where: 'public/fonts · src/style.css', desc: '머니그라피 Rounded (원본 그대로 제공, 수정 · 재배포 금지)' },
 
   // ───────────── 분자 ─────────────
-  { id: 'bench', name: '벤치', level: 'molecule', area: '3d', group: '앉는 곳', where: 'src/elements/bench.js', extracted: 'src/elements/bench.js', desc: '광장 · 숲길(호숫가) · 노을 언덕 · 주민용 작은 벤치, 모양 4가지' },
+  { id: 'bench', name: '벤치', level: 'molecule', area: '3d', group: '앉는 곳', parts: ['part-plank', 'part-leg'], where: 'src/elements/molecules/bench.js', extracted: 'src/elements/molecules/bench.js', desc: '광장 · 숲길(호숫가) · 노을 언덕 · 주민용 작은 벤치, 모양 4가지' },
   { id: 'camp-chair', name: '캠핑 의자', level: 'molecule', area: '3d', group: '앉는 곳', where: 'src/fire.js #chair()', desc: '텐트 앞 화로 둘레 접이식 의자 (자리마다 색이 다름)' },
   { id: 'stump-seat', name: '그루터기 의자', level: 'molecule', area: '3d', group: '앉는 곳', where: 'src/fire.js #stump()', desc: '화로 둘레 그루터기 자리', hidden: true }, // 지금 게임에 없음 (모든 바깥 화로가 텐트 앞 캠핑 의자). 코드만 남아 있다
   { id: 'fire-ring', name: '화로 돌', level: 'molecule', area: '3d', group: '불', where: 'src/fire.js', desc: '화로 둘레 돌 11개와 재' },

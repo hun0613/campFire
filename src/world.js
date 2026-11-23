@@ -4,7 +4,7 @@ import { createSky } from './sky.js';
 import { fingerpost, hangingSign } from './signs.js';
 import { CFG, TENTS, PITS, STUMPS, NPC, KEEPER, WOODYARD, BOUNDS, FENCE, GATES, SUNSET, TENT_WH, TENT_RH, EGG, PLAZA_BENCHES } from '../shared/config.js';
 import { buildTrail } from './trail.js';
-import { create as createBench } from './elements/bench.js';
+import { create as createBench } from './elements/molecules/bench.js';
 import { placeElement } from './elements/place.js';
 import { tag, tagAdds } from './ds/tag.js';
 

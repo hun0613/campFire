@@ -16,11 +16,12 @@ import { Character } from '../character.js';
 import { createResidents } from '../residents.js';
 import { icon, NORM } from '../icons.js';
 import { powderIco } from '../ui.js';
-import { PALETTE } from '../palette.js';
-import { FIRES, PITS, STUMPS, NPC, KEEPER, WOODYARD, GUESTBOOK, BOARD, TENTS, SUNSET, LOUNGE_SEATS, hillHeight, POWDER_EFFECTS, LEGEND_POWDERS } from '../../shared/config.js';
+import { PALETTE, PARTS } from '../elements/atoms/index.js';
+import { FIRES, PITS, STUMPS, NPC, KEEPER, WOODYARD, GUESTBOOK, BOARD, TENTS, SUNSET, LOUNGE_SEATS, hillHeight, POWDER_EFFECTS, POWDER_COLORS, LEGEND_POWDERS } from '../../shared/config.js';
 import { THEMES, themeOf } from '../../shared/themes.js';
 import { CATALOG, LEVELS, byId, tagsOf } from '../ds/catalog.js';
 import { tagOf } from '../ds/tag.js';
+import { createGraph, matchPath, MOLECULES } from './swap.js';
 
 const $ = (id) => document.getElementById(id);
 const HIDE = 30; // 숨길 물체를 옮겨 두는 레이어 (카메라는 0번만 본다)
@@ -69,6 +70,11 @@ const sampleChars = [
   { skin: '#f6c9a0', hair: '#c9772f', shirt: '#f2a7c3', pants: '#3d4a6b', hat: 'straw' },
   { skin: '#e8b48a', hair: '#2a1f1c', shirt: '#79b35a', pants: '#5a4330', hat: 'beanie' },
 ].map((look, i) => { const ch = new Character(look, { name: '견본' }); ch.root.position.set(-3 + i * 1.6, 0, 6.5); ch.root.rotation.y = 0.15; scene.add(ch.root); samples.push(ch.root); return ch; });
+for (const p of PARTS) { // 원자 부품 견본: 바닥 위에 올려 놓는다
+  const m = p.make(); m.userData.ds = p.id;
+  const bb = new THREE.Box3().setFromObject(m); m.position.set(3, -bb.min.y, 4);
+  scene.add(m); samples.push(m);
+}
 for (const s of samples) s.traverse((o) => { o.userData.labSample = true; });
 
 const controls = new OrbitControls(camera, R.renderer.domElement);
@@ -76,7 +82,7 @@ controls.enableDamping = true; controls.dampingFactor = 0.12; controls.maxPolarA
 
 // ---------------------------------------------------------------- 불 · 테마 (게임의 applyTheme 과 같은 순서)
 const FIRE_COLOR = new THREE.Color('#ff7a2a');
-const lab = { theme: 'clear', fire: 'lit', mode: 'solo', all: false, ground: true, sel: null, cluster: 0, clusters: [], solo: [], residentNow: null, residentTheme: null, checks: {}, notion: false };
+const lab = { pairOf: new Map(), swap: null, ab: 'after', theme: 'clear', fire: 'lit', mode: 'solo', all: false, ground: true, sel: null, cluster: 0, clusters: [], solo: [], residentNow: null, residentTheme: null, checks: {}, notion: false };
 function setFire(kind) {
   lab.fire = kind;
   const now = Date.now();
@@ -97,15 +103,16 @@ function setTheme(id) {
 setFire('lit');
 
 // ---------------------------------------------------------------- 요소 고르기 (이름표 → 자리 묶음 → 따로 보기)
-const renderables = [];
-scene.traverse((o) => { if (o.isMesh || o.isPoints || o.isSprite || o.isLine) renderables.push(o); });
+let renderables = [];
+function collectRenderables() { renderables = []; scene.traverse((o) => { if (o.isMesh || o.isPoints || o.isSprite || o.isLine) renderables.push(o); }); }
+collectRenderables();
 const ENV = new Set(['sky', 'light']); // 늘 보이는 배경
 const box = new THREE.Box3(), v3 = new THREE.Vector3(), m4 = new THREE.Matrix4();
 
 /** 이름표들에 해당하는 「뿌리」: 자기 이름표가 있고 부모는 다른 이름표인 물체. 인스턴스는 하나하나를 뿌리로 */
 function rootsOf(tags) {
   const out = [];
-  const visibleNow = (o) => { for (let x = o; x; x = x.parent) if (!x.visible) return false; return true; };
+  const visibleNow = (o) => { for (let x = o; x; x = x.parent) if (!x.visible && !x.userData.labBefore) return false; return true; };
   const push = (o, part) => {
     if (o.isInstancedMesh && o.count > 1) {
       for (let i = 0; i < o.count; i++) { o.getMatrixAt(i, m4); v3.setFromMatrixPosition(m4).applyMatrix4(o.matrixWorld); out.push({ obj: o, index: i, pos: v3.clone(), part }); }
@@ -125,6 +132,7 @@ function rootsOf(tags) {
   scene.traverse((o) => {
     const t = o.userData?.ds;
     if (t == null || !tags.has(t) || (o.parent && tags.has(tagOf(o.parent)))) return;
+    if (o.userData.labAfter) return; // 바꿔 끼운 「후」는 「전」의 짝으로 따라 보인다
     if (!visibleNow(o)) return; // 지금 게임에서 숨어 있는 것(도끼질 전 쪼갠 장작 등)은 빼고
     push(o, false);
   });
@@ -181,7 +189,7 @@ function applyIsolation() {
   const cl = lab.all ? lab.clusters : [lab.clusters[lab.cluster]].filter(Boolean);
   const showObjs = new Set(), soloMap = new Map();
   for (const c of cl) for (const it of c.items) {
-    if (it.index >= 0) { if (!soloMap.has(it.obj)) soloMap.set(it.obj, []); soloMap.get(it.obj).push(it.index); showObjs.add(it.obj); } else it.obj.traverse((o) => showObjs.add(o));
+    if (it.index >= 0) { if (!soloMap.has(it.obj)) soloMap.set(it.obj, []); soloMap.get(it.obj).push(it.index); showObjs.add(it.obj); } else { it.obj.traverse((o) => showObjs.add(o)); lab.pairOf.get(it.obj)?.traverse((o) => showObjs.add(o)); }
   }
   for (const o of renderables) {
     const t = tagOf(o);
@@ -212,12 +220,13 @@ function frameCluster() {
       if (b.isEmpty()) b.union(new THREE.Box3().setFromObject(it.obj));
     }
   }
+  for (const it of c.items) { const a = lab.pairOf.get(it.obj); if (a?.visible) b.union(new THREE.Box3().setFromObject(a)); } // 바꿔 끼운 「후」도 함께 (나란히)
   const size = b.getSize(v3).length() || 2, ctr = b.getCenter(new THREE.Vector3());
   // 앞모습: 그 물체가 보는 쪽(+z)에서 비스듬히 (주민 · 벤치 · NPC). 인스턴스 · 점 구름은 기본 방향
   const lead = (own.length ? own : c.items).find((it) => it.index < 0 && !it.spot);
   let yaw = 0.7;
   if (lead) { const q = lead.obj.getWorldQuaternion(new THREE.Quaternion()); const f = new THREE.Vector3(0, 0, 1).applyQuaternion(q); if (Math.abs(f.y) < 0.7) yaw = Math.atan2(f.x, f.z) + 0.55; }
-  frame(ctr, Math.max(lab.sel?.level === 'organism' ? 3.6 : 0.9, size * 1.6), { yaw, pitch: 0.38 });
+  frame(ctr, Math.max(lab.sel?.level === 'organism' ? 3.6 : 0.9, size * (lab.sel?.level === 'atom' ? 2.2 : 1.6)), { yaw, pitch: 0.38 });
   focus.copy(ctr);
 }
 
@@ -314,13 +323,14 @@ function renderInfo() {
   const ch = lab.checks[e.id];
   let html = `<h2>${esc(e.name)} <span class="st">${lv.name}</span> ${statusBadge(e.id)} ${e.extracted ? '<span class="st st-ok">떼어 냄 · 바꿔 끼우기 가능</span>' : e.view || e.level === 'page' || e.region ? '' : '<span class="st">보기만 (아직 떼어 내지 않음)</span>'}</h2>
     <div class="desc">${esc(e.desc || '')}</div>
-    <div class="meta"><span>코드 <code>${esc(e.where || '—')}</code></span><span>이름표 <code>${[...tagsOf(e)].join(', ')}</code></span>${ch?.memo ? `<span>메모 <b>${esc(ch.memo)}</b></span>` : ''}</div>`;
+    <div class="meta"><span>코드 <code>${esc(e.where || '—')}</code></span>${e.api ? `<span>쓰는 법 <code>${esc(e.api)}</code></span>` : ''}<span>이름표 <code>${[...tagsOf(e)].join(', ')}</code></span>${ch?.memo ? `<span>메모 <b>${esc(ch.memo)}</b></span>` : ''}</div>`;
   if (parts.length) html += `<div class="lab-chips">이루는 요소 ${parts.map((p) => `<button class="lab-chip" data-go="${p.id}">${esc(p.name)}</button>`).join('')}</div>`;
   if (users.length) html += `<div class="lab-chips">쓰이는 곳 ${users.map((p) => `<button class="lab-chip" data-go="${p.id}">${esc(p.name)}</button>`).join('')}</div>`;
   if (st) {
     const cols = [...new Map(st.mats.filter((x) => hex(x.m)).map((x) => [hex(x.m), x])).values()].sort((a, b) => b.n - a.n);
+    html += swapCompareHtml();
     html += `<div class="perf"><span>물체<br><b>${st.objs.toLocaleString()}</b></span><span class="${st.tris > 60000 ? 'warn' : ''}">면<br><b>${st.tris.toLocaleString()}</b></span><span>재질<br><b>${st.mats.length}</b></span><span>인스턴스<br><b>${st.inst.toLocaleString()}</b></span><span>그리기 횟수 (화면 효과 포함)<br><b id="labCalls">…</b></span></div>`;
-    if (cols.length) html += `<div class="lab-chips">쓰는 색 ${cols.slice(0, 24).map((x) => `<span class="sw" title="${x.m.type} · ${x.n}개 물체"><i style="background:${hex(x.m)}"></i>${hex(x.m)}${paletteHex.has(hex(x.m)) ? ' ✓' : ''}</span>`).join(' ')}${cols.length > 24 ? ` <span class="sw">외 ${cols.length - 24}색</span>` : ''}</div><div class="desc" style="margin-top:4px">✓ = 공용 팔레트(palette.js)에 있는 색</div>`;
+    if (cols.length) html += `<div class="lab-chips">쓰는 색 ${cols.slice(0, 24).map((x) => `<span class="sw" title="${x.m.type} · ${x.n}개 물체"><i style="background:${hex(x.m)}"></i>${hex(x.m)}${paletteHex.has(hex(x.m)) ? ' ✓' : ''}</span>`).join(' ')}${cols.length > 24 ? ` <span class="sw">외 ${cols.length - 24}색</span>` : ''}</div><div class="desc" style="margin-top:4px">✓ = 공용 팔레트(atoms/palette.js)에 있는 색</div>`;
   }
   el.innerHTML = html;
   el.onclick = (ev) => { const b = ev.target.closest('[data-go]'); if (b) select(b.dataset.go); };
@@ -343,7 +353,9 @@ function renderSide() {
   h += `<h3>디자인 점검</h3><div class="lab-row lab-check">${[['ok', '괜찮음'], ['review', '검토 필요'], ['design', '디자인 필요']].map(([k, l]) => `<button class="lab-btn st-${k} ${ch.status === k ? 'on' : ''}" data-check="${k}">${l}</button>`).join('')}</div>
     <textarea id="labMemo" placeholder="무엇이 아쉬운지, 어떻게 바뀌면 좋을지">${esc(ch.memo || '')}</textarea>
     <div class="lab-row" style="margin-top:6px"><button class="lab-btn" id="labSave">저장</button><span class="note" id="labSaveMsg">${lab.notion ? '노션 현황판에 저장돼요' : '노션 연결 확인 중… (로컬 서버에서만 저장)'}</span></div>`;
-  if (e.extracted) h += `<h3>바꿔 끼우기</h3><div class="note">떼어 낸 요소예요 (<code>${esc(e.extracted)}</code>). 디자이너가 보낸 파일을 끌어다 놓으면 바꿔 끼워 수정 전/후를 비교하는 기능은 다음 단계에서 붙여요.</div>`;
+  const styles = [...new Set(lab.clusters.map((c) => c.items[0]?.obj.userData.style).filter(Boolean))];
+  if (is3d && styles.length > 1) h += `<h3>모양 (변형)</h3><div class="lab-row">${styles.map((st) => btn('style', st, st, lab.clusters[lab.cluster]?.items[0]?.obj.userData.style === st)).join('')}</div>`;
+  h += swapPanel(e, btn);
   el.innerHTML = h;
   el.onclick = onSide;
 }
@@ -353,6 +365,10 @@ function onSide(ev) {
   if (b.dataset.check) return saveCheck(b.dataset.check);
   if (b.id === 'labSave') return saveCheck(lab.checks[lab.sel.id]?.status || null);
   if (k === 'mode') { lab.mode = v; applyIsolation(); }
+  if (k === 'style') { lab.all = false; lab.cluster = lab.clusters.findIndex((c) => c.items[0]?.obj.userData.style === v); applyIsolation(); frameCluster(); renderPicker(); }
+  if (k === 'ab') { lab.ab = v; applyAB(); applyIsolation(); if (v === 'side') frameCluster(); }
+  if (k === 'swap-reset') { clearSwap(); select(lab.sel.id, { keepCluster: true }); return; }
+  if (k === 'swap-pick') { $('labFile').click(); return; }
   if (k === 'ground') { lab.ground = !lab.ground; applyIsolation(); }
   if (k === 'theme') { lab.themeBefore = null; setTheme(v); }
   if (k === 'fire') setFire(v);
@@ -365,6 +381,125 @@ function onSide(ev) {
   }
   renderSide(); setTimeout(renderInfo, 50);
 }
+// ---------------------------------------------------------------- 바꿔 끼우기 (디자이너 파일 → 수정 전/후)
+// 성능 한도 (초안): 휴대폰에서 같은 요소가 여러 개 놓여도 버티는 정도. 넘으면 빨갛게
+const LIMITS = { atom: { tris: 500, mats: 1, objs: 1 }, molecule: { tris: 3000, mats: 6, objs: 40 }, organism: { tris: 40000, mats: 30, objs: 400 } };
+function countOf(root) {
+  let objs = 0, tris = 0; const mats = new Set();
+  root.traverse((o) => {
+    if (!(o.isMesh || o.isPoints || o.isSprite || o.isLine)) return;
+    objs++;
+    const g = o.geometry, n = o.isInstancedMesh ? o.count : 1;
+    tris += Math.round(((g?.index ? g.index.count : g?.attributes?.position?.count || 0) / 3) * n);
+    for (const m of [].concat(o.material || [])) mats.add(m.color ? `${m.type}|${m.color.getHexString()}` : m.uuid);
+  });
+  return { objs, tris, mats: mats.size };
+}
+function swapPanel(e, btn) {
+  const sw = lab.swap;
+  const mine = sw && (sw.path === e.extracted || sw.touches.has(e.id));
+  let h = '<h3>바꿔 끼우기</h3>';
+  if (!e.extracted && !mine) return h + `<div class="note">아직 떼어 내지 않은 요소라 보기만 돼요. 떼어 내면(<code>src/elements/</code>) 디자이너 파일을 끌어다 놓아 바꿔 볼 수 있어요.</div>`;
+  if (mine) {
+    h += `<div class="note">「${esc(sw.name)}」 바꿔 끼움 · ${sw.count}곳</div><div class="lab-row" style="margin-top:6px">${btn('ab', 'before', '수정 전', lab.ab === 'before')}${btn('ab', 'after', '수정 후', lab.ab === 'after')}${btn('ab', 'side', '나란히', lab.ab === 'side')}${btn('swap-reset', 'x', '되돌리기', false)}</div>`;
+  } else h += `<div class="note">떼어 낸 요소예요 (<code>${esc(e.extracted)}</code>). 디자이너가 보낸 같은 이름의 파일을 <b>화면에 끌어다 놓으면</b> 바꿔 끼워 수정 전/후를 비교해요.</div>`;
+  h += `<div class="lab-row" style="margin-top:6px">${btn('swap-pick', 'x', '파일 고르기', false)}</div>`;
+  if (lab.swapError) h += `<div class="note" style="color:#ff9a9a">${esc(lab.swapError)}</div>`;
+  return h;
+}
+/** 지금 고른 자리의 수정 전/후 숫자 */
+function swapCompareHtml() {
+  const c = lab.clusters[lab.cluster];
+  if (!lab.swap || !c) return '';
+  const pairs = c.items.map((it) => [it.obj, lab.pairOf.get(it.obj)]).filter(([, a]) => a);
+  if (!pairs.length) return '';
+  const sum = (arr) => arr.reduce((s, x) => ({ objs: s.objs + x.objs, tris: s.tris + x.tris, mats: Math.max(s.mats, x.mats) }), { objs: 0, tris: 0, mats: 0 });
+  const b = sum(pairs.map(([x]) => countOf(x))), a = sum(pairs.map(([, y]) => countOf(y)));
+  const lim = LIMITS[lab.sel.level] || LIMITS.molecule;
+  const cell = (k, label) => { const d = a[k] - b[k]; return `<span class="${a[k] > lim[k] ? 'warn' : ''}">${label}<br><b>${b[k].toLocaleString()} → ${a[k].toLocaleString()}</b> ${d ? `(${d > 0 ? '+' : ''}${d.toLocaleString()})` : ''}${a[k] > lim[k] ? ` · 한도 ${lim[k].toLocaleString()} 넘음` : ''}</span>`; };
+  return `<div class="perf" style="grid-template-columns:repeat(3,auto)">${cell('objs', '수정 전 → 후 물체')}${cell('tris', '면')}${cell('mats', '재질')}</div>`;
+}
+function clearSwap() {
+  for (const [before, after] of lab.pairOf) { after.removeFromParent(); before.visible = true; delete before.userData.labBefore; }
+  lab.pairOf.clear(); lab.swap = null; lab.swapError = null; lab.ab = 'after';
+  collectRenderables();
+}
+function applyAB() {
+  for (const [before, after] of lab.pairOf) {
+    before.visible = lab.ab !== 'after';
+    after.visible = lab.ab !== 'before';
+    after.position.copy(before.position); after.quaternion.copy(before.quaternion); after.scale.copy(before.scale);
+    if (lab.ab === 'side') { // 수정 후를 옆(요소의 오른쪽)에 나란히
+      const bb = new THREE.Box3().setFromObject(before), w = Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z) + 0.6;
+      after.position.add(new THREE.Vector3(w, 0, 0).applyQuaternion(before.quaternion));
+    }
+  }
+}
+/** 놓은 파일을 바꿔 끼운다. 원자면 그 원자를 쓰는 분자를 모두 다시 조립 */
+async function swapIn(name, text) {
+  lab.swapError = null;
+  try {
+    const path = matchPath(name);
+    const graph = createGraph({ [path]: text });
+    clearSwap();
+    const touches = new Set();
+    const isAtom = path.includes('/atoms/');
+    let count = 0;
+    const pair = (before, after) => {
+      after.position.copy(before.position); after.quaternion.copy(before.quaternion); after.scale.copy(before.scale);
+      before.parent.add(after);
+      before.userData.labBefore = true;
+      after.traverse((o) => { o.userData.labAfter = true; });
+      lab.pairOf.set(before, after); count++;
+    };
+    for (const mp of isAtom ? MOLECULES : [path]) {
+      if (!isAtom && !mp.includes('/molecules/') && !mp.includes('/organisms/')) break;
+      const mod = await graph.load(mp);
+      if (typeof mod.create !== 'function') throw new Error(`${mp}: create(opts) 가 없어요 (요소 틀을 지켜 주세요)`);
+      const probe = mod.create({}).group, id = probe.userData.ds;
+      if (!id) throw new Error(`${mp}: group.userData.ds (이름표)가 없어요`);
+      touches.add(id);
+      const olds = []; scene.traverse((o) => { if (o.userData.ds === id && o.userData.args && !o.userData.labAfter) olds.push(o); });
+      for (const old of olds) pair(old, mod.create({ ...old.userData.args }).group);
+    }
+    if (isAtom) { // 원자 견본도 새 것으로
+      const atoms = await graph.load('src/elements/atoms/index.js');
+      for (const p of atoms.PARTS || []) {
+        const old = samples.find((s) => s.userData.ds === p.id); if (!old) continue;
+        if (p.file === path) touches.add(p.id);
+        const m = p.make(); m.userData.ds = p.id; m.traverse((o) => { o.userData.labSample = true; });
+        const bb = new THREE.Box3().setFromObject(m); m.position.set(old.position.x, -bb.min.y, old.position.z);
+        scene.add(m); old.userData.labBefore = true; m.traverse((o) => { o.userData.labAfter = true; }); lab.pairOf.set(old, m);
+        m.position.copy(old.position); m.position.y = -bb.min.y;
+      }
+    }
+    lab.swap = { path, name, count, touches };
+    collectRenderables(); applyAB();
+    const go = byId.get([...touches][0]) ? [...touches][0] : lab.sel?.id;
+    select(touches.has(lab.sel?.id) ? lab.sel.id : go, { keepCluster: touches.has(lab.sel?.id) });
+  } catch (err) {
+    lab.swapError = `바꿔 끼우지 못했어요: ${err.message}`;
+    console.error(err);
+    renderSide();
+  }
+}
+// 끌어다 놓기 · 파일 고르기
+{
+  const input = Object.assign(document.createElement('input'), { type: 'file', accept: '.js,text/javascript', id: 'labFile', hidden: true });
+  document.body.appendChild(input);
+  input.addEventListener('change', async () => { const f = input.files[0]; if (f) await swapIn(f.name, await f.text()); input.value = ''; });
+  const over = document.createElement('div'); over.className = 'lab-drop hidden'; over.textContent = '여기에 놓으면 바꿔 끼워요 (bench.js · plank.js 처럼 원래 파일 이름 그대로)';
+  $('labStage').appendChild(over);
+  let depth = 0;
+  addEventListener('dragenter', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { depth++; over.classList.remove('hidden'); } });
+  addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; over.classList.add('hidden'); } });
+  addEventListener('dragover', (e) => e.preventDefault());
+  addEventListener('drop', async (e) => {
+    e.preventDefault(); depth = 0; over.classList.add('hidden');
+    const f = e.dataTransfer?.files?.[0]; if (f) await swapIn(f.name, await f.text());
+  });
+}
+
 
 // ---------------------------------------------------------------- 디자인 점검 → 노션 현황판 (로컬 서버의 /api/ds/*)
 const statusBadge = (id) => { const s = lab.checks[id]?.status; return s ? `<span class="st st-${s}">${{ ok: '괜찮음', review: '검토 필요', design: '디자인 필요' }[s]}</span>` : '<span class="st st-none">미점검</span>'; };
@@ -420,7 +555,7 @@ function showHtml(e) {
   el.classList.remove('hidden');
   let h = `<h2>${esc(e.name)}</h2><p>${esc(e.desc || '')}</p>`;
   if (e.view === 'palette') {
-    h += '<h3>공용 팔레트 (src/palette.js)</h3><div class="grid-sw">' + Object.entries(PALETTE).flatMap(([g, cs]) => Object.entries(cs).map(([k, c]) => `<div class="c"><i style="background:${c}"></i><div><b>${g}.${k}</b><br>${c}</div></div>`)).join('') + '</div>';
+    h += '<h3>공용 팔레트 (src/elements/atoms/palette.js)</h3><div class="grid-sw">' + Object.entries(PALETTE).flatMap(([g, cs]) => Object.entries(cs).map(([k, c]) => `<div class="c"><i style="background:${c}"></i><div><b>${g}.${k}</b><br>${c}</div></div>`)).join('') + '</div>';
     const byHex = new Map();
     for (const [mat, tags] of sceneMaterials()) {
       const c = hex(mat); if (!c) continue;
@@ -439,9 +574,6 @@ function showHtml(e) {
     }
     h += '<table class="lab-table"><tr><th>재질</th><th>개수</th><th>쓰는 요소</th></tr>' + [...by.entries()].sort((a, b) => b[1].n - a[1].n).map(([k, x]) => `<tr><td>${k}</td><td>${x.n}</td><td>${[...x.tags].map((t) => byId.get(t)?.name || t).join(', ')}</td></tr>`).join('') + '</table>';
     h += '<p>키트 규칙: 새 요소는 <code>toon()</code>(셀 셰이딩) · <code>glow()</code>(빛나는 것)만 쓴다. MeshToonMaterial 은 같은 색이면 하나를 나눠 쓴다 (src/toon.js).</p>';
-  } else if (e.view === 'parts') {
-    h += '<p>지금 게임 3D 요소는 상자 · 원기둥을 바로 쌓아 만들어서, 따로 나눠 쓰는 기본 부품이 아직 없어요. 「디자인 필요」로 고른 요소를 <code>src/elements/</code>로 떼어 낼 때, 아래 부품을 공용으로 만들어 다시 조립해요.</p><table class="lab-table"><tr><th>부품 (예정)</th><th>쓰일 곳</th></tr>' +
-      [['판자', '벤치 · 데크 · 창고 · 간판'], ['다리 · 기둥', '벤치 · 의자 · 가로등 · 울타리'], ['통나무 · 쪼갠 장작', '장작더미 · 장작 마당 · 그루터기'], ['돌', '화로 돌 · 연못 · 분수'], ['전구 · 불빛', '가로등 · 랜턴 · 전구 줄'], ['천', '텐트 · 천막 · 차양']].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('') + '</table><h3>떼어 낸 요소</h3><p>' + CATALOG.filter((x) => x.extracted).map((x) => `${x.name} — <code>${x.extracted}</code>`).join('<br>') + '</p>';
   } else if (e.view === 'tokens') {
     const cs = getComputedStyle(document.documentElement);
     const names = ['--cream', '--cream-2', '--brown', '--brown-2', '--orange', '--orange-2', '--green', '--wood-hi', '--wood', '--wood-lo', '--wood-edge', '--wood-deep', '--engrave', '--engrave-hi'];
@@ -450,7 +582,8 @@ function showHtml(e) {
   } else if (e.view === 'icons') {
     h += '<div class="ui-sheet">' + Object.keys(NORM).sort().map((n) => `<div class="icon-cell"><button class="icon-btn">${icon(n)}</button>${n}</div>`).join('') + '</div>';
   } else if (e.view === 'powder-icons') {
-    h += '<h3>기본 가루 (효과 8가지)</h3><div class="ui-sheet">' + POWDER_EFFECTS.map((f) => `<div class="icon-cell">${powderIco({ effect: f.id, color: '#ffb066' }, 'big')}${f.name}</div>`).join('') + '</div>';
+    h += '<h3>기본 가루 (효과 8가지 · 색은 무작위 8가지 중 하나)</h3><div class="ui-sheet">' + POWDER_EFFECTS.map((f, i) => `<div class="icon-cell">${powderIco({ effect: f.id, color: POWDER_COLORS[i % POWDER_COLORS.length].hex }, 'big')}${f.name}</div>`).join('') + '</div>';
+    h += '<h3>색 8가지 (같은 효과 · 반짝이)</h3><div class="ui-sheet">' + POWDER_COLORS.map((c) => `<div class="icon-cell">${powderIco({ effect: 'sparkle', color: c.hex }, 'big')}${c.name}</div>`).join('') + '</div>';
     h += '<h3>✦ 특별한 가루</h3><div class="ui-sheet">' + Object.entries(LEGEND_POWDERS).map(([k, p]) => `<div class="icon-cell">${powderIco({ effect: k, color: p.color, bg: p.bg, legend: true }, 'big')}${esc(p.name.replace('✦ ', '').replace(' 가루', ''))}</div>`).join('') + '</div>';
   } else if (e.view === 'font') {
     h += '<div class="font-sample">' + [40, 28, 20, 15, 12].map((s) => `<div style="font-size:${s}px;margin:6px 0">불멍 캠핑장 · 오늘 하루 수고했어요 🔥 ${s}px</div>`).join('') + '</div><p>게임 · 간판 · 이정표에 같은 글꼴을 쓴다. 원본 OTF 를 수정 없이 그대로 제공 (서브셋 · 변환 · 재배포 금지).</p>';
@@ -458,7 +591,7 @@ function showHtml(e) {
     h += '<h3>아이콘 버튼 (.icon-btn)</h3><div class="ui-sheet">' + ['map', 'mail', 'sound', 'help', 'eye', 'install', 'menu'].map((n) => `<button class="icon-btn">${icon(n)}</button>`).join('') + '</div>';
     h += '<h3>글자 버튼 (.btn) · 가방 (.bag-btn) · 가루 사기 (.shop-buy)</h3><div class="ui-sheet light"><button class="btn">캠핑장 들어가기</button><button class="bag-btn">' + icon('bag') + '</button><button class="shop-buy">10 코인</button></div>';
   } else if (e.view === 'ui-label') {
-    h += '<div class="ui-sheet"><div class="char-label" style="position:static"><span class="name">🔥 기준</span></div><div class="bubble" style="position:static">오늘 불멍 하기 좋은 날이에요</div><div class="npc-mark" style="position:static">💬</div></div><p>게임 화면에서는 캐릭터 머리 위에 붙어요 (CSS2D).</p>';
+    h += '<div class="ui-sheet"><div class="char-label" style="position:static"><span class="name">🔥 기준</span></div><div class="bubble" style="position:relative;transform:none;left:auto;top:auto">오늘 불멍 하기 좋은 날이에요</div><div class="npc-mark" style="position:static">💬</div></div><p>게임 화면에서는 캐릭터 머리 위에 붙어요 (CSS2D).</p>';
   } else if (e.view === 'ui-page' || e.view === 'ui-game') {
     h += `<p>실제 게임을 그대로 띄워요 (입장 화면부터). 들어가기를 누르면 이 로컬 서버의 캠핑장에 접속해요.</p><div class="lab-frames"><figure><figcaption>PC 1280 × 720 (½ 크기)</figcaption><div class="fr" style="width:640px;height:360px"><iframe src="/" style="width:1280px;height:720px;transform:scale(.5)"></iframe></div></figure><figure><figcaption>휴대폰 390 × 844 (½ 크기)</figcaption><div class="fr" style="width:195px;height:422px"><iframe src="/" style="width:390px;height:844px;transform:scale(.5)"></iframe></div></figure></div>`;
   }

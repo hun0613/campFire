@@ -94,3 +94,5 @@ body.lab {
 .lab-frames .fr { overflow: hidden; border-radius: 10px; border: 1px solid var(--lab-line); background: #000; }
 .lab-frames iframe { border: 0; transform-origin: 0 0; display: block; }
 .font-sample { font-family: 'Moneygraphy', sans-serif; color: var(--lab-text); }
+.lab-drop { position: absolute; inset: 12px; border: 3px dashed var(--lab-accent); border-radius: 16px; background: rgba(30, 20, 10, .7); display: flex; align-items: center; justify-content: center; color: #ffe0b8; font-size: 18px; z-index: 5; pointer-events: none; }
+.ui-sheet .pico.big { width: 56px; height: 56px; } /* 가루 아이콘은 놓이는 자리마다 크기를 받는다 (게임: 가방 · 가루 줄 · 공방) — 실험실 견본 크기 */

@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { Character } from './character.js';
 import { toon, glow } from './toon.js';
-import { create as createBench } from './elements/bench.js';
+import { create as createBench } from './elements/molecules/bench.js';
 import { hillHeight } from '../shared/config.js';
 import { RESIDENTS, residentPos, residentActive, RESIDENT_RANGE } from '../shared/residents.js';
 

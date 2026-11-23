@@ -6,7 +6,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { toon, glow, radialTexture } from './toon.js';
 import { fingerpost } from './signs.js';
 import { RESIDENTS } from '../shared/residents.js';
-import { create as createBench } from './elements/bench.js';
+import { create as createBench } from './elements/molecules/bench.js';
 import { tag } from './ds/tag.js';
 import { TRAIL, GATES, SPOTS, ZONES, LAKE, POND, STREAM, HILL, BOUNDS, FENCE, HILL_BENCH, HILL_CAT, LAKE_BENCH, SUNSET, WINDMILL, hillHeight, trailCurve, zonePath } from '../shared/config.js';
 
