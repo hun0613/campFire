@@ -352,7 +352,7 @@ function renderSide() {
   const ch = lab.checks[e.id] || {};
   h += `<h3>디자인 점검</h3><div class="lab-row lab-check">${[['ok', '괜찮음'], ['review', '검토 필요'], ['design', '디자인 필요']].map(([k, l]) => `<button class="lab-btn st-${k} ${ch.status === k ? 'on' : ''}" data-check="${k}">${l}</button>`).join('')}</div>
     <textarea id="labMemo" placeholder="무엇이 아쉬운지, 어떻게 바뀌면 좋을지">${esc(ch.memo || '')}</textarea>
-    <div class="lab-row" style="margin-top:6px"><button class="lab-btn" id="labSave">저장</button><span class="note" id="labSaveMsg">${lab.notion ? '노션 현황판에 저장돼요' : '노션 연결 확인 중… (로컬 서버에서만 저장)'}</span></div>`;
+    <div class="lab-row" style="margin-top:6px"><button class="lab-btn" id="labSave">저장</button><span class="note" id="labSaveMsg">${lab.notion ? '노션 현황판에 저장돼요' : lab.checked ? '이 페이지에서는 저장되지 않아요 (운영자의 로컬 서버에서만 노션에 저장)' : '노션 연결 확인 중…'}</span></div>`;
   const styles = [...new Set(lab.clusters.map((c) => c.items[0]?.obj.userData.style).filter(Boolean))];
   if (is3d && styles.length > 1) h += `<h3>모양 (변형)</h3><div class="lab-row">${styles.map((st) => btn('style', st, st, lab.clusters[lab.cluster]?.items[0]?.obj.userData.style === st)).join('')}</div>`;
   h += swapPanel(e, btn);
@@ -508,6 +508,7 @@ async function loadChecks() {
     const r = await fetch('/api/ds/checks'); if (!r.ok) throw new Error(r.status);
     const j = await r.json(); lab.checks = j.checks || {}; lab.notion = !!j.notion;
   } catch { lab.notion = false; }
+  lab.checked = true;
   renderNav(); renderInfo(); renderSide();
   const m = $('labSaveMsg'); if (m && !lab.notion) m.textContent = '저장 안 됨: 로컬 서버(npm run dev)에서 열어야 노션에 저장돼요';
 }

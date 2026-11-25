@@ -8,11 +8,24 @@ export class Sound {
     this.sheltered = false;     // 천막 · 텐트 지붕 아래 (빗방울이 지붕을 두드리는 소리)
   }
 
+  /**
+   * 소리 장치 깨우기: iOS 는 화면을 끄거나 다른 앱에 다녀오면 소리를 「끊김(interrupted)」 · 「멈춤」으로 바꾼다.
+   * 사용자가 화면을 누를 때마다 불러서 다시 켠다. 아주 짧은 무음을 한 번 틀어야 깨어나는 기기도 있다
+   */
+  unlock() {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state === 'running' || typeof ctx.resume !== 'function') return;
+    ctx.resume().catch(() => {});
+    try { const b = ctx.createBuffer(1, 1, ctx.sampleRate), s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(0); } catch { /* 무시 */ }
+  }
+
   /** @param {BaseAudioContext} [ctxIn] 미리 듣기 파일을 만들 때 OfflineAudioContext 를 넘긴다 */
   init(ctxIn) {
-    if (this.ctx) { this.ctx.resume?.(); return; }
+    if (this.ctx) { this.unlock(); return; }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC && !ctxIn) return;
+    // iOS · iPadOS Safari: 기본은 「주변 소리」라 무음(벨 끄기)이면 Web Audio 가 들리지 않는다 → 「재생」으로 (Safari 16.4+, 유튜브 노래처럼 들리게)
+    if (!ctxIn) try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* 없는 브라우저 */ }
     const ctx = (this.ctx = ctxIn || new AC());
     this.master = ctx.createGain();
     this.master.gain.value = 0.7;

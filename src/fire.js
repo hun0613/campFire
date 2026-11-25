@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { toon, radialTexture } from './toon.js';
 import { CFG, seatPos, seatsOf, TENT_WH, TENT_RH } from '../shared/config.js';
+import { create as createCampChair, FABRICS as CHAIR_FABRICS } from './elements/molecules/camp-chair.js';
+import { create as createFireRing } from './elements/molecules/fire-ring.js';
+import { create as createLogPile } from './elements/molecules/log-pile.js';
 
 const VS = `
 uniform float uTime, uScale, uIntensity, uHeight, uSize, uRise, uSpread, uSpeed;
@@ -69,10 +72,6 @@ const WHITE = new THREE.Color('#ffffff');
 const WOOD = new THREE.Color('#8b5a33');
 const CHAR = new THREE.Color('#2a1d17');
 
-const stoneGeo = new THREE.DodecahedronGeometry(0.17, 0);
-const logGeo = new THREE.CylinderGeometry(0.075, 0.09, 1.05, 7);
-const baseLogGeo = new THREE.CylinderGeometry(0.09, 0.09, 1.0, 7);
-const up = new THREE.Vector3(0, 1, 0);
 const BOWL_TOP = 0.46; // 텐트 화로 그릇 높이 (데크 위)
 
 export class FirePit {
@@ -101,50 +100,15 @@ export class FirePit {
     this.group = g;
 
     if (this.stove) this.#buildStove(def, shared);
-    // 돌 테두리
-    const n = this.stove ? 0 : 11;
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      const s = new THREE.Mesh(stoneGeo, toon(['#8d8a94', '#a3a0aa', '#7b7884'][i % 3]));
-      s.position.set(Math.cos(a) * 0.74, 0.1, Math.sin(a) * 0.74);
-      s.rotation.set(Math.random() * 3, Math.random() * 3, 0);
-      s.scale.set(1.1 + Math.random() * 0.3, 0.8 + Math.random() * 0.3, 1.0 + Math.random() * 0.3);
-      s.castShadow = true;
-      s.userData.ds = 'fire-ring';
-      g.add(s);
-    }
-    if (!this.stove) {
-      const ash = new THREE.Mesh(new THREE.CircleGeometry(0.62, 20), toon('#3a302b'));
-      ash.rotation.x = -Math.PI / 2;
-      ash.position.y = 0.025;
-      ash.userData.ds = 'fire-ring';
-      g.add(ash);
-    }
+    // 돌 테두리 + 바닥 재 (요소: elements/molecules/fire-ring.js). 텐트 화로(그릇)에는 없다
+    if (!this.stove) g.add(createFireRing({ seed: 7 + [...def.id].reduce((h, c) => h * 31 + c.charCodeAt(0), 0) % 9973 }).group); // 화로마다 다른 고정 돌 배치
 
-    // 장작 (티피 형태)
+    // 장작 (티피 형태, 요소: elements/molecules/log-pile.js). 타는 색은 이 재질로 update 에서 바꾼다
     this.logMat = toon('#8b5a33', { emissive: new THREE.Color('#ff4a10'), emissiveIntensity: 0 });
-    this.logs = new THREE.Group();
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2 + 0.3;
-      const B = new THREE.Vector3(Math.cos(a) * 0.4, 0.05, Math.sin(a) * 0.4);
-      const T = new THREE.Vector3(Math.cos(a) * 0.04, 0.82, Math.sin(a) * 0.04);
-      const m = new THREE.Mesh(logGeo, this.logMat);
-      m.position.copy(B).add(T).multiplyScalar(0.5);
-      m.quaternion.setFromUnitVectors(up, T.clone().sub(B).normalize());
-      m.castShadow = true;
-      this.logs.add(m);
-    }
-    for (let i = 0; i < 2; i++) {
-      const m = new THREE.Mesh(baseLogGeo, this.logMat);
-      m.rotation.z = Math.PI / 2;
-      m.rotation.y = i * 1.4 + 0.2;
-      m.position.y = 0.1;
-      this.logs.add(m);
-    }
+    this.logs = createLogPile({ material: this.logMat }).group;
     this.logs.visible = false;
     this.logK = 1;
     if (this.stove) this.logs.position.y = BOWL_TOP - 0.06;
-    this.logs.userData.ds = 'log-pile';
     g.add(this.logs);
 
     // 불꽃
@@ -177,7 +141,7 @@ export class FirePit {
       this.seatPos.push(s);
       if (this.stove) continue; // 텐트 화로 자리는 둥근 소파 (tent.js)
       const seat = def.kind === 'tent' ? this.#chair(i) : this.#stump();
-      seat.userData.ds = def.kind === 'tent' ? 'camp-chair' : 'stump-seat';
+      if (def.kind !== 'tent') seat.userData.ds = 'stump-seat';
       seat.position.set(s.x - def.x, 0, s.z - def.z);
       seat.rotation.y = s.ry;
       g.add(seat);
@@ -241,29 +205,9 @@ export class FirePit {
     this.group.add(this.smoke);
   }
 
+  /** 캠핑 의자 (요소: elements/molecules/camp-chair.js) — 자리마다 천 색이 다르다 */
   #chair(i) {
-    const fabric = toon(['#d65f4a', '#3f8fd1', '#e0b43a', '#5aa36b', '#b07bff'][i % 5]);
-    const frame = toon('#3b3631');
-    const c = new THREE.Group();
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.06, 0.48), fabric);
-    seat.position.y = 0.4;
-    const back = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.05), fabric);
-    back.position.set(0, 0.66, -0.26);
-    back.rotation.x = -0.2;
-    c.add(seat, back);
-    for (const sx of [-1, 1]) {
-      for (const sz of [-1, 1]) {
-        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.45, 5), frame);
-        leg.position.set(sx * 0.25, 0.2, sz * 0.2);
-        leg.rotation.x = sz * 0.25;
-        c.add(leg);
-      }
-      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.04, 0.45), frame);
-      arm.position.set(sx * 0.29, 0.6, -0.02);
-      c.add(arm);
-    }
-    c.children.forEach((m) => { m.castShadow = true; });
-    return c;
+    return createCampChair({ fabric: CHAIR_FABRICS[i % CHAIR_FABRICS.length] }).group;
   }
 
   #stump() {

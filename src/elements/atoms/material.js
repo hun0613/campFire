@@ -11,6 +11,6 @@ export function color(key) {
   return c;
 }
 /** 팔레트 이름으로 칠한 셀 셰이딩 재질 */
-export const paint = (key, opts) => toon(color(key), opts);
+export const paint = (key, opts) => (key?.isMaterial ? key : toon(color(key), opts)); // 재질을 바로 넘겨도 된다 (불에 타는 장작처럼 게임이 색을 바꾸는 재질)
 /** 팔레트 이름으로 칠한 빛나는 재질 (블룸). strength 빛 세기 */
 export const shine = (key, strength = 3) => glow(color(key), strength);

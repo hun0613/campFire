@@ -30,10 +30,10 @@ export const CATALOG = [
 
   // ───────────── 분자 ─────────────
   { id: 'bench', name: '벤치', level: 'molecule', area: '3d', group: '앉는 곳', parts: ['part-plank', 'part-leg'], where: 'src/elements/molecules/bench.js', extracted: 'src/elements/molecules/bench.js', desc: '광장 · 숲길(호숫가) · 노을 언덕 · 주민용 작은 벤치, 모양 4가지' },
-  { id: 'camp-chair', name: '캠핑 의자', level: 'molecule', area: '3d', group: '앉는 곳', where: 'src/fire.js #chair()', desc: '텐트 앞 화로 둘레 접이식 의자 (자리마다 색이 다름)' },
+  { id: 'camp-chair', name: '캠핑 의자', level: 'molecule', area: '3d', group: '앉는 곳', parts: ['part-plank', 'part-pole'], where: 'src/elements/molecules/camp-chair.js', extracted: 'src/elements/molecules/camp-chair.js', desc: '텐트 앞 화로 둘레 접이식 의자 (자리마다 색이 다름)' },
   { id: 'stump-seat', name: '그루터기 의자', level: 'molecule', area: '3d', group: '앉는 곳', where: 'src/fire.js #stump()', desc: '화로 둘레 그루터기 자리', hidden: true }, // 지금 게임에 없음 (모든 바깥 화로가 텐트 앞 캠핑 의자). 코드만 남아 있다
-  { id: 'fire-ring', name: '화로 돌', level: 'molecule', area: '3d', group: '불', where: 'src/fire.js', desc: '화로 둘레 돌 11개와 재' },
-  { id: 'log-pile', name: '장작더미', level: 'molecule', area: '3d', group: '불', fire: 'stacked', where: 'src/fire.js logs', desc: '화로에 쌓은 장작. 불 상태에 따라 줄어들고 타는 색이 된다' },
+  { id: 'fire-ring', name: '화로 돌', level: 'molecule', area: '3d', group: '불', parts: ['part-stone'], where: 'src/elements/molecules/fire-ring.js', extracted: 'src/elements/molecules/fire-ring.js', desc: '화로 둘레 돌 11개와 재' },
+  { id: 'log-pile', name: '장작더미', level: 'molecule', area: '3d', group: '불', fire: 'stacked', parts: ['part-pole', 'part-log'], where: 'src/elements/molecules/log-pile.js', extracted: 'src/elements/molecules/log-pile.js', desc: '화로에 쌓은 장작. 불 상태에 따라 줄어들고 타는 색이 된다' },
   { id: 'fire-flame', name: '불꽃', level: 'molecule', area: '3d', group: '불', fire: 'lit', where: 'src/fire.js flamePoints', desc: '불꽃 · 불씨 · 불티 입자, 빛무리, 바닥 불빛' },
   { id: 'split-log', name: '쪼갠 장작', level: 'molecule', area: '3d', group: '불', where: 'src/woodcut.js makeHalf()', desc: '도끼로 쪼갠 반쪽 통나무 (그루터기 · 품 · 손). 게임에서는 도끼질할 때만 나와서 실험실은 견본을 놓아 보여 준다' },
   { id: 'lamp', name: '가로등', level: 'molecule', area: '3d', group: '불빛', where: 'src/world.js lamp()', desc: '큰길 · 텐트 진입로 가로등 (기둥 · 갓 · 전구 · 빛 웅덩이)' },

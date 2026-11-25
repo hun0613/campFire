@@ -14,12 +14,22 @@ export const PALETTE = {
     dark: '#7b7884', // 짙은 화로 돌
   },
   metal: {
-    dark: '#3b3229', // 가로등 기둥 · 갓 (짙은 고동빛 쇠)
+    dark: '#3b3229', // 가로등 기둥 · 갓 · 캠핑 의자 틀 (짙은 고동빛 쇠)
   },
   light: {
     warm: '#ffcf85', // 가로등 전구 (빛나는 재질로 쓴다)
   },
   cloth: {
     cream: '#eadbbd', // 텐트 천 · 차양
+  },
+  fabric: { // 캠핑 의자 천 (자리마다 다른 색)
+    red: '#d65f4a',
+    blue: '#3f8fd1',
+    yellow: '#e0b43a',
+    green: '#5aa36b',
+    purple: '#b07bff',
+  },
+  ground: {
+    ash: '#3a302b', // 화로 바닥 재
   },
 };

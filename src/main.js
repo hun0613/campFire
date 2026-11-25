@@ -349,6 +349,8 @@ $('mapClose').onclick = () => setMap(false);
 $('mapPanel').addEventListener('click', () => { if (mapFolds() && mapShown()) setMap(false); });
 $('status').addEventListener('click', () => { if (isTouch) document.body.classList.toggle('quest-open'); });
 $('helpClose').onclick = () => $('help').classList.add('hidden');
+// 소리 장치가 꺼져 있으면(아이패드 · 아이폰: 화면을 끄거나 다른 앱에 다녀온 뒤) 화면을 누를 때마다 다시 켠다
+for (const t of ['touchend', 'click', 'keydown']) addEventListener(t, () => sound.unlock(), { capture: true, passive: true });
 $('soundBtn').onclick = (e) => {
   sound.init();
   const muted = sound.toggle();
@@ -379,7 +381,9 @@ net.on('open', () => {
   if (auto) {
     doJoin();
     // 자동 입장은 터치 없이 일어나서 소리가 잠겨 있다. 처음 화면을 누를 때 소리를 켠다
-    addEventListener('pointerdown', () => sound.init(), { once: true, capture: true });
+    // (iOS 는 pointerdown 을 「사용자가 누름」으로 쳐 주지 않을 때가 있어 touchend · click 에서도)
+    const wake = () => { sound.init(); for (const t of ['pointerdown', 'touchend', 'click', 'keydown']) removeEventListener(t, wake, true); };
+    for (const t of ['pointerdown', 'touchend', 'click', 'keydown']) addEventListener(t, wake, { capture: true });
   }
 });
 
