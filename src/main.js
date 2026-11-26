@@ -18,6 +18,7 @@ import { themeOf } from '../shared/themes.js';
 import { Guide, pickTarget } from './guide.js';
 import { Preview } from './preview.js';
 import { isTouch, TouchControls } from './touch.js';
+import { initQuality, PRESET, LABEL, LEVELS, AutoQuality, saveMode, saveAuto } from './quality.js';
 import { initPWA, initFullscreen } from './pwa.js';
 import { initAnalytics, track, startHeartbeat } from './analytics.js';
 import { Music } from './music.js';
@@ -56,7 +57,10 @@ scene.fog = new THREE.Fog('#1a1c44', 40, 150);
 const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 1500);
 
 // 렌더러 + 후처리(픽셀 정리 → 빛 번짐 → 색감)는 src/render.js — 실험실(lab)과 같은 설정
-const view3d = createRender({ scene, camera, lowSpec: isTouch });
+// 🖥️ 화질 (v1.22.8): 높음(예전 PC) · 보통(휴대폰) · 가벼움 + 자동. 풀 · 꽃 밀도 같은 「처음 만들 때」 설정은 보통 이하면 휴대폰처럼
+const gfx = initQuality({ isTouch });
+const lowSpec = isTouch || gfx.level !== 'high';
+const view3d = createRender({ scene, camera, lowSpec, quality: PRESET[gfx.level] });
 const { renderer, composer, bloom, grade } = view3d;
 $('app').appendChild(renderer.domElement);
 
@@ -76,7 +80,7 @@ addEventListener('resize', resize);
 resize();
 
 // ---------------------------------------------------------------- 월드
-const world = buildWorld(scene, { lowSpec: isTouch });
+const world = buildWorld(scene, { lowSpec });
 const pits = new Map(FIRES.map((d) => [d.id, new FirePit(d, scene, shared)])); // 바깥 화로 + 텐트 화로
 const pitList = [...pits.values()];
 const glowFx = new Particles(scene, shared, { max: 5000, additive: true });
@@ -91,7 +95,7 @@ for (const s of world.stumpMeshes) s.log.visible = false; // 그루터기 위 �
 const gbStand = new GuestbookStand(scene, GUESTBOOK);
 const board = new NoticeBoard(scene, BOARD);
 const lightSpots = [...world.lightSpots, gbStand.lightSpot, board.lightSpot];
-const lampPool = new LightPool(scene, isTouch ? 2 : 3);
+const lampPool = new LightPool(scene, PRESET.high.lamps); // 화질에 따라 setCount 로 줄인다
 const colliders = [
   ...world.colliders.filter((c) => !c.tent), // 텐트 벽은 collideTents 에서 (들어가기 · 나가기 버튼으로만 드나든다)
   { x: GUESTBOOK.x, z: GUESTBOOK.z, r: 1.35 },
@@ -103,7 +107,8 @@ const colliders = [
 
 // 모닥불 조명은 가까운 불 몇 곳에만 (폰은 더 적게) — 조명 수가 곧 발열이다
 const firePool = [];
-for (let i = 0; i < (isTouch ? 3 : 4); i++) {
+let fireN = PRESET.high.fires; // 화질에 따라 줄인다 (applyQuality)
+for (let i = 0; i < PRESET.high.fires; i++) {
   const L = new THREE.PointLight('#ff8a3a', 0, 16, 1.5);
   scene.add(L);
   firePool.push(L);
@@ -113,7 +118,35 @@ const tentRoom = new TentInterior(scene, world.tents);
 
 // NPC 루미
 // ---------------------------------------------------------------- 🌦️ 캠핑장 테마 (서버가 알려 준다: 서울 날씨 · 관리자 선택)
-const precip = new Precip(scene, shared, { lowSpec: isTouch });
+const precip = new Precip(scene, shared, { lowSpec });
+
+/** 화질 적용: 픽셀 · 멀티샘플 · 빛 번짐 (render.js) + 그림자 + 실제 조명 수 */
+function applyQuality(level) {
+  const P = PRESET[level];
+  view3d.setQuality(P);
+  const ml = world.moonLight;
+  if (ml.castShadow !== P.shadow > 0) ml.castShadow = P.shadow > 0;
+  if (P.shadow && ml.shadow.mapSize.x !== P.shadow) { ml.shadow.mapSize.setScalar(P.shadow); ml.shadow.map?.dispose(); ml.shadow.map = null; }
+  lampPool.setCount(P.lamps);
+  fireN = P.fires;
+  firePool.forEach((L, i) => { L.visible = i < fireN; if (i >= fireN) L.intensity = 0; });
+  gfx.level = level;
+  document.body.dataset.gfx = level;
+  resize();
+}
+applyQuality(gfx.level);
+// 자동: 느리면 한 단계씩 내린다 (점검 브라우저는 재지 않는다: 기준 캡처가 흔들리지 않게)
+const autoQ = new AutoQuality({
+  enabled: gfx.mode === 'auto' && (!navigator.webdriver || /[?&]gfxauto\b/.test(location.search)),
+  level: gfx.level,
+  onDrop: (to, from, ratio) => {
+    applyQuality(to);
+    saveAuto(to);
+    renderGfxBtn();
+    UI.toast(`🖥️ 화면이 버벅여서 화질을 「${LABEL[to]}」으로 낮췄어요 · 오른쪽 위 화질 버튼에서 바꿀 수 있어요`, 5200);
+    track('gfx_auto', { from, to, ratio: Math.round(ratio * 100) });
+  },
+});
 const fogTarget = { color: new THREE.Color(scene.fog.color), near: scene.fog.near, far: scene.fog.far };
 const fogBase = new THREE.Color(scene.fog.color), fogLook = new THREE.Vector3(), SUNSET_FOG = new THREE.Color('#52244a'); // 지평선 노을빛과 이어지게 (너무 검으면 앉았을 때 지평선이 어두운 띠로 보인다)
 const sunsetK = () => (themeOf(state.theme).sky?.stars > 0.5 ? 1 : 0.35);
@@ -351,6 +384,30 @@ $('status').addEventListener('click', () => { if (isTouch) document.body.classLi
 $('helpClose').onclick = () => $('help').classList.add('hidden');
 // 소리 장치가 꺼져 있으면(아이패드 · 아이폰: 화면을 끄거나 다른 앱에 다녀온 뒤) 화면을 누를 때마다 다시 켠다
 for (const t of ['touchend', 'click', 'keydown']) addEventListener(t, () => sound.unlock(), { capture: true, passive: true });
+// 🖥️ 화질 버튼: 자동 → 높음 → 보통 → 가벼움 → 자동 (휴대폰은 높음 없음)
+function renderGfxBtn() {
+  const b = $('gfxBtn');
+  const t = gfx.mode === 'auto' ? `화질: 자동 (지금 ${LABEL[gfx.level]})` : `화질: ${LABEL[gfx.mode]}`;
+  b.title = t; b.setAttribute('aria-label', t);
+  b.dataset.level = gfx.level;
+}
+$('gfxBtn').onclick = (e) => {
+  e.currentTarget.blur();
+  const modes = ['auto', ...LEVELS.filter((l) => !(isTouch && l === 'high'))];
+  const mode = modes[(modes.indexOf(gfx.mode) + 1) % modes.length];
+  gfx.mode = mode;
+  saveMode(mode);
+  autoQ.on = mode === 'auto';
+  const level = mode === 'auto' ? gfx.top : mode; // 자동으로 돌아가면 가장 높은 단계부터 다시 잰다
+  if (mode === 'auto') saveAuto(level);
+  autoQ.level = level; autoQ.reset(3000); autoQ.slow = 0;
+  applyQuality(level);
+  renderGfxBtn();
+  const lowNow = level !== 'high' || isTouch;
+  UI.toast(`🖥️ 화질 「${LABEL[mode]}」${mode === 'auto' ? ' · 버벅이면 알아서 낮춰요' : ''}${lowNow !== lowSpec ? ' · 풀 · 꽃 밀도는 다시 들어오면 바뀌어요' : ''}`, 3200);
+  track('gfx_set', { mode });
+};
+renderGfxBtn();
 $('soundBtn').onclick = (e) => {
   sound.init();
   const muted = sound.toggle();
@@ -462,7 +519,11 @@ net.on('welcome', (m) => {
   $('hud').classList.remove('hidden');
   const firstTime = !store.get('helpSeen', false);
   requestBoard();
-  track('game_join', { device: isTouch ? 'mobile' : 'pc', view: view.fp ? 'fp' : 'tp', returning: !firstTime });
+  track('game_join', { device: isTouch ? 'mobile' : 'pc', view: view.fp ? 'fp' : 'tp', returning: !firstTime, gfx: gfx.level });
+  if (gfx.soft && !store.get('softTip', false)) { // 그래픽 가속이 꺼진 브라우저: 가볍게 + 켜는 법 안내 (한 번만)
+    store.set('softTip', true);
+    setTimeout(() => UI.tip('🖥️ 브라우저 그래픽 가속이 꺼져 있어 화면이 느릴 수 있어요 · 크롬 설정 → 시스템 → 「가능한 경우 그래픽 가속 사용」을 켜 주세요', 8000), 3000);
+  }
   if (!state.hbStarted) { state.hbStarted = true; startHeartbeat(() => ({ sitting: !!state.sitting, view: view.fp ? 'fp' : 'tp' })); }
   if (firstTime) {
     $('help').classList.remove('hidden');
@@ -2287,7 +2348,7 @@ function updateFires(t, dt) {
     .map((p) => ({ p, d: p.pos.distanceToSquared(focus) }))
     .sort((a, b) => a.d - b.d);
   firePool.forEach((L, i) => {
-    const e = lit[i];
+    const e = i < fireN ? lit[i] : null; // 화질에 따라 쓰는 조명 수가 다르다
     if (!e) { L.intensity = 0; return; }
     L.position.set(e.p.pos.x, 1.1 * e.p.height, e.p.pos.z);
     L.color.copy(e.p.tip).lerp(FIRE_COLOR, 0.35);
@@ -2599,6 +2660,7 @@ function frame(now = performance.now()) {
   const interval = 1000 / targetFps(now);
   if (now - lastDraw < interval - 3) return;
   lastDraw = now;
+  autoQ.frame(now, targetFps(now)); // 🖥️ 자동 화질: 목표만큼 못 그리면 한 단계 낮춘다
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = clock.elapsedTime;
   shared.uTime.value = t;

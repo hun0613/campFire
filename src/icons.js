@@ -47,12 +47,14 @@ const G = {
   dock: { s: '<rect x="1.8" y="3.2" width="20.4" height="13.8" rx="2.4"/><path d="M9.4 16.6h5.2l.8 3.4H8.6z"/><rect x="6.4" y="19.4" width="11.2" height="2" rx="1"/>' },
   guitar: { s: '<circle cx="8.6" cy="15.6" r="5.6"/><circle cx="12.2" cy="11.8" r="3.7"/>' + L('M13.4 10.6L19.6 4.4', 2.4) + '<path d="M18.2 3.2l1.6-1.6 2.6 2.6-1.6 1.6z"/>', c: '<circle cx="9.6" cy="14.6" r="1.5" ' + F + '/><path d="M5.6 17.8l2.6 2.6" stroke-width="1.3"/>' },
 };
+G.gfx = { s: '<rect x="2.4" y="4.7" width="19.2" height="2.6" rx="1.3"/><rect x="2.4" y="10.7" width="19.2" height="2.6" rx="1.3"/><rect x="2.4" y="16.7" width="19.2" height="2.6" rx="1.3"/><circle cx="8" cy="6" r="3.1"/><circle cx="16" cy="12" r="3.1"/><circle cx="10.4" cy="18" r="3.1"/>' }; // 🖥️ 화질 (조절판)
 const P = G; // 이름 목록 (측정 스크립트 · 다른 모듈 호환용)
 
 // 아이콘마다 그려지는 크기 · 위치가 달라서, 모두 비슷한 무게로 가운데에 오게 맞춘다 [배율, x 이동, y 이동]
 // (scratchpad 의 측정 스크립트가 만든 값. 아이콘을 고치면 다시 잰다)
 export const NORM = {
   menu: [1.024, 0, 0],
+  gfx: [0.96, 0, 0],
   close: [1.124, 0, 0],
   map: [0.856, -0.25, 0],
   install: [0.92, 0, -1.11],

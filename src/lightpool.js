@@ -16,6 +16,18 @@ export class LightPool {
       this.slots.push({ L, spot: null, w: 0 });
     }
     this.t = 1;
+    this.n = count; // 지금 쓰는 조명 수 (화질에 따라 줄인다. 안 쓰는 조명은 꺼 둔다 — 셰이더는 한 번만 다시 만든다)
+  }
+
+  /** 쓰는 조명 수 바꾸기 (화질) */
+  setCount(n) {
+    this.n = Math.max(0, Math.min(this.slots.length, n));
+    this.slots.forEach((sl, i) => {
+      const on = i < this.n;
+      sl.L.visible = on;
+      if (!on) { sl.spot = null; sl.w = 0; sl.L.intensity = 0; }
+    });
+    this.t = 1;
   }
 
   /**
@@ -30,11 +42,12 @@ export class LightPool {
         .map((s) => ({ s, d: s.pos.distanceTo(focus) }))
         .filter((o) => o.d < o.s.distance + 30)
         .sort((a, b) => a.d - b.d)
-        .slice(0, this.slots.length)
+        .slice(0, this.n)
         .map((o) => o.s);
     }
     const want = this.want || [];
-    for (const sl of this.slots) {
+    for (let i = 0; i < this.n; i++) {
+      const sl = this.slots[i];
       const keep = sl.spot && want.includes(sl.spot);
       if (keep) sl.w = Math.min(1, sl.w + dt * 2.5);
       else {

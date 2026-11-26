@@ -16,9 +16,10 @@ const FULLSCREEN_VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = pr
  * @param {{ scene: THREE.Scene, camera: THREE.Camera, lowSpec?: boolean }} o lowSpec: 휴대폰(터치) — 픽셀 예산 · 멀티샘플을 낮춘다
  * @returns {{ renderer, composer, bloom, grade, renderPR, resize(w, h) }}
  */
-export function createRender({ scene, camera, lowSpec = false }) {
-  const PIXEL_BUDGET = lowSpec ? 2.2e6 : 3.2e6;
-  const renderPR = (w = innerWidth, h = innerHeight) => Math.max(0.75, Math.min(devicePixelRatio, MAX_PR, Math.sqrt(PIXEL_BUDGET / (w * h))));
+export function createRender({ scene, camera, lowSpec = false, quality = null }) {
+  // 화질 (src/quality.js PRESET): 없으면 예전처럼 lowSpec 으로 (실험실)
+  const Q = { pixels: lowSpec ? 2.2e6 : 3.2e6, maxPR: MAX_PR, samples: lowSpec ? 2 : 4, bloomDiv: 2, ...(quality || {}) };
+  const renderPR = (w = innerWidth, h = innerHeight) => Math.max(0.75, Math.min(devicePixelRatio, Q.maxPR, Math.sqrt(Q.pixels / (w * h))));
 
   // alpha: TV 화면 자리만 투명하게 뚫어서, 캔버스 '뒤'에 있는 유튜브 영상이 보이게 한다 (앞의 물체가 영상을 제대로 가림)
   // antialias 는 끈다: 장면은 composer 의 별도 버퍼에 그려서 캔버스 안티에일리어싱은 효과 없이 메모리·대역폭만 쓴다
@@ -33,7 +34,7 @@ export function createRender({ scene, camera, lowSpec = false }) {
   renderer.toneMappingExposure = 1.0;
 
   // 계단 현상(모자 · 울타리 · 나무 가장자리)을 줄이는 멀티샘플 안티에일리어싱: PC 4배, 폰 2배 (폰 GPU는 타일 방식이라 2배는 거의 공짜)
-  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(innerWidth * renderPR(), innerHeight * renderPR(), { type: THREE.HalfFloatType, samples: lowSpec ? 2 : 4 }));
+  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(innerWidth * renderPR(), innerHeight * renderPR(), { type: THREE.HalfFloatType, samples: Q.samples }));
   composer.addPass(new RenderPass(scene, camera));
   // 빛 번짐 전에 픽셀 값 정리: 아주 드물게 생기는 NaN · 무한대 픽셀(멀티샘플 + HDR)이 블룸에 번지면 화면 전체가 까매진다
   // (노을 언덕 벤치에서 캠핑장 쪽으로 고개를 돌릴 때 재현) → 그런 픽셀은 0으로, 지나치게 밝은 값은 잘라 둔다
@@ -51,7 +52,8 @@ export function createRender({ scene, camera, lowSpec = false }) {
   const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.42, 0.32, 0.85);
   composer.addPass(bloom);
   // 빛 번짐(블룸)은 원래 흐릿한 효과라 절반 해상도로 계산해도 티가 거의 안 난다 — GPU 부담은 크게 준다
-  { const set = bloom.setSize.bind(bloom); bloom.setSize = (w, h) => set(Math.round(w / 2), Math.round(h / 2)); }
+  // (가벼움 화질은 1/4 해상도)
+  { const set = bloom.setSize.bind(bloom); bloom.setSize = (w, h) => set(Math.round(w / Q.bloomDiv), Math.round(h / Q.bloomDiv)); }
   // 블룸을 더할 때 투명도(알파)는 건드리지 않게 → TV 화면 구멍이 블룸에 메워지지 않는다
   Object.assign(bloom.blendMaterial, {
     blending: THREE.CustomBlending,
@@ -82,5 +84,12 @@ export function createRender({ scene, camera, lowSpec = false }) {
     composer.setSize(w, h);
   }
 
-  return { renderer, composer, bloom, grade, renderPR, resize };
+  /** 화질 바꾸기 (게임 도중): 픽셀 예산 · 멀티샘플 · 빛 번짐 해상도 */
+  function setQuality(q) {
+    Object.assign(Q, q);
+    for (const rt of [composer.renderTarget1, composer.renderTarget2]) if (rt.samples !== Q.samples) { rt.samples = Q.samples; rt.dispose(); }
+    resize();
+  }
+
+  return { renderer, composer, bloom, grade, renderPR, resize, setQuality };
 }
