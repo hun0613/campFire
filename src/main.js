@@ -2872,9 +2872,8 @@ function updateHud() {
   if (state.ride != null || nearDock) { // 열기구 안 · 광장 승강장 근처: 남은 시간
     const [head, when] = arena.timeText(state.zone);
     UI.setQuest(`<b>${state.ride != null ? `🎈 ${arena.b.at ? `${Math.ceil(arena.b.next)}초 뒤 출발` : '날아가는 중'}` : `${head} ${when}`}</b><br>${questText() + lumiQuestLine()}`);
-  } else if (state.zone === 'arena') UI.setQuest(arenaHint()); // 아레나: 무대는 위젯으로, 여기는 짧은 안내만
+  } else if (state.zone === 'arena') UI.setQuest(arenaHint()); // 아레나: 짧은 안내만 (무대는 전광판 · 타임테이블로)
   else UI.setQuest(questText() + lumiQuestLine() + directionText(target));
-  updateStageWidget();
   const pit = it?.pit;
   if (pit && pit.state === 'lit') {
     const rem = Math.ceil(pit.remaining(serverNow()) / 1000);
@@ -2916,36 +2915,6 @@ function updateHud() {
 const arenaHint = () => '🔥 객석 모닥불에 장작 5개로 불을 피워요 · 장작은 왼쪽 창고지기 콩이에게';
 
 // 🎤 아레나 무대 위젯: 지금 무대(썸네일 · 제목 · 신청자 · 진행 막대) / 다음 무대 / 없으면 신청 안내
-let swKey = '', swT = 0;
-const fmtClock = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
-function updateStageWidget() {
-  const el = $('stageWidget');
-  const on = state.zone === 'arena' && state.ride == null && !!me;
-  if (el.classList.contains('hidden') === on) { el.classList.toggle('hidden', !on); if (on) marquee($('swTitle')); } // 보이는 순간 다시 잰다 (숨어 있을 땐 너비가 0)
-  if (!on) return;
-  const now = serverNow();
-  const show = arena.show && now >= arena.show.startedAt ? arena.show : null;
-  const nx = show ? null : arena.next(now);
-  const e = show || nx;
-  const key = `${show?.id || ''}|${nx?.id || ''}`;
-  if (key !== swKey) {
-    swKey = key;
-    el.classList.toggle('live', !!show);
-    $('swTag').textContent = show ? '지금 무대' : nx ? '다음 무대' : '무대';
-    marquee($('swTitle'), e ? `${e.title} · 🎤 ${show ? show.byName : nx.by}` : '아직 잡힌 무대가 없어요 · 승강장 앞 부스에서 신청해요'); // 긴 제목은 흐르게
-  }
-  if ((swT -= 1) > 0) return; // 시간 글은 가끔만
-  swT = 10;
-  if (show) {
-    const dur = (arena.table.find((x) => x.id === show.id)?.dur) || (show.endsAt ? (show.endsAt - show.startedAt - 2000) / 1000 : 600);
-    const at = Math.min(dur, Math.max(0, (now - show.startedAt) / 1000));
-    $('swFill').style.width = `${(at / dur) * 100}%`;
-    $('swWhen').textContent = `${fmtClock(at)} / ${fmtClock(dur)}`;
-  } else if (nx) {
-    const left = Math.max(0, (nx.at - now) / 1000);
-    $('swWhen').textContent = left < 3600 ? `${Math.ceil(left / 60)}분 뒤` : kstWhen(nx.at);
-  } else $('swWhen').textContent = '';
-}
 
 /** 지금 장작을 더 넣을 수 있는 타는 불 (없으면 null) */
 function feedPit() {

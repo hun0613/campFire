@@ -232,8 +232,8 @@ export const BALLOON = {
 };
 /** 열기구 상태: { at: 'camp'|'arena'|null(나는 중), from, to, u(0~1 나는 진행), x, y, z, next(다음 출발까지 초), heading }
  *  나는 길 (v1.23): 처음엔 거의 수직으로 떠오르고 → 바람에 살짝 휘어 가며 높이 떠서 → 천천히 내려앉는다 (닿을 땐 속도 0) */
-/** 🎤 무대 타임테이블 팻말 (v1.23.1): 광장 승강장 입구 오른쪽 (출발 전광판 맞은편), 큰길에서 오는 쪽을 본다 */
-export const TT_SIGN = { x: BALLOON.camp.x - 4.6, z: BALLOON.camp.z - 0.9, ry: Math.PI - 0.45 };
+/** 🎤 무대 타임테이블 팻말 (v1.23.1): 광장 승강장 입구 앞 큰길 쪽 (가로등 · 데크와 떨어진 빈자리), 큰길에서 오는 쪽을 본다 */
+export const TT_SIGN = { x: BALLOON.camp.x - 3.7, z: BALLOON.camp.z - 4.6, ry: Math.PI - 0.35 };
 export function balloonState(now, k = 0) {
   const B = BALLOON, s = (((now / 1000 - k * (B.cycle / B.fleet)) % B.cycle) + B.cycle) % B.cycle; // k 번째 열기구는 반 바퀴씩 늦게
   const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * t * (t * (t * 6 - 15) + 10); }; // 부드러운 시작 · 끝
