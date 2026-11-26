@@ -9,7 +9,7 @@ import { toon, glow, textTexture } from '../../toon.js';
 
 export const DECK = { w: 30, d: 11, h: 1.6 };
 export const MAIN = { y: 7.4, z: -3.8, w: 14.4, h: 8.1 };
-const SIDE = { x: 15.6, y: 5.8, z: -2.2, w: 7.6, h: 4.28 };
+export const SIDE = { x: 15.6, y: 5.8, z: -2.2, w: 7.6, h: 4.28 };
 const TRUSS_Y = 13.2, TRUSS_Z = -2.4;
 const BEAM_COLORS = ['stage.warm', 'stage.peach', 'stage.glow', 'stage.warm']; // 조명은 모닥불빛 한 톤 (금 · 살구 · 크림)
 const FLAG_COLORS = ['balloon.red', 'balloon.cream', 'stage.amber', 'balloon.sun'];

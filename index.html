@@ -51,17 +51,6 @@
 
   <!-- HUD -->
   <div id="hud" class="hidden">
-    <!-- 🎤 아레나 무대 위젯 (뮤직 플레이어처럼: 지금 · 다음 무대) -->
-    <div id="stageWidget" class="panel stage-widget hidden" aria-live="polite">
-      <div class="sw-art"><img id="swThumb" alt="" referrerpolicy="no-referrer" /><span class="sw-eq" aria-hidden="true"><i></i><i></i><i></i></span></div>
-      <div class="sw-body">
-        <div class="sw-top"><span id="swTag" class="sw-tag">NOW PLAYING</span><span id="swWhen" class="sw-when"></span></div>
-        <div id="swTitle" class="sw-title"></div>
-        <div id="swBy" class="sw-by"></div>
-        <div class="sw-bar"><i id="swFill"></i></div>
-        <div class="sw-time"><span id="swNow">0:00</span><span id="swDur">0:00</span></div>
-      </div>
-    </div>
     <div id="status" class="panel">
       <div class="wood-row">
         <span class="wood-icon">🪵</span>
@@ -70,6 +59,14 @@
         <span class="coin-num" title="코인 · 매일 밤 12시에 30개로 채워져요">🪙 <b id="coinCount">0</b></span>
       </div>
       <div id="quest" class="quest"></div>
+      <!-- 🎤 아레나 무대 줄 (v1.23.1): 장작 칸 안 한 줄 — 지금 · 다음 무대, 긴 제목은 흐른다 -->
+      <div id="stageWidget" class="sw-line hidden" aria-live="polite">
+        <span class="sw-eq" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span id="swTag" class="sw-tag">다음 무대</span>
+        <span id="swTitle" class="sw-title"></span>
+        <span id="swWhen" class="sw-when"></span>
+        <span class="sw-bar"><i id="swFill"></i></span>
+      </div>
     </div>
 
     <div id="topright" class="panel small">
@@ -193,12 +190,14 @@
   <!-- 🎤 불멍 아레나 무대 신청 (아레나 승강장 앞 부스) -->
   <div id="arenaModal" class="overlay hidden">
     <div class="card help-card music-card arena-card">
-      <div class="title small">🎤 불멍 아레나 무대 신청</div>
-      <div class="ar-intro">신청한 곡이 승인되면 그 시각에 <b>이 무대 대형 전광판</b>에서 모두 함께 들어요 · 승인 전까지는 「승인 대기」로 보여요</div>
+      <div class="title small" id="arenaTitle">🎤 불멍 아레나 무대 신청</div>
+      <div class="ar-intro ar-apply">신청한 곡이 승인되면 그 시각에 <b>이 무대 대형 전광판</b>에서 모두 함께 들어요 · 승인 전까지는 「승인 대기」로 보여요</div>
       <div class="ar-scroll">
         <div class="mm-list-title">📅 타임테이블</div>
         <div id="arenaTable" class="ar-table"></div>
         <div id="arenaMine" class="ar-mine"></div>
+        <div class="ar-viewnote ar-view">🎈 무대 신청은 열기구를 타고 가서 아레나 승강장 앞 「🎤 무대 신청」 부스에서 할 수 있어요 · 승인된 무대는 그 시각에 아레나 대형 전광판에서 함께 들어요</div>
+        <div class="ar-apply">
         <div class="mm-list-title">✍️ 곡 고르기</div>
         <form id="arenaForm" class="mm-row" autocomplete="off">
           <input id="arenaQ" type="search" enterkeyhint="search" placeholder="곡 이름 · 가수 또는 유튜브 링크" spellcheck="false" />
@@ -211,9 +210,10 @@
         <div class="mm-list-title">🕘 원하는 시각 <small>(30분 칸 · 한국 시간)</small></div>
         <div class="ar-when"><select id="arenaDay"></select><select id="arenaTime"></select></div>
         <input id="arenaMsg" class="ar-msg" maxlength="60" placeholder="무대에 띄울 한마디 (선택) 예: 첫눈 오는 밤에 ❄️" />
+        </div>
       </div>
-      <button class="btn" id="arenaSend">🎤 신청하기</button>
-      <div class="mm-rules">운영자가 확인하고 승인해요 · 한 사람이 2곡까지 걸어 둘 수 있어요 · 한 무대는 15분까지</div>
+      <button class="btn ar-apply" id="arenaSend">🎤 신청하기</button>
+      <div class="mm-rules ar-apply">운영자가 확인하고 승인해요 · 한 사람이 2곡까지 걸어 둘 수 있어요 · 한 무대는 15분까지</div>
       <button class="btn ghost" id="arenaClose">닫기</button>
     </div>
   </div>

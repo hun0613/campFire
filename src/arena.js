@@ -4,8 +4,10 @@
 // - 전광판: 곡이 나오면 가운데 화면에 영상 구멍 (music.js 가 유튜브를 뒤에 붙인다), 아니면 다음 무대 안내 그림
 import * as THREE from 'three';
 import { toon, glow, mulberry32 } from './toon.js';
-import { ARENA, BALLOON, balloonState, basketSlot, rideOf } from '../shared/config.js';
-import { create as createStage, DECK, MAIN } from './elements/organisms/arena-stage.js';
+import { ARENA, BALLOON, TT_SIGN, balloonState, basketSlot, rideOf } from '../shared/config.js';
+import { create as createTimetableSign } from './elements/molecules/timetable-sign.js';
+import { create as createStage, DECK, MAIN, SIDE } from './elements/organisms/arena-stage.js';
+import { textStrip } from './marquee.js';
 import { create as createBalloon, FLOOR as BASKET_FLOOR, VARIANTS as BALLOON_LOOKS } from './elements/molecules/hot-air-balloon.js';
 import { create as createBooth } from './elements/molecules/festival-booth.js';
 import { create as createDock } from './elements/molecules/balloon-dock.js';
@@ -138,6 +140,7 @@ export class Arena {
 
     // ── 캠핑장 쪽: 광장 승강장 (늘 보인다)
     this.campDock = put(scene, createDock({ title: '🎈 아레나행 열기구' }), BALLOON.camp.x, BALLOON.camp.z, Math.PI, this.colliders);
+    this.ttSign = put(scene, createTimetableSign(), TT_SIGN.x, TT_SIGN.z, TT_SIGN.ry, this.colliders); // 🎤 타임테이블 팻말 (v1.23.1)
     this.applyBooth = put(this.root, createBooth({ variant: 'apply' }), ARENA.apply.x, ARENA.apply.z, ARENA.apply.ry, this.colliders); // 🎤 무대 신청 (아레나)
     this.lightSpots.push({ pos: new THREE.Vector3(ARENA.apply.x + Math.sin(ARENA.apply.ry) * 2.6, 1.8, ARENA.apply.z + Math.cos(ARENA.apply.ry) * 2.6), color: new THREE.Color('#ffc98a'), intensity: 3, distance: 9 });
     this.campLight = { pos: new THREE.Vector3(BALLOON.camp.x, 2.4, BALLOON.camp.z), color: new THREE.Color('#ffc98a'), intensity: 3, distance: 9 }; // 광장 승강장 불빛
@@ -163,6 +166,18 @@ export class Arena {
     this.sideTex = new THREE.CanvasTexture(this.sideCv); this.sideTex.colorSpace = THREE.SRGBColorSpace;
     const sideMat = new THREE.MeshBasicMaterial({ map: this.sideTex, toneMapped: false, fog: false });
     S.left.material = sideMat; S.right.material = sideMat;
+    // 🎞️ 긴 곡 제목은 흐르게 (v1.23.1): 제목 줄만 투명한 글자 띠로 전광판 위에 얹는다 (큰 그림은 30초에 한 번만 다시 그린다)
+    this.mainTitle = textStrip({ w: MAIN.w * 0.92, h: MAIN.h * 92 / 576, px: 942, py: 92, font: '52px Moneygraphy, sans-serif' });
+    this.mainTitle.mesh.position.z = 0.02;
+    S.main.add(this.mainTitle.mesh);
+    this.sideTitles = [0, 1, 2, 3].map((i) => {
+      const st = textStrip({ w: SIDE.w * 276 / 512, h: SIDE.h * 46 / 288, px: 552, py: 92, font: '48px Moneygraphy, sans-serif', align: 'left' });
+      const y = (0.5 - (98 + i * 50) / 288) * SIDE.h, x = ((228 + 138) / 512 - 0.5) * SIDE.w;
+      st.mesh.position.set(x, y, 0.02);
+      const twin = new THREE.Mesh(st.mesh.geometry, st.mesh.material); twin.position.copy(st.mesh.position); twin.renderOrder = 2;
+      S.left.add(st.mesh); S.right.add(twin);
+      return st;
+    });
     this.screenW = MAIN.w;
     this.show = null; this.table = [];
     this._info = '';
@@ -194,7 +209,7 @@ export class Arena {
   }
 
   // ---------------------------------------------------------------- music.js 가 쓰는 전광판 (Monitor 와 같은 모양)
-  setHole(on) { this.stage.screens.main.material = on ? HOLE : this.infoMat; }
+  setHole(on) { this.stage.screens.main.material = on ? HOLE : this.infoMat; this.mainTitle.mesh.visible = !on; } // 영상이 나오면 제목 띠도 숨긴다
   screenPose(outPos, outQuat) {
     const s = this.stage.screens.main;
     s.updateWorldMatrix(true, false);
@@ -223,16 +238,18 @@ export class Arena {
     g.fillText('🔥 불멍 아레나', W / 2, 96);
     g.fillStyle = '#fff1d8';
     const clip = (t, n) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
+    const title = (text, y, c = '#fff1d8') => { this.mainTitle.set(text, c); this.mainTitle.mesh.position.y = (0.5 - y / 576) * MAIN.h; }; // 흐르는 제목 띠
     if (show) {
       g.font = '44px Moneygraphy, sans-serif'; g.fillText('지금 무대', W / 2, 220);
-      g.font = '52px Moneygraphy, sans-serif'; g.fillText(`「${clip(show.title, 22)}」`, W / 2, 300);
+      title(`「${show.title}」`, 300);
       g.font = '36px Moneygraphy, sans-serif'; g.fillText(`🎤 ${show.byName}`, W / 2, 380);
     } else if (nx) {
       g.font = '40px Moneygraphy, sans-serif'; g.fillText('다음 무대', W / 2, 205);
       g.fillStyle = '#ff9ad8'; g.font = '58px Moneygraphy, sans-serif'; g.fillText(kstWhen(nx.at), W / 2, 285);
-      g.fillStyle = '#fff1d8'; g.font = '44px Moneygraphy, sans-serif'; g.fillText(`「${clip(nx.title, 24)}」`, W / 2, 365);
+      g.fillStyle = '#fff1d8'; title(`「${nx.title}」`, 365);
       g.font = '32px Moneygraphy, sans-serif'; g.fillText(`🎤 ${nx.by}${nx.msg ? ` · ${clip(nx.msg, 24)}` : ''}`, W / 2, 430);
     } else {
+      title('', 0);
       g.font = '46px Moneygraphy, sans-serif'; g.fillText('오늘은 조용한 불멍 무대', W / 2, 250);
       g.font = '32px Moneygraphy, sans-serif'; g.fillText('승강장 앞 「🎤 무대 신청」 부스에서 내 노래를 무대에 올려 보세요', W / 2, 330);
     }
@@ -254,8 +271,8 @@ export class Arena {
     rows.forEach((e, i) => {
       const live = this.show?.id === e.id;
       g.fillStyle = live ? '#ff9ad8' : '#ffb347'; g.fillText(live ? 'NOW' : kstWhen(e.at), 28, 98 + i * 50);
-      g.fillStyle = '#fff1d8'; g.fillText(e.title.length > 13 ? `${e.title.slice(0, 12)}…` : e.title, 228, 98 + i * 50);
     });
+    this.sideTitles.forEach((st, i) => st.set(rows[i]?.title || '')); // 제목은 흐르는 글자 띠로
     this.sideTex.needsUpdate = true;
   }
 
@@ -338,11 +355,17 @@ export class Arena {
     // 시각판
     const boardFor = (side) => this.timeInfo(side);
     this.campDock.setBoard(boardFor('camp'));
+    if (zone === 'camp' && (this._ttT = (this._ttT || 0) - dt) <= 0) { // 팻말: 1초에 한 번 (바뀐 게 없으면 다시 그리지 않는다)
+      this._ttT = 1;
+      this.ttSign.setRows(this.table.slice(0, 4).map((e) => ({ when: kstWhen(e.at), title: e.title, live: this.show?.id === e.id && now >= e.at })));
+    }
     this.arenaDock.setBoard(boardFor('arena'));
     if (this.root.visible) {
       this.stage.update(t, { energy });
       this.#drawInfo(now);
       this.#drawSide(now);
+      this.mainTitle.update(dt);
+      for (const st of this.sideTitles) st.update(dt);
     }
   }
 }

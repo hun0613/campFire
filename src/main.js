@@ -33,9 +33,10 @@ import { BASKET_R } from './elements/molecules/hot-air-balloon.js';
 import { createArenaCrowd } from './arenaCrowd.js';
 import { createArenaFans } from './arenaFans.js';
 import { createArenaBand } from './arenaBand.js';
+import { marquee, marqueeAll } from './marquee.js';
 import {
   CFG, PITS, STUMPS, NPC, KEEPER, BOUNDS, RANGE, LOOKS, GUESTBOOK, BOARD, QUESTS, LEGEND_POWDERS, TENTS, FIRES, tentAt, tentLocal, EGG, kstDay, EMOTES, FENCE, GATES, SPOTS, LOUNGE_SEATS, SUNSET, ZONES, zonePath,
-  ARENA, ARENA_PITS, BALLOON, inArena,
+  ARENA, ARENA_PITS, BALLOON, TT_SIGN, inArena,
 } from '../shared/config.js';
 
 const $ = (id) => document.getElementById(id);
@@ -762,6 +763,21 @@ function closeOnBackdrop(el, close) {
   });
 }
 closeOnBackdrop($('storeModal'), () => closeStore());
+/**
+ * 창 안의 버튼도 같은 문제(v1.23.1): 휴대폰 행동 버튼을 누르는 순간 창이 열리면, 손을 뗄 때 생기는 클릭이
+ * 방금 열린 창의 「닫기」 같은 버튼에 떨어져 바로 닫혔다. 창 안에서 누르기 시작한 클릭만 받는다
+ * (키보드 Enter · 코드로 누른 클릭은 detail 이 0 이라 그대로 통과)
+ */
+function guardStrayClicks(el) {
+  let armed = false;
+  el.addEventListener('pointerdown', () => { armed = true; }, true);
+  el.addEventListener('click', (e) => {
+    if (e.detail !== 0 && !armed) { e.stopPropagation(); e.preventDefault(); }
+    armed = false;
+  }, true);
+  new MutationObserver(() => { if (!el.classList.contains('hidden')) armed = false; }).observe(el, { attributes: true, attributeFilter: ['class'] }); // 열릴 때마다 새로
+}
+for (const el of document.querySelectorAll('.overlay')) guardStrayClicks(el);
 for (const b of $('storeModal').querySelectorAll('[data-op]')) {
   b.onclick = () => {
     const op = b.dataset.op;
@@ -1198,14 +1214,17 @@ $('musicQ').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMu
 const arena$ = { pick: null, mine: [], slotMin: 30, maxDays: 14, busy: false };
 const arenaOpen = () => !$('arenaModal').classList.contains('hidden');
 function arenaErr(text) { $('arenaErr').textContent = text || ''; $('arenaErr').classList.toggle('hidden', !text); }
-function openArena() {
+function openArena({ view = false } = {}) {
   arenaErr('');
   arena$.busy = false;
+  // view: 캠핑장 승강장 팻말에서 연 「타임테이블만 보기」 (신청은 아레나 부스에서만)
+  $('arenaModal').querySelector('.arena-card').classList.toggle('view', view);
+  $('arenaTitle').textContent = view ? '🎤 불멍 아레나 타임테이블' : '🎤 불멍 아레나 무대 신청';
   $('arenaModal').classList.remove('hidden');
   renderArenaTable();
   renderArenaWhen();
   net.send({ t: 'arenaOpen' });
-  track('arena_booth');
+  track(view ? 'arena_timetable' : 'arena_booth');
 }
 function closeArena() { $('arenaModal').classList.add('hidden'); $('arenaQ').blur(); }
 const STATUS_TXT = { 대기: '⏳ 승인 대기', 승인: '✅ 승인', 거절: '🙏 이번엔 어려워요' };
@@ -1214,9 +1233,10 @@ function renderArenaTable() {
   const rows = arena.table.slice(0, 8);
   $('arenaTable').innerHTML = rows.length ? rows.map((e) => {
     const live = arena.show?.id === e.id && now >= e.at;
-    return `<div class="ar-row${live ? ' live' : ''}"><span class="ar-at">${live ? '🎵 지금 무대' : kstWhen(e.at)}</span><span class="ar-t">${escHtml(e.title)}</span><small>${escHtml(e.by)}</small></div>`;
+    return `<div class="ar-row${live ? ' live' : ''}"><span class="ar-at">${live ? '🎵 지금 무대' : kstWhen(e.at)}</span><span class="ar-t" data-mq>${escHtml(e.title)}</span><small>${escHtml(e.by)}</small></div>`;
   }).join('') : '<div class="ar-empty">아직 잡힌 무대가 없어요. 첫 무대를 신청해 보세요!</div>';
-  $('arenaMine').innerHTML = arena$.mine.length ? `<div class="mm-list-title">🙋 내 신청</div>${arena$.mine.map((e) => `<div class="ar-row"><span class="ar-at">${e.at ? kstWhen(e.at) : '-'}</span><span class="ar-t">${escHtml(e.title)}</span><small>${STATUS_TXT[e.status] || e.status}</small></div>`).join('')}` : '';
+  $('arenaMine').innerHTML = arena$.mine.length ? `<div class="mm-list-title">🙋 내 신청</div>${arena$.mine.map((e) => `<div class="ar-row"><span class="ar-at">${e.at ? kstWhen(e.at) : '-'}</span><span class="ar-t" data-mq>${escHtml(e.title)}</span><small>${STATUS_TXT[e.status] || e.status}</small></div>`).join('')}` : '';
+  marqueeAll($('arenaModal')); // 긴 제목은 흐르게
 }
 /** 날짜 (오늘부터 maxDays 일) · 시각 (30분 칸). 이미 잡힌 무대 · 10분 안 칸은 고를 수 없다 */
 function renderArenaWhen() {
@@ -1678,6 +1698,10 @@ function findInteraction() {
     const dock = BALLOON[state.zone], b = arena.b;
     const dd = Math.hypot(me.x - dock.x, me.z - dock.z);
     if (dd < BALLOON.range) { best = b.at === state.zone ? { type: 'balloon' } : { type: 'balloonWait' }; bestD = dd; }
+    if (state.zone === 'camp') { // 🎤 승강장 옆 타임테이블 팻말
+      const dt2 = Math.hypot(me.x - TT_SIGN.x, me.z - TT_SIGN.z);
+      if (dt2 < 2.6 && dt2 < bestD) { best = { type: 'timetable' }; bestD = dt2; }
+    }
     if (state.zone === 'arena') { // 아레나: 부스 둘 · 창고지기 콩이 · 사람들 · 객석 모닥불
       for (const [bp, type] of [[ARENA.booth, 'festBooth'], [ARENA.apply, 'arenaBooth']]) {
         const db = Math.hypot(me.x - bp.x, me.z - bp.z);
@@ -1761,6 +1785,7 @@ function promptFor(it) {
   if (it.type === 'balloon') return [`<kbd>E</kbd> 열기구 타기 🎈 <small>(${state.zone === 'arena' ? '캠핑장행' : '불멍 아레나행'} · ${Math.ceil(arena.b.next)}초 뒤 출발)</small>`];
   if (it.type === 'balloonWait') return [`🎈 열기구가 오는 중이에요 <small>(1분마다 출발 · 승강장 전광판을 봐 주세요)</small>`, true];
   if (it.type === 'arenaBooth') return ['<kbd>E</kbd> 무대 신청 · 타임테이블 보기 🎤'];
+  if (it.type === 'timetable') return ['<kbd>E</kbd> 아레나 무대 타임테이블 보기 🎤'];
   if (it.type === 'arenaNpc') return [`<kbd>E</kbd> ${it.n.p.name}에게 말 걸기 ${it.n.p.icon}`];
   if (it.type === 'festBooth') return inv.wood >= CFG.FESTIVAL_PRICE ? [`<kbd>E</kbd> ✦ 페스티벌 가루 받기 <small>(🪵 ${CFG.FESTIVAL_PRICE}개)</small>`] : [`✦ 페스티벌 가루는 장작 ${CFG.FESTIVAL_PRICE}개 <small>(🪵 ${inv.wood}/${CFG.FESTIVAL_PRICE} · 캠핑장에서 패 와요)</small>`, true];
   if (it.type === 'pit') {
@@ -1816,6 +1841,7 @@ function interact(it) {
   else if (it.type === 'riding') { if (arena.b.at) net.send({ t: 'rideOff' }); }
   else if (it.type === 'balloon') { faceTo(BALLOON[state.zone].x, BALLOON[state.zone].z); net.send({ t: 'rideOn' }); }
   else if (it.type === 'arenaBooth') { faceTo(ARENA.apply.x, ARENA.apply.z); openArena(); }
+  else if (it.type === 'timetable') { faceTo(TT_SIGN.x, TT_SIGN.z); openArena({ view: true }); }
   else if (it.type === 'arenaNpc') { faceTo(it.n.x, it.n.z); crowd.talk(it.n); }
   else if (it.type === 'festBooth') { faceTo(ARENA.booth.x, ARENA.booth.z); if (state.inv.wood >= CFG.FESTIVAL_PRICE) net.send({ t: 'festBuy' }); else UI.toast(`장작이 ${CFG.FESTIVAL_PRICE}개 필요해요 🪵`); }
   else if (it.type === 'egg') { faceTo(EGG.x, EGG.z); me.char.play('light', { onImpact: () => {} }); net.send({ t: 'egg' }); }
@@ -2042,6 +2068,7 @@ function actionFor(it) {
   if (it.type === 'riding') return arena.b.at ? { icon: '🚶', label: '내리기' } : null;
   if (it.type === 'balloon') return { icon: '🎈', label: '타기' };
   if (it.type === 'arenaBooth') return { icon: '🎤', label: '무대 신청' };
+  if (it.type === 'timetable') return { icon: '🎤', label: '타임테이블' };
   if (it.type === 'arenaNpc') return { icon: '💬', label: '말 걸기' };
   if (it.type === 'festBooth') return state.inv.wood >= CFG.FESTIVAL_PRICE ? { icon: '✦', label: '가루 받기' } : null;
   if (it.type === 'pit') {
@@ -2555,7 +2582,7 @@ function updateCamera(dt, t) {
       pitch = THREE.MathUtils.lerp(pitch, Math.min(pitch, walkCur.pitch), k);
     }
   }
-  cam.target.lerp(camTarget, Math.min(1, dt * (me ? 6 : 1)));
+  cam.target.lerp(camTarget, state.ride != null ? 1 : Math.min(1, dt * (me ? 6 : 1))); // 열기구 위: 바구니에 딱 붙어 따라간다 (늦게 따라가면 덜컹여 보인다)
   cam.curDist += (dist - cam.curDist) * Math.min(1, dt * 3);
   cam.curPitch = (cam.curPitch ?? pitch) + (pitch - (cam.curPitch ?? pitch)) * Math.min(1, dt * 3);
   // 낮게 내려가면 카메라는 캐릭터 뒤 낮은 곳에 머물고, 고개를 들어 하늘을 올려다본다
@@ -2894,10 +2921,8 @@ const fmtClock = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)
 function updateStageWidget() {
   const el = $('stageWidget');
   const on = state.zone === 'arena' && state.ride == null && !!me;
-  if (el.classList.contains('hidden') === on) el.classList.toggle('hidden', !on);
+  if (el.classList.contains('hidden') === on) { el.classList.toggle('hidden', !on); if (on) marquee($('swTitle')); } // 보이는 순간 다시 잰다 (숨어 있을 땐 너비가 0)
   if (!on) return;
-  const st = $('status').getBoundingClientRect(); // 상태 칸 바로 아래
-  el.style.setProperty('--sw-top', `${Math.round(st.bottom + 8)}px`);
   const now = serverNow();
   const show = arena.show && now >= arena.show.startedAt ? arena.show : null;
   const nx = show ? null : arena.next(now);
@@ -2906,13 +2931,8 @@ function updateStageWidget() {
   if (key !== swKey) {
     swKey = key;
     el.classList.toggle('live', !!show);
-    const img = $('swThumb');
-    if (e?.vid) img.src = `https://i.ytimg.com/vi/${e.vid}/mqdefault.jpg`; else img.removeAttribute('src');
-    img.parentElement.classList.toggle('empty', !e?.vid);
-    $('swTag').textContent = show ? 'NOW PLAYING' : nx ? '다음 무대' : '불멍 아레나';
-    $('swTitle').textContent = e ? e.title : '오늘은 조용한 불멍 무대';
-    const by = show ? show.byName : nx?.by;
-    $('swBy').textContent = e ? `🎤 ${by}${e.msg ? ` · ${e.msg}` : ''}` : '승강장 앞 「🎤 무대 신청」 부스에서 내 노래를 무대에';
+    $('swTag').textContent = show ? '지금 무대' : nx ? '다음 무대' : '무대';
+    marquee($('swTitle'), e ? `${e.title} · 🎤 ${show ? show.byName : nx.by}` : '아직 잡힌 무대가 없어요 · 승강장 앞 부스에서 신청해요'); // 긴 제목은 흐르게
   }
   if ((swT -= 1) > 0) return; // 시간 글은 가끔만
   swT = 10;
@@ -2920,8 +2940,7 @@ function updateStageWidget() {
     const dur = (arena.table.find((x) => x.id === show.id)?.dur) || (show.endsAt ? (show.endsAt - show.startedAt - 2000) / 1000 : 600);
     const at = Math.min(dur, Math.max(0, (now - show.startedAt) / 1000));
     $('swFill').style.width = `${(at / dur) * 100}%`;
-    $('swNow').textContent = fmtClock(at); $('swDur').textContent = fmtClock(dur);
-    $('swWhen').textContent = '';
+    $('swWhen').textContent = `${fmtClock(at)} / ${fmtClock(dur)}`;
   } else if (nx) {
     const left = Math.max(0, (nx.at - now) / 1000);
     $('swWhen').textContent = left < 3600 ? `${Math.ceil(left / 60)}분 뒤` : kstWhen(nx.at);
@@ -3040,6 +3059,8 @@ function frame(now = performance.now()) {
   const t = clock.elapsedTime;
   shared.uTime.value = t;
 
+  // 🎈 열기구를 먼저 움직이고 나서 탄 사람 · 카메라를 맞춘다 (반대 순서면 한 프레임 늦게 따라가 바구니 밖으로 삐져나오고 덜컹인다)
+  arena.update(dt, t, serverNow(), { zone: state.zone, ride: state.ride, energy: Math.max(arena.show && serverNow() >= arena.show.startedAt ? 1 : 0, performance.now() < state.festUntil ? 1 : 0) });
   updateLocal(dt);
   updateTentState();
   tentRoom.fadeNear(camera.position, me && !view.fp && !state.tent ? me : null);
@@ -3093,7 +3114,6 @@ function frame(now = performance.now()) {
   declutterLabels(dt);
   // 🎤 아레나 · 🎈 열기구
   const riding = state.ride != null;
-  arena.update(dt, t, serverNow(), { zone: state.zone, ride: state.ride, energy: Math.max(arena.show && serverNow() >= arena.show.startedAt ? 1 : 0, performance.now() < state.festUntil ? 1 : 0) });
   arena.setZone(state.zone, riding, hideCamp);
   world.sky.group.position.z = Math.max(0, camera.position.z - 120); // 하늘은 아레나까지 따라간다 (캠핑장에서는 그대로)
   if (document.body.classList.contains('in-arena') !== (state.zone === 'arena' || riding)) document.body.classList.toggle('in-arena', state.zone === 'arena' || riding);
