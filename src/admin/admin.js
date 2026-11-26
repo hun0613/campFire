@@ -64,6 +64,7 @@ async function start() {
   initGenerator();
   loadStats(); // 첫 화면은 통계
   loadGuestbook(); // 방명록은 미리 불러 두고 답글 대기 수를 탭에 표시
+  loadArena(); // 무대 신청 대기 수도 탭에 표시
 }
 function renderStats() {
   $('stats').innerHTML = [
@@ -77,7 +78,8 @@ function renderStats() {
 document.querySelectorAll('.tab').forEach((b) => {
   b.onclick = () => {
     document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('on', x === b));
-    for (const t of ['gb', 'stats', 'notice', 'theme', 'gen']) $(`tab-${t}`).classList.toggle('hidden', b.dataset.tab !== t);
+    for (const t of ['gb', 'stats', 'notice', 'arena', 'theme', 'gen']) $(`tab-${t}`).classList.toggle('hidden', b.dataset.tab !== t);
+    if (b.dataset.tab === 'arena') loadArena();
     if (b.dataset.tab === 'theme') loadTheme();
     if (b.dataset.tab === 'notice' && !notice$.loaded) loadNotices();
     if (b.dataset.tab === 'stats' && !statsState.loaded) loadStats();
@@ -893,4 +895,87 @@ $('themeList').addEventListener('click', async (e) => {
   if (!b) return;
   try { const st = await api('theme', { method: 'POST', body: { mode: b.dataset.mode } }); renderTheme(st); toast(`테마를 「${b.querySelector('b').textContent}」(으)로 바꿨어요`); }
   catch (err) { if (err.message !== 'unauthorized') toast(err.message); }
+});
+
+// ---------------------------------------------------------------- 🎤 불멍 아레나 무대 신청 · 타임테이블
+const arena$ = { items: [], filter: '대기', now: Date.now(), dur: 600 };
+const kstInput = (ms) => new Date(ms + 9 * 3600e3).toISOString().slice(0, 16); // datetime-local 값 (한국 시간)
+const fromKstInput = (v) => Date.parse(`${v}:00+09:00`);
+const kstLabel = (ms) => new Date(ms).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' });
+const fmtSec = (s) => (s ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : '길이 모름 (10분으로 잡아요)');
+async function loadArena() {
+  try {
+    const r = await api('arena');
+    arena$.items = r.items; arena$.now = r.now; arena$.dur = r.defaultDur;
+    if (!r.notion) $('arenaHint').dataset.local = '1';
+    renderArena();
+  } catch (e) { if (e.message !== 'unauthorized') $('arenaList').innerHTML = `<p class="hint">불러오지 못했어요: ${esc(e.message)}</p>`; }
+}
+function renderArena() {
+  const now = Date.now();
+  const live = (e) => e.at + (e.dur || arena$.dur) * 1000 > now;
+  const todo = arena$.items.filter((e) => e.status === '대기');
+  const ok = arena$.items.filter((e) => e.status === '승인' && live(e)).sort((a, b) => a.at - b.at);
+  $('aTodo').textContent = todo.length; $('aOk').textContent = ok.length; $('aAll').textContent = arena$.items.length;
+  const badge = $('arenaBadge'); badge.textContent = todo.length; badge.classList.toggle('hidden', !todo.length);
+  const list = arena$.filter === '대기' ? todo.sort((a, b) => a.at - b.at) : arena$.filter === '승인' ? ok : arena$.items;
+  const tag = { 대기: '<span class="pill todo">승인 대기</span>', 승인: '<span class="pill ok">승인</span>', 거절: '<span class="pill no">거절</span>' };
+  $('arenaList').innerHTML = list.length ? list.map((e) => `<div class="gb-item arena-item" data-id="${esc(e.id)}">
+      <div class="arena-row">
+        <img class="arena-thumb" src="https://i.ytimg.com/vi/${esc(e.vid)}/mqdefault.jpg" alt="" loading="lazy" />
+        <div class="arena-main">
+          <div>${tag[e.status] || ''} <b>${esc(e.title)}</b></div>
+          <div class="hint" style="margin:2px 0">${esc(e.channel || '')} · ${fmtSec(e.dur)} · <a href="https://www.youtube.com/watch?v=${esc(e.vid)}" target="_blank" rel="noopener">유튜브에서 듣기 ↗</a></div>
+          <div>🎤 <b>${esc(e.by)}</b>${e.msg ? ` — 「${esc(e.msg)}」` : ''}</div>
+          <div class="hint" style="margin:2px 0">신청 ${e.created ? kstLabel(e.created) : '-'}${e.at && !live(e) ? ' · 이미 지난 시각' : ''}</div>
+        </div>
+      </div>
+      <div class="arena-act">
+        <label>공연 시각 <input type="datetime-local" step="1800" value="${e.at ? kstInput(e.at) : ''}" class="arena-at" /></label>
+        ${e.status !== '승인' ? '<button class="btn small" data-a="승인">✅ 승인</button>' : '<button class="btn small" data-a="save">💾 시각 바꾸기</button>'}
+        ${e.status !== '거절' ? '<button class="btn ghost small" data-a="거절">거절</button>' : '<button class="btn ghost small" data-a="대기">대기로</button>'}
+        <button class="btn ghost small" data-a="del">🗑 지우기</button>
+      </div>
+    </div>`).join('') : `<p class="hint">${arena$.filter === '대기' ? '승인을 기다리는 신청이 없어요.' : '아직 없어요.'}</p>`;
+}
+$('arenaFilter').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  arena$.filter = b.dataset.f;
+  $('arenaFilter').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+  renderArena();
+});
+$('arenaReload').onclick = loadArena;
+$('arenaList').addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-a]'); if (!b) return;
+  const row = b.closest('.arena-item'), id = row.dataset.id, a = b.dataset.a;
+  const atV = row.querySelector('.arena-at').value, at = atV ? fromKstInput(atV) : undefined;
+  try {
+    if (a === 'del') {
+      if (!confirm('이 신청을 지울까요? (노션에서는 휴지통으로 옮겨져요)')) return;
+      await api(`arena/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      arena$.items = arena$.items.filter((x) => x.id !== id);
+      toast('지웠어요');
+    } else {
+      const body = a === 'save' ? { at } : { status: a, ...(at ? { at } : {}) };
+      const { item } = await api(`arena/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+      Object.assign(arena$.items.find((x) => x.id === id), item);
+      toast(a === '승인' ? `승인했어요 · ${kstLabel(item.at)} 무대` : a === 'save' ? '시각을 바꿨어요' : a === '거절' ? '거절했어요' : '대기로 돌렸어요');
+    }
+    renderArena();
+  } catch (err) { if (err.message !== 'unauthorized') toast(err.message.replace(/^잘못된 시각: /, '')); }
+});
+
+// 무대 바로 올리기 (관리실)
+$('aaAt').value = kstInput(Math.ceil((Date.now() + 10 * 60e3) / 1800e3) * 1800e3);
+$('arenaAdd').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('aaSend').disabled = true;
+  try {
+    const { item } = await api('arena', { method: 'POST', body: { url: $('aaUrl').value.trim(), at: fromKstInput($('aaAt').value), by: $('aaBy').value.trim(), msg: $('aaMsg').value.trim() } });
+    arena$.items.unshift(item);
+    $('aaUrl').value = ''; $('aaMsg').value = '';
+    toast(`무대를 올렸어요 · ${kstLabel(item.at)} 「${item.title}」`);
+    renderArena();
+  } catch (err) { if (err.message !== 'unauthorized') toast(err.message.replace(/^잘못된 (시각|곡|링크): /, '')); }
+  finally { $('aaSend').disabled = false; }
 });

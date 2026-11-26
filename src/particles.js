@@ -9,7 +9,7 @@ void main(){
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   // 눈앞(1m 안쪽)으로 날아온 입자는 부드럽게 사라지고, 화면을 덮을 만큼 커지지 않게 (1인칭 눈부심 방지)
   vAlpha = aAlpha * smoothstep(0.35, 1.2, -mv.z);
-  gl_PointSize = min(aSize * uScale / -mv.z, uScale * 0.09);
+  gl_PointSize = min(aSize * uScale / -mv.z, uScale * 0.07); // (v1.23: 0.09 → 0.07 — 눈앞에서 크게 겹쳐 그리는 부담 줄이기)
   gl_Position = projectionMatrix * mv;
 }`;
 const FS = `
@@ -56,7 +56,11 @@ export class Particles {
     this.alpha = new Float32Array(max);
     this.shape = new Float32Array(max);
     this.rot = new Float32Array(max);
-    this.p = []; // 시뮬레이션 데이터
+    this.p = []; // 시뮬레이션 데이터 (살아 있는 것)
+    this.pool = []; // 다 쓴 파티클 객체 (다시 써서 쓰레기 수거를 줄인다)
+    this.budget = max; // 화질에 따라 줄이는 한도 (setBudget)
+    this.density = 1;  // 만드는 양 (가벼운 화질은 일부만 만든다)
+    this.ov = 0;       // 가득 찼을 때 덮어쓸 자리
     const geo = new THREE.BufferGeometry();
     const attr = (name, arr, n) => {
       const a = new THREE.BufferAttribute(arr, n);
@@ -88,18 +92,23 @@ export class Particles {
    * o: { x,y,z, vx,vy,vz, color(THREE.Color), size, life, grav, drag, shape, grow, spin,
    *      orbit:{cx,cz,ang,angVel,rad,radVel}, bob, alpha }
    */
+  /** 화질: 한도 · 만드는 양 (0~1) */
+  setBudget(max, density = 1) { this.budget = Math.min(this.max, max); this.density = density; }
+
   spawn(o) {
-    if (this.p.length >= this.max) this.p.shift();
-    this.p.push({
-      x: o.x, y: o.y, z: o.z,
-      vx: o.vx || 0, vy: o.vy || 0, vz: o.vz || 0,
-      r: o.color.r, g: o.color.g, b: o.color.b,
-      size: o.size ?? 0.2, life: o.life ?? 1, age: 0,
-      grav: o.grav || 0, drag: o.drag || 0, shape: o.shape || 0,
-      grow: o.grow || 0, spin: o.spin || 0, rot: o.rot ?? Math.random() * 6.28,
-      orbit: o.orbit || null, bob: o.bob || 0, bobPh: Math.random() * 6.28,
-      alpha: o.alpha ?? 1,
-    });
+    if (this.density < 1 && Math.random() > this.density) return;
+    // 가득 차면 맨 앞을 지우며 당기지 않고(느림), 돌아가며 한 자리를 덮어쓴다
+    let q;
+    if (this.p.length >= this.budget) { this.ov = (this.ov + 1) % this.p.length; q = this.p[this.ov]; }
+    else { q = this.pool.pop() || {}; this.p.push(q); }
+    q.x = o.x; q.y = o.y; q.z = o.z;
+    q.vx = o.vx || 0; q.vy = o.vy || 0; q.vz = o.vz || 0;
+    q.r = o.color.r; q.g = o.color.g; q.b = o.color.b;
+    q.size = o.size ?? 0.2; q.life = o.life ?? 1; q.age = 0;
+    q.grav = o.grav || 0; q.drag = o.drag || 0; q.shape = o.shape || 0;
+    q.grow = o.grow || 0; q.spin = o.spin || 0; q.rot = o.rot ?? Math.random() * 6.28;
+    q.orbit = o.orbit || null; q.bob = o.bob || 0; q.bobPh = Math.random() * 6.28;
+    q.alpha = o.alpha ?? 1;
   }
 
   update(dt) {
@@ -108,7 +117,7 @@ export class Particles {
     for (let i = 0; i < P.length; i++) {
       const q = P[i];
       q.age += dt;
-      if (q.age >= q.life) continue;
+      if (q.age >= q.life) { if (this.pool.length < this.max) this.pool.push(q); continue; }
       q.vy -= q.grav * dt;
       if (q.drag) {
         const f = Math.max(0, 1 - q.drag * dt);

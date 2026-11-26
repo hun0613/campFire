@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { toon, glow, radialTexture, textTexture, mulberry32 } from './toon.js';
 import { createSky } from './sky.js';
 import { fingerpost, hangingSign } from './signs.js';
-import { CFG, TENTS, PITS, STUMPS, NPC, KEEPER, WOODYARD, BOUNDS, FENCE, GATES, SUNSET, TENT_WH, TENT_RH, EGG, PLAZA_BENCHES } from '../shared/config.js';
+import { CFG, TENTS, PITS, STUMPS, NPC, KEEPER, WOODYARD, BOUNDS, FENCE, GATES, SUNSET, TENT_WH, TENT_RH, EGG, PLAZA_BENCHES, BALLOON } from '../shared/config.js';
 import { buildTrail } from './trail.js';
 import { create as createBench } from './elements/molecules/bench.js';
 import { placeElement } from './elements/place.js';
@@ -837,6 +837,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     g.visible = false;
     scene.add(g);
     themeParts.xmas.push(g);
+    themeParts.xmasBig = g;
     const greenA = toon('#1f5a3a'), greenB = toon('#28704a');
     const snowTip = toon('#f4f7fd', { emissive: new THREE.Color('#2a3350'), emissiveIntensity: 0.35 });
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.4, 1.0, 10), toon('#6b4428'));
@@ -1020,6 +1021,11 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
       if (Math.abs(x) < 50 && Math.abs(z) < 30 && rand() > 0.25) continue;
       bushes.push({ x, y: 0.3, z, s: 0.5 + rand() * 0.5, color: ['#3f8a4c', '#4f9a58', '#356f40'][Math.floor(rand() * 3)] });
     }
+    // 🎈 열기구 승강장 데크 · 무대 신청 부스 자리는 덤불을 비운다 (만든 뒤에 빼서 뒤의 무작위 배치는 그대로)
+    for (let i = bushes.length - 1; i >= 0; i--) {
+      const b = bushes[i];
+      if (Math.hypot(b.x - BALLOON.camp.x, b.z - BALLOON.camp.z) < 5.4) bushes.splice(i, 1);
+    }
     for (let i = 0; i < 40; i++) {
       const x = (rand() * 2 - 1) * 56, z = (rand() * 2 - 1) * 37;
       if (isPath(x, z)) continue;
@@ -1132,6 +1138,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     sky,
     /** 바깥 모닥불 천막 자리 (비 · 눈을 막는 곳) */
     tarpSpots: themeParts.tarps.map((t) => ({ x: t.x, z: t.z })),
+    xmasTree: themeParts.xmasBig, // 광장 큰 크리스마스 트리 (아레나가 복제해 쓴다)
     trail, // 숲길 (흔들의자 등)
     /** 테마 템플릿(shared/themes.js)대로 캠핑장을 바꾼다 */
     setTheme(th) {

@@ -2,7 +2,7 @@
 // 3D 요소는 게임 코드의 이름표(userData.ds, src/ds/tag.js)로 실제 월드에서 골라 보여 준다
 //   tags: 보여 줄 이름표 (없으면 [id]) · parts: 이 요소를 이루는 아래 단계 요소 · extracted: 떼어 낸 요소 파일 (변형 · 바꿔 끼우기 가능)
 //   view: 3D 가 아닌 화면 (palette · materials · tokens · icons · font · ui-*)
-import { WOODYARD, NPC, KEEPER, LAKE_BENCH, HILL_BENCH, SPOTS, POND } from '../../shared/config.js';
+import { WOODYARD, NPC, KEEPER, LAKE_BENCH, HILL_BENCH, SPOTS, POND, ARENA, BALLOON } from '../../shared/config.js';
 import { RESIDENTS } from '../../shared/residents.js';
 import { PARTS } from '../elements/atoms/index.js';
 
@@ -61,6 +61,9 @@ export const CATALOG = [
   { id: 'field-cherry', name: '벚꽃길 바닥', level: 'molecule', area: '3d', group: '들판', where: 'src/trail.js', desc: '벚꽃길 꽃잎 깔개 · 작은 꽃' },
   { id: 'puddle', name: '물웅덩이', level: 'molecule', area: '3d', group: '날씨', theme: 'rain', where: 'src/trail.js', desc: '비 오는 날 랜턴 옆 물웅덩이' },
   { id: 'hill-cat', name: '언덕 고양이', level: 'molecule', area: '3d', group: '동물', where: 'src/trail.js', desc: '노을 언덕 벤치 끝에 앉은 고양이' },
+  { id: 'hot-air-balloon', name: '열기구', level: 'molecule', area: '3d', group: '아레나', parts: ['part-pole'], where: 'src/elements/molecules/hot-air-balloon.js', extracted: 'src/elements/molecules/hot-air-balloon.js', desc: '캠핑장 ↔ 불멍 아레나를 두 대가 엇갈려 1분마다 오가는 셔틀. 등나무 바구니 · 줄 · 버너 · 줄무늬 풍선 (실험실에서는 광장 승강장에 세워 둔다)' },
+  { id: 'balloon-dock', name: '열기구 승강장', level: 'molecule', area: '3d', group: '아레나', parts: ['part-plank', 'part-pole', 'part-bulb'], where: 'src/elements/molecules/balloon-dock.js', extracted: 'src/elements/molecules/balloon-dock.js', desc: '둥근 데크 · 밧줄 울타리 · 출발 시각판 (광장 · 아레나 두 곳)' },
+  { id: 'festival-booth', name: '페스티벌 부스', level: 'molecule', area: '3d', group: '아레나', parts: ['part-plank', 'part-pole', 'part-bulb'], where: 'src/elements/molecules/festival-booth.js', extracted: 'src/elements/molecules/festival-booth.js', desc: '줄무늬 차양 매대. 아레나 🎤 무대 신청 부스 · ✦ 페스티벌 가루 부스' },
   { id: 'character', name: '캐릭터', level: 'molecule', area: '3d', group: '사람', where: 'src/character.js', desc: '이용자 · 주민 · NPC 가 같이 쓰는 몸 (옷 · 모자 · 테마 옷). 이용자는 들어와야 생겨서 실험실은 견본 3명을 놓아 보여 준다 (테마를 바꾸면 테마 옷)' },
   { id: 'ui-button', name: '나무 버튼', level: 'molecule', area: 'ui', group: 'UI', view: 'ui-button', where: 'src/style.css 공통 나무판', desc: '아이콘 버튼 · 큰 행동 버튼 · 글자 버튼' },
   { id: 'ui-label', name: '이름표 · 말풍선', level: 'molecule', area: 'ui', group: 'UI', view: 'ui-label', where: 'src/style.css', desc: '캐릭터 머리 위 이름표 · 채팅 말풍선 · 장소 표시' },
@@ -77,6 +80,7 @@ export const CATALOG = [
   { id: 'deck', name: '나무다리 · 데크', level: 'organism', area: '3d', group: '숲길 쉼터', tags: ['deck', 'bench'], parts: ['bench'], where: 'src/trail.js', desc: '개울 다리 · 호숫가 데크' },
   { id: 'hill', name: '노을 지는 언덕', level: 'organism', area: '3d', group: '숲길 쉼터', tags: ['hill', 'bench', 'hill-cat'], parts: ['bench', 'hill-cat'], where: 'src/trail.js', desc: '언덕 · 등받이 없는 벤치 · 고양이' },
   { id: 'windmill', cluster: 40, name: '풍차', level: 'organism', area: '3d', group: '숲길 쉼터', where: 'src/trail.js', desc: '북쪽 숲 너머 노을 앞 풍차' },
+  { id: 'arena-stage', cluster: 40, name: '불멍 아레나 무대', level: 'organism', area: '3d', group: '아레나', tags: ['arena-stage', 'arena-screen', 'arena-beam'], parts: ['part-plank'], where: 'src/elements/organisms/arena-stage.js · src/arena.js (전광판 글)', extracted: 'src/elements/organisms/arena-stage.js', desc: '망루 오두막을 얹은 철골 탑 · 대형 전광판 3 · 조명 트러스 빛줄기 · 기와 지붕 · 현수막 · 깃발 · 스피커' },
   { id: 'rain-tarp', name: '우중 천막', level: 'organism', area: '3d', group: '테마', theme: 'rain', where: 'src/world.js', desc: '비 오는 날 바깥 모닥불 위 천막 (우중캠핑장 테마)' },
   { id: 'xmas-tree', name: '크리스마스 트리', level: 'organism', area: '3d', group: '테마', theme: 'christmas', tags: ['xmas-tree', 'xmas-small-tree', 'xmas-tree-lights', 'xmas-tent-deco'], where: 'src/world.js', desc: '광장 큰 트리 · 작은 트리 · 나무 전구 · 텐트 리스 (크리스마스 테마)' },
   { id: 'npc-lumi', name: '루미', level: 'organism', area: '3d', group: '사람', parts: ['character'], where: 'src/main.js', desc: '가루 상인 NPC' },
@@ -90,6 +94,8 @@ export const CATALOG = [
   { id: 'zone-tents-south', name: '남쪽 텐트 줄', level: 'template', area: '3d', group: '캠핑장', region: { x: 0, z: 18.5, r: 48, band: 9 }, camera: { yaw: 0.25, pitch: 0.55, dist: 46 }, desc: '글램핑 텐트 6동 + 모닥불 자리 6' },
   { id: 'zone-lake', name: '호숫가 쉼터', level: 'template', area: '3d', group: '숲길', region: { x: lake.x, z: lake.z, r: 16 }, camera: { yaw: 2.4, pitch: 0.55, dist: 24 }, desc: '호수 · 분수 · 데크 · 벤치' },
   { id: 'zone-pond', name: '밤 정원 연못', level: 'template', area: '3d', group: '숲길', region: { x: pond.x, z: pond.z, r: 10 }, camera: { yaw: 0.8, pitch: 0.6, dist: 16 }, desc: '연못 · 석등 · 개울 다리' },
+  { id: 'zone-balloon', name: '광장 열기구 승강장', level: 'template', area: '3d', group: '캠핑장', region: { x: BALLOON.camp.x, z: BALLOON.camp.z, r: 8 }, camera: { yaw: 2.6, pitch: 0.45, dist: 24 }, desc: '열기구 승강장 · 출발 전광판 (큰길 남쪽)' },
+  { id: 'zone-arena', name: '불멍 아레나', level: 'template', area: '3d', group: '아레나', region: { x: ARENA.x, z: ARENA.z, r: 60 }, camera: { x: ARENA.x, z: ARENA.z + 4, yaw: 0, pitch: 0.42, dist: 62 }, desc: '무대 · 객석 모닥불 17 · 🎤 무대 신청 부스 · ✦ 페스티벌 가루 부스 · 창고지기 · 사람들 · 승강장 · 숲 · 전구 줄' },
   { id: 'zone-hill', name: '노을 지는 언덕', level: 'template', area: '3d', group: '숲길', region: { x: HILL_BENCH.x, z: HILL_BENCH.z, r: 14 }, camera: { yaw: HILL_BENCH.ry + Math.PI + 0.4, pitch: 0.35, dist: 18 }, desc: '언덕 · 벤치 · 고양이 · 노을 하늘' },
 
   // ───────────── 페이지 (실제 장면) ─────────────

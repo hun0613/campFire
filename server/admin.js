@@ -5,6 +5,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import * as guestbook from './guestbook.js';
+import * as arena from './arena.js';
 import * as ga from './analytics.js';
 import * as board from './board.js';
 import { releaseNotes } from './releases.js';
@@ -157,6 +158,29 @@ export async function handleAdmin(req, res, getStats, hooks = {}) {
     if (nm && req.method === 'DELETE') {
       await board.remove(nm[1]);
       hooks.onBoardChange?.();
+      send(res, 200, { ok: true });
+      return true;
+    }
+    // 🎤 아레나 무대 신청: 목록 · 승인/거절/대기 · 시각 바꾸기 · 지우기
+    if (route === 'arena' && req.method === 'GET') {
+      const items = await arena.refresh();
+      send(res, 200, { items: items.map(({ tag, ...e }) => e), notion: arena.notionOn(), now: Date.now(), defaultDur: arena.DEFAULT_DUR });
+      return true;
+    }
+    if (route === 'arena' && req.method === 'POST') { // 관리실에서 무대 바로 올리기
+      const item = await hooks.arenaAdd(await readJson(req));
+      send(res, 200, { item: { ...item, tag: undefined } });
+      return true;
+    }
+    const am = route.match(/^arena\/([^/]+)$/);
+    if (am && req.method === 'PATCH') {
+      const { status, at } = await readJson(req);
+      const item = await arena.update(am[1], { status, at });
+      send(res, 200, { item: { ...item, tag: undefined } });
+      return true;
+    }
+    if (am && req.method === 'DELETE') {
+      await arena.remove(am[1]);
       send(res, 200, { ok: true });
       return true;
     }

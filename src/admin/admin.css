@@ -303,3 +303,19 @@ table.daily tr.today td { font-weight: 700; }
 table.daily small { opacity: 0.6; font-weight: 400; }
 table.daily .rep-open { background: none; border: 1px solid rgba(255,179,107,.5); color: #ffb36b; font: 600 12px inherit; border-radius: 999px; padding: 3px 10px; cursor: pointer; }
 table.daily .rep-open:hover { background: rgba(255,179,107,.12); }
+
+/* 🎤 아레나 무대 신청 */
+.arena-row { display: flex; gap: 12px; align-items: flex-start; }
+.arena-thumb { width: 120px; aspect-ratio: 16/9; object-fit: cover; border-radius: 10px; flex: none; background: var(--line); }
+.arena-main { min-width: 0; flex: 1; line-height: 1.5; }
+.arena-act { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.arena-act label { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--sub); }
+.arena-act input { font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); }
+.pill { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; vertical-align: 1px; }
+.pill.todo { background: var(--todo); color: var(--ink); }
+.pill.ok { background: var(--ok); color: #fff; }
+.pill.no { background: var(--warn); color: #fff; }
+@media (max-width: 560px) { .arena-thumb { width: 84px; } }
+.arena-add { margin: 0 0 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.arena-add-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.arena-add-row input { flex: 1; min-width: 160px; font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); }

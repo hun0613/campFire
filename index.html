@@ -51,6 +51,17 @@
 
   <!-- HUD -->
   <div id="hud" class="hidden">
+    <!-- 🎤 아레나 무대 위젯 (뮤직 플레이어처럼: 지금 · 다음 무대) -->
+    <div id="stageWidget" class="panel stage-widget hidden" aria-live="polite">
+      <div class="sw-art"><img id="swThumb" alt="" referrerpolicy="no-referrer" /><span class="sw-eq" aria-hidden="true"><i></i><i></i><i></i></span></div>
+      <div class="sw-body">
+        <div class="sw-top"><span id="swTag" class="sw-tag">NOW PLAYING</span><span id="swWhen" class="sw-when"></span></div>
+        <div id="swTitle" class="sw-title"></div>
+        <div id="swBy" class="sw-by"></div>
+        <div class="sw-bar"><i id="swFill"></i></div>
+        <div class="sw-time"><span id="swNow">0:00</span><span id="swDur">0:00</span></div>
+      </div>
+    </div>
     <div id="status" class="panel">
       <div class="wood-row">
         <span class="wood-icon">🪵</span>
@@ -170,6 +181,7 @@
         <button id="musicSearch" class="mm-go" type="submit" data-icon="search">검색</button>
       </form>
       <div id="musicQuota" class="mm-quota"></div>
+      <div class="mm-note">🔎 모닥불에서는 <b>20분 이하</b> 영상만 틀 수 있어요 (검색 · 유튜브 링크 모두) · 라이브 방송, 업로더가 퍼가기를 막은 영상도 틀 수 없어요</div>
       <div id="musicErr" class="mm-err hidden"></div>
       <div id="musicListTitle" class="mm-list-title"></div>
       <div id="musicList" class="mm-list"></div>
@@ -178,9 +190,37 @@
     </div>
   </div>
 
+  <!-- 🎤 불멍 아레나 무대 신청 (아레나 승강장 앞 부스) -->
+  <div id="arenaModal" class="overlay hidden">
+    <div class="card help-card music-card arena-card">
+      <div class="title small">🎤 불멍 아레나 무대 신청</div>
+      <div class="ar-intro">신청한 곡이 승인되면 그 시각에 <b>이 무대 대형 전광판</b>에서 모두 함께 들어요 · 승인 전까지는 「승인 대기」로 보여요</div>
+      <div class="ar-scroll">
+        <div class="mm-list-title">📅 타임테이블</div>
+        <div id="arenaTable" class="ar-table"></div>
+        <div id="arenaMine" class="ar-mine"></div>
+        <div class="mm-list-title">✍️ 곡 고르기</div>
+        <form id="arenaForm" class="mm-row" autocomplete="off">
+          <input id="arenaQ" type="search" enterkeyhint="search" placeholder="곡 이름 · 가수 또는 유튜브 링크" spellcheck="false" />
+          <button id="arenaSearch" class="mm-go" type="submit" data-icon="search">찾기</button>
+        </form>
+        <div class="mm-note">🔎 무대는 <b>15분 이하</b> 곡만 올릴 수 있어요 · 라이브 방송, 업로더가 퍼가기를 막은 영상은 신청할 수 없어요</div>
+        <div id="arenaErr" class="mm-err hidden"></div>
+        <div id="arenaSongs" class="mm-list ar-songs"></div>
+        <div id="arenaPick" class="ar-pick hidden"></div>
+        <div class="mm-list-title">🕘 원하는 시각 <small>(30분 칸 · 한국 시간)</small></div>
+        <div class="ar-when"><select id="arenaDay"></select><select id="arenaTime"></select></div>
+        <input id="arenaMsg" class="ar-msg" maxlength="60" placeholder="무대에 띄울 한마디 (선택) 예: 첫눈 오는 밤에 ❄️" />
+      </div>
+      <button class="btn" id="arenaSend">🎤 신청하기</button>
+      <div class="mm-rules">운영자가 확인하고 승인해요 · 한 사람이 2곡까지 걸어 둘 수 있어요 · 한 무대는 15분까지</div>
+      <button class="btn ghost" id="arenaClose">닫기</button>
+    </div>
+  </div>
+
   <div id="storeModal" class="overlay hidden">
     <div class="card help-card store-card">
-      <div class="title small">📦 보리의 장작 창고</div>
+      <div class="title small" id="storeTitle">📦 보리의 장작 창고</div>
       <div class="store-say" id="storeSay"></div>
       <div class="store-counts">
         <div><span>🎒 손에 든 장작</span><b id="storeHand">0</b><small id="storeHandMax"></small></div>

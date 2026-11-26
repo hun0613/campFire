@@ -140,8 +140,9 @@ export class FirePit {
       const s = seatPos(def, i);
       this.seatPos.push(s);
       if (this.stove) continue; // 텐트 화로 자리는 둥근 소파 (tent.js)
-      const seat = def.kind === 'tent' ? this.#chair(i) : this.#stump();
-      if (def.kind !== 'tent') seat.userData.ds = 'stump-seat';
+      const chairKind = def.kind === 'tent' || def.kind === 'arena'; // 아레나 객석 모닥불도 캠핑 의자
+      const seat = chairKind ? this.#chair(i) : this.#stump();
+      if (!chairKind) seat.userData.ds = 'stump-seat';
       seat.position.set(s.x - def.x, 0, s.z - def.z);
       seat.rotation.y = s.ry;
       g.add(seat);

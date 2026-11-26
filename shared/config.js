@@ -21,6 +21,7 @@ export const CFG = {
   TENT_CAP: 5,             // 글램핑 텐트 한 동에 들어갈 수 있는 사람 수
   TENT_R: 6.2,             // 글램핑 텐트 둥근 벽의 반지름 (v1.15: 안에 들어가 쉴 수 있게 3 → 6.2로 넓힘)
   TENT_INNER: 6.1,         // 텐트 중심에서 이 거리 안이면 「텐트 안」
+  FESTIVAL_PRICE: 10,      // 🎤 아레나 부스: ✦ 페스티벌 가루 한 개 = 장작 10개
 };
 
 /** 한국 시간 기준 오늘 날짜 (YYYY-MM-DD) — 코인 충전 · 공유 보너스 기준 */
@@ -197,8 +198,62 @@ export const STOVES = TENTS.map((t) => {
   const p = tentLocal(t, STOVE_LOCAL.x, STOVE_LOCAL.z);
   return { id: `f${t.id}`, x: p.x, z: p.z, kind: 'stove', tent: t.id, facing: t.facing, label: `${t.label} 화로` };
 });
+
+// ---------------------------------------------------------------- 🎤 불멍 아레나 (v1.23)
+// 캠핑장에서 멀리 떨어진 페스티벌 무대. 광장 승강장에서 열기구를 타고 오간다 (같은 월드의 먼 자리: 캠핑장에선 안개 너머라 안 보인다)
+// 무대는 북쪽(캠핑장 쪽)에서 남쪽 객석을 본다. 객석엔 늘 타는 모닥불 9곳 (앞줄 4 · 뒷줄 5), 맨 뒤 열기구 승강장 · 페스티벌 가루 부스
+export const ARENA = {
+  x: 0, z: 330,
+  bounds: { minX: -38, maxX: 38, minZ: 304, maxZ: 372 }, // 걸어 다닐 수 있는 객석 마당 (무대 위는 못 올라간다)
+  stage: { x: 0, z: 295, w: 30, d: 11, h: 1.6 },          // 무대 (가운데 · 너비 · 깊이 · 바닥 높이). 앞 끝은 z = 300.5
+  screen: { x: 0, y: 7.4, z: 291.2, w: 14.4, h: 8.1 },     // 가운데 대형 전광판 (16:9)
+  dock: { x: 0, z: 362 },                                  // 열기구 승강장 (아레나 쪽)
+  booth: { x: 21, z: 356, ry: -Math.PI / 2 - 0.5 },        // ✦ 페스티벌 가루 부스 (객석 쪽을 본다)
+  apply: { x: -9, z: 352, ry: Math.PI / 2 + 0.25 },       // 🎤 무대 신청 부스 (승강장에서 내리면 바로 보이는 흙길 왼쪽, 길 쪽을 본다)
+  keeper: { x: -21, z: 356, ry: Math.PI / 2 + 0.5, name: '콩이' }, // 📦 아레나 창고지기 (캠핑장 장작 창고와 같은 창고, 객석 쪽을 본다)
+};
+export const ARENA_SEAT_DEG = [-58, -20, 20, 58]; // 객석 모닥불 의자 4개: 남쪽 반달
+// 객석 불멍 스팟 17곳 (앞줄 5 · 가운데 6 · 뒷줄 6, 뒷줄 가운데는 승강장으로 가는 흙길). 캠핑장 화로와 같은 규칙: 장작 5개로 쌓고 불 붙이기 · 10분 · 장작 더 넣기
+export const ARENA_PITS = [
+  ...[[313, [-18, -9, 0, 9, 18]], [324, [-22.5, -13.5, -4.5, 4.5, 13.5, 22.5]], [335, [-27, -18, -9, 9, 18, 27]]]
+    .flatMap(([z, xs], row) => xs.map((x) => ({ x, z, row })))
+    .map((p, i) => ({ id: `a${i}`, x: p.x, z: p.z, kind: 'arena', label: `아레나 ${['앞줄', '가운데 줄', '뒷줄'][p.row]} 모닥불` })),
+];
+/** (x, z)가 아레나 안인지 (조금 넉넉하게) */
+export const inArena = (x, z) => x > ARENA.bounds.minX - 20 && x < ARENA.bounds.maxX + 20 && z > ARENA.bounds.minZ - 30 && z < ARENA.bounds.maxZ + 20;
+// 🎈 열기구: 두 대가 엇갈려 오가서 양쪽 승강장 모두 1분마다 출발한다 (서버 시각만으로 모두가 같은 자리를 본다)
+//   한 대: 0:00 캠핑장 출발 → 0:40 아레나 도착 · 20초 대기 → 1:00 아레나 출발 → 1:40 캠핑장 도착 · 20초 대기 → 2:00 다시 출발
+//   다른 한 대는 1분 늦게 (그래서 매분 정각에 캠핑장 · 아레나에서 한 대씩 떠난다. 하늘에서는 서로 비켜 지나간다)
+export const BALLOON = {
+  camp: { x: 21, z: 11 },                 // 광장 승강장 (큰길 남쪽, 광장과 루미 공방 사이)
+  arena: ARENA.dock,
+  cycle: 120, fly: 40, back: 60, fleet: 2, // 초: 한 대의 한 바퀴 · 한 번 나는 시간 · 아레나 출발 시각 · 열기구 수 (각 승강장 1분마다, 사용자 결정 11/26)
+  alt: 42, cap: 8, range: 4.6, drift: 9,  // 나는 높이 · 바구니 정원 · 타는 거리 · 바람에 옆으로 휘는 폭 (m)
+};
+/** 열기구 상태: { at: 'camp'|'arena'|null(나는 중), from, to, u(0~1 나는 진행), x, y, z, next(다음 출발까지 초), heading }
+ *  나는 길 (v1.23): 처음엔 거의 수직으로 떠오르고 → 바람에 살짝 휘어 가며 높이 떠서 → 천천히 내려앉는다 (닿을 땐 속도 0) */
+export function balloonState(now, k = 0) {
+  const B = BALLOON, s = (((now / 1000 - k * (B.cycle / B.fleet)) % B.cycle) + B.cycle) % B.cycle; // k 번째 열기구는 반 바퀴씩 늦게
+  const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * t * (t * (t * 6 - 15) + 10); }; // 부드러운 시작 · 끝
+  const leg = (from, to, u) => {
+    const A = B[from], Z = B[to];
+    const p = sstep(0.16, 0.86, u);                        // 가로 진행: 떠오른 뒤 출발해 내려앉기 전에 거의 도착
+    const dx = Z.x - A.x, dz = Z.z - A.z, len = Math.hypot(dx, dz) || 1;
+    const side = Math.sin(Math.PI * p) * B.drift; // 바람에 옆으로 휘는 길 (가는 길 · 오는 길이 서로 반대쪽이라 두 대가 비켜 간다)
+    const y = B.alt * sstep(0, 0.34, u) * (1 - sstep(0.7, 1, u)) + Math.sin(Math.PI * p) * Math.sin(u * Math.PI * 4) * 1.2; // 오르고 · 살짝 출렁이고 · 내려앉기
+    return { at: null, from, to, u, x: A.x + dx * p - (dz / len) * side, y: Math.max(0, y), z: A.z + dz * p + (dx / len) * side, heading: Math.atan2(dx, dz) };
+  };
+  if (s < B.fly) return { ...leg('camp', 'arena', s / B.fly), next: B.back - s };
+  if (s < B.back) return { at: 'arena', ...B.arena, y: 0, u: 0, next: B.back - s, heading: Math.PI };
+  if (s < B.back + B.fly) return { ...leg('arena', 'camp', (s - B.back) / B.fly), next: B.cycle - s };
+  return { at: 'camp', ...B.camp, y: 0, u: 0, next: B.cycle - s, heading: 0 };
+}
+/** 바구니 안 자리 (열기구 가운데 기준) */
+/** 탄 자리 번호 r → 몇 번째 열기구 · 바구니 안 자리 (r = 열기구 × 정원 + 자리) */
+export const rideOf = (r) => ({ k: Math.floor(r / BALLOON.cap), slot: r % BALLOON.cap });
+export const basketSlot = (i) => { i %= BALLOON.cap; const a = (i / BALLOON.cap) * Math.PI * 2 + 0.4; return { x: Math.sin(a) * 1.1, z: Math.cos(a) * 1.1, ry: a }; }; // 바구니 안 둥글게 서서 바깥 풍경을 본다
 /** 모든 불 피우는 자리: 바깥 화로 + 텐트 안 화로 (서버 · 클라이언트의 pits 는 이것으로 만든다) */
-export const FIRES = [...PITS, ...STOVES];
+export const FIRES = [...PITS, ...STOVES, ...ARENA_PITS];
 export const seatsOf = (def) => (def.kind === 'stove' ? CFG.TENT_CAP : CFG.SEATS_PER_PIT);
 
 export const SPAWN = { x: 0, z: 10.5 };
@@ -210,6 +265,12 @@ export const BOARD = { x: 3.4, z: 4.4 };
 export const RANGE = { stump: 2.0, npc: 3.6, keeper: 3.4, pit: 3.2, guestbook: 2.8, board: 2.8 };
 
 export function seatPos(pit, i) {
+  if (pit.kind === 'arena') { // 🎤 아레나 객석 모닥불: 무대 반대편(남쪽)에 반달로 앉는다 → 불 너머로 무대가 보인다
+    const a = Math.PI + ARENA_SEAT_DEG[i] * Math.PI / 180; // +z(남쪽)에서 잰 각도
+    const x = pit.x + Math.sin(a + Math.PI) * CFG.SEAT_RADIUS;
+    const z = pit.z + Math.cos(a + Math.PI) * CFG.SEAT_RADIUS;
+    return { x, z, ry: Math.atan2(pit.x - x, pit.z - z) };
+  }
   if (pit.kind === 'stove') { // 텐트 화로: 둘레 C자 소파 (문 쪽은 비어 있다)
     const a = (STOVE_SEAT_DEG[i] * Math.PI) / 180 + pit.facing;
     const x = pit.x + Math.sin(a) * STOVE_SEAT_R;
@@ -296,6 +357,8 @@ export const LEGEND_POWDERS = {
   // 찻집 할머니만 주는 가루 (가루 공방 · 무작위 선물에는 없다). 힘든 마음엔 풍등, 좋은 마음엔 팡팡
   lanterns: { name: '✦ 위로의 풍등 가루', desc: '따뜻한 풍등이 모닥불에서 천천히 밤하늘로 떠올라요', color: '#ffb066', bg: 'radial-gradient(circle at 50% 38%, #fff3c4, #ffb066 45%, #d9603a)', gift: true },
   cheers: { name: '✦ 축하의 팡팡 가루', desc: '모닥불 둘레에서 작은 축포가 팡팡 터지고 색종이가 흩날려요', color: '#ff7eb6', bg: 'conic-gradient(#ffd447, #ff7eb6, #7ee0ff, #9dff8a, #ffd447)', gift: true },
+  // 🎤 아레나 부스에서 장작 10개로만 받는 가루. 아레나 객석 모닥불에서만 뿌릴 수 있다 (무대 전체가 터지는 큰 연출)
+  festival: { name: '✦ 페스티벌 가루', desc: '내 모닥불 둘레로 불기둥이 솟고, 머리 위에서 축포가 터지고, 반짝이 꽃가루가 쏟아져요 · 무대 조명도 함께 (아레나 객석 모닥불에서만)', color: '#ff5cc8', bg: 'conic-gradient(from 200deg, #7c5cff, #ff5cc8, #ffb347, #5cf0ff, #7c5cff)', gift: true, arena: true },
 };
 /** 가루 공방에서 팔고 무작위 선물로 나오는 ✦ 특별한 가루 (선물 전용 가루는 뺀다) */
 export const SHOP_LEGENDS = Object.keys(LEGEND_POWDERS).filter((k) => !LEGEND_POWDERS[k].gift);

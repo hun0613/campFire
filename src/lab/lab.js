@@ -14,6 +14,7 @@ import { LightPool } from '../lightpool.js';
 import { Precip } from '../precip.js';
 import { Character } from '../character.js';
 import { createResidents } from '../residents.js';
+import { Arena } from '../arena.js';
 import { icon, NORM } from '../icons.js';
 import { powderIco } from '../ui.js';
 import { PALETTE, PARTS } from '../elements/atoms/index.js';
@@ -55,6 +56,10 @@ npc.root.position.set(NPC.x, 0, NPC.z); npc.root.rotation.y = NPC.ry; npc.root.u
 const keeper = new Character({ skin: '#f6c9a0', hair: '#6b4a2b', shirt: '#5f8a45', pants: '#5a4330', hat: 'beanie' }, { name: '보리', kind: 'npc' });
 keeper.root.position.set(KEEPER.x, 0, KEEPER.z); keeper.root.rotation.y = KEEPER.ry; keeper.root.userData.ds = 'npc-bori'; scene.add(keeper.root);
 const residents = createResidents(scene);
+// 🎤 불멍 아레나 (v1.23): 무대 · 승강장 · 부스 · 열기구. 실험실에서는 열기구를 광장 승강장에 세워 두고, 무대 조명은 공연 중처럼
+const arenaW = new Arena(scene, { lowSpec: false });
+lightSpots.push(...arenaW.lightSpots, arenaW.campLight);
+arenaW.setState({ show: null, table: [{ id: 'lab', title: '실험실 견본 곡', by: '불멍', msg: '첫 무대', at: Date.now() + 3600e3, dur: 240 }] });
 tentRoom.set(TENTS.find((t) => t.id === 'ts3') || TENTS[0]); // 텐트 안은 한 동만 보여 준다
 
 // 견본: 게임에서는 잠깐만 생기는 물체 (도끼질할 때 쪼갠 장작, 들어온 이용자). 그 요소를 고를 때만 보인다
@@ -98,6 +103,7 @@ function setTheme(id) {
   themeLight = th.light; precip.set(th.precip);
   for (const ch of [npc, keeper, ...sampleChars]) ch.setOutfit(th.outfit);
   residents.setOutfit(th.outfit);
+  arenaW?.setTheme(th, world.xmasTree); // 🎤 아레나도 같은 테마로
   applyIsolation(); // 테마로 켜지고 꺼지는 물체가 있다
 }
 setFire('lit');
@@ -638,6 +644,7 @@ function loop() {
   npc.update(dt); keeper.update(dt); woodcut.update(dt); for (const ch of sampleChars) ch.update(dt);
   tentRoom.update(dt, false, camera.position);
   gbStand.update(dt, null); board.update(dt, null);
+  arenaW.update(dt, t, 100e3 + (now % 15e3), { energy: 1 }); // 1번 열기구는 광장 승강장에 (시각표 1:40 ~ 1:55 → 캠핑장 대기)
   R.renderer.info.reset();
   R.composer.render();
   if ((infoT -= dt) < 0) { infoT = 0.5; const c = $('labCalls'); if (c) c.textContent = R.renderer.info.render.calls; }

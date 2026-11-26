@@ -1,5 +1,6 @@
 /* 글꼴: 머니그라피 Rounded (© Viva Republica). 원본 파일을 수정 없이 그대로 제공해요 (수정 · 재배포 금지) */
 @font-face { font-family: 'Moneygraphy'; src: url('/fonts/Moneygraphy-Rounded.otf') format('opentype'); font-display: swap; }
+@font-face { font-family: 'MatrixMonoScreen'; src: url('/fonts/MatrixMonoScreen-Regular.woff2') format('woff2'); font-display: swap; } /* 🎈 열기구 출발 전광판 숫자 */
 /* 색 · 그림자 · 둥근 정도 같은 UI 토큰은 src/tokens.css (index.html 에서 이 파일보다 먼저 읽는다) */
 
 * { box-sizing: border-box; }
@@ -505,14 +506,16 @@ body.touch.chat-open.kb-open #chat { padding-bottom: 8px; }
 @keyframes hintBob { 50% { transform: translateY(-3px); } }
 .music-card { max-width: 460px; width: min(460px, calc(100vw - 24px)); max-height: calc(var(--vvh, 100vh) - 24px); display: flex; flex-direction: column; }
 .mm-row { display: flex; gap: 6px; margin-top: 10px; }
-#musicQ { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 11px 14px; border-radius: 14px; border: 2px solid #f1dfba;
+#musicQ, #arenaQ { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 11px 14px; border-radius: 14px; border: 2px solid #f1dfba;
   background: #fffdf6; color: var(--brown); outline: none; -webkit-appearance: none; appearance: none; }
-#musicQ:focus { border-color: var(--orange); }
-#musicQ:disabled { opacity: .6; }
+#musicQ:focus, #arenaQ:focus { border-color: var(--orange); }
+#musicQ:disabled, #arenaQ:disabled { opacity: .6; }
 .mm-go { flex: none; padding: 0 16px; border: 0; border-radius: 14px; font: inherit; font-size: 16px; color: #fff; background: var(--orange); cursor: pointer; }
 .mm-go:disabled { filter: grayscale(.7); cursor: default; }
 .mm-quota { margin-top: 7px; font-size: 12.5px; color: var(--brown-2); text-align: center; }
 .mm-quota b { color: var(--orange-2); }
+.mm-note { margin-top: 6px; padding: 7px 10px; border-radius: 10px; background: #fff3df; font-size: 12px; line-height: 1.5; color: var(--brown-2); text-align: center; }
+.mm-note b { color: var(--orange-2); font-weight: normal; }
 .mm-err { margin-top: 8px; font-size: 13.5px; color: #c4452a; background: #ffe9e2; border-radius: 10px; padding: 7px 10px; }
 .mm-list-title { margin: 12px 2px 6px; font-size: 14px; color: var(--brown); }
 .mm-list { flex: 1 1 auto; min-height: 120px; max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
@@ -1405,3 +1408,57 @@ body.touch .dchoice { font-size: 15px; padding: 8px 13px; }
 .gfx-opt.on { border-color: var(--orange); background: #fff1dc; }
 .gfx-opt.on b::after { content: ' ✓'; color: var(--orange-2); }
 body.touch .gfx-opt[data-mode="high"] { display: none; } /* 휴대폰 · 태블릿은 보통이 가장 높은 단계 */
+
+/* 🎤 불멍 아레나 무대 신청 (v1.23) */
+.arena-card .ar-intro { margin-top: 6px; font-size: 13px; color: var(--brown-2); text-align: center; line-height: 1.55; }
+.arena-card .ar-intro b { color: var(--orange-2); font-weight: normal; }
+.ar-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 2px; }
+.ar-table, .ar-mine { display: flex; flex-direction: column; gap: 5px; }
+.ar-row { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 12px; background: #fff6e6; font-size: 13px; }
+.ar-row .ar-at { flex: none; color: var(--orange-2); min-width: 92px; }
+.ar-row .ar-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ar-row small { flex: none; color: var(--brown-2); font-size: 11.5px; }
+.ar-row.live { background: #ffe1f2; }
+.ar-row.live .ar-at { color: #c0398a; }
+.ar-empty { font-size: 13px; color: var(--brown-2); text-align: center; padding: 6px; }
+.ar-mine { margin-top: 8px; }
+.ar-mine .ar-row { background: #eef5ff; }
+.ar-songs { min-height: 0; max-height: 30vh; flex: none; }
+.ar-songs:empty { display: none; }
+.ar-pick { margin-top: 8px; display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 14px; border: 2px solid var(--orange); background: #fff8ec; }
+.ar-pick img { width: 64px; height: 36px; border-radius: 8px; object-fit: cover; flex: none; }
+.ar-pick > span:not(.song-noimg) { flex: 1; min-width: 0; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ar-pick button { flex: none; border: 0; background: none; font: inherit; color: var(--brown-2); cursor: pointer; }
+.ar-when { display: flex; gap: 6px; }
+.ar-when select, .ar-msg { flex: 1; min-width: 0; font: inherit; font-size: 15px; padding: 9px 10px; border-radius: 12px; border: 2px solid #f1dfba; background: #fffdf8; color: var(--brown); }
+.ar-msg { width: 100%; box-sizing: border-box; margin-top: 8px; }
+/* 아레나 · 열기구에서는 캠핑장 지도를 숨긴다 */
+body.in-arena #mapPanel, body.in-arena #radar, body.in-arena #mapToggle { display: none !important; }
+
+/* 🎤 아레나 무대 위젯 (v1.23): 뮤직 플레이어처럼 지금 · 다음 무대. 상태 칸 아래 왼쪽 */
+.stage-widget { top: var(--sw-top, 150px); left: 16px; width: 300px; padding: 10px 12px 10px 10px; display: flex; gap: 11px; align-items: center; }
+.stage-widget.hidden { display: none; }
+.sw-art { position: relative; flex: none; width: 64px; height: 64px; border-radius: 14px; overflow: hidden; background: linear-gradient(135deg, #4a1f5e, #14284a); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .25); }
+.sw-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sw-art img[src=""], .sw-art img:not([src]) { display: none; }
+.sw-art.empty::after { content: '🎵'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 26px; }
+.sw-eq { position: absolute; right: 5px; bottom: 5px; display: none; gap: 2px; align-items: flex-end; height: 14px; padding: 2px 3px; border-radius: 5px; background: rgba(20, 12, 30, .55); }
+.stage-widget.live .sw-eq { display: flex; }
+.sw-eq i { width: 3px; background: #ffb347; border-radius: 2px; animation: swEq 1.1s ease-in-out infinite; }
+.sw-eq i:nth-child(2) { animation-delay: -.35s; } .sw-eq i:nth-child(3) { animation-delay: -.7s; }
+@keyframes swEq { 0%, 100% { height: 4px; } 50% { height: 12px; } } /* 천천히 오르내리기 (깜빡임 없음) */
+.sw-body { flex: 1; min-width: 0; }
+.sw-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.sw-tag { font-size: 10.5px; letter-spacing: .06em; color: var(--brown-2); }
+.stage-widget.live .sw-tag { color: #c0398a; }
+.stage-widget.live .sw-tag::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: #ff5cc8; vertical-align: 1px; }
+.sw-when { font-size: 11.5px; color: var(--orange-2); white-space: nowrap; }
+.sw-title { margin-top: 2px; font-size: 15px; color: var(--brown); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sw-by { font-size: 12px; color: var(--brown-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sw-bar { margin-top: 6px; height: 5px; border-radius: 3px; background: #f1dfba; overflow: hidden; }
+.sw-bar i { display: block; height: 100%; width: 0; border-radius: 3px; background: linear-gradient(90deg, #ff9d3c, #ff5cc8); transition: width .5s linear; }
+.sw-time { display: flex; justify-content: space-between; margin-top: 3px; font-size: 10.5px; color: var(--brown-2); font-variant-numeric: tabular-nums; }
+.stage-widget:not(.live) .sw-bar, .stage-widget:not(.live) .sw-time { display: none; }
+body.touch .stage-widget { left: max(10px, env(safe-area-inset-left)); width: min(280px, calc(100vw - 96px)); padding: 7px 10px 7px 7px; border-radius: 18px; }
+body.touch .sw-art { width: 50px; height: 50px; border-radius: 11px; }
+body.stargaze .stage-widget { opacity: .12; }

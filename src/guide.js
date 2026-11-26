@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { CFG, TENTS, STUMPS, NPC, KEEPER, WOODYARD, BOUNDS, FENCE, GATES, TRAIL, SPOTS, ZONES, zonePath, LAKE, POND, STREAM, HILL, trailCurve, GUESTBOOK, BOARD } from '../shared/config.js';
+import { CFG, TENTS, STUMPS, NPC, KEEPER, WOODYARD, BOUNDS, FENCE, GATES, TRAIL, SPOTS, ZONES, zonePath, LAKE, POND, STREAM, HILL, trailCurve, GUESTBOOK, BOARD, BALLOON } from '../shared/config.js';
 
 // 숲길 · 개울 곡선 (지도 · 레이더에서 그린다)
 const TRAIL_PTS = trailCurve(TRAIL.loop, true, 3);
@@ -261,6 +261,7 @@ export class Guide {
     place(KEEPER.x, KEEPER.z, '📦', '', target?.kind === 'keeper', '#8fc46a'); // 장작 아이콘과 가까워 글자는 생략
     place(GUESTBOOK.x, GUESTBOOK.z, '📖', '방명록', false, '#ffc46b');
     place(BOARD.x, BOARD.z, '📌', '', false, '#ffc46b'); // 방명록과 가까워 글자는 생략
+    place(BALLOON.camp.x, BALLOON.camp.z, '🎈', '아레나', false, '#ff9ad8'); // 🎤 불멍 아레나행 열기구 승강장
     for (const sp of SPOTS) place(sp.x, sp.z, sp.icon, sp.name, target?.kind === 'spot' && target.id === sp.id, '#9fd0ff');
     if (target?.kind === 'pit') {
       g.strokeStyle = '#ffc46b'; g.lineWidth = 2;

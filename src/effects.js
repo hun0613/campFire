@@ -65,7 +65,7 @@ export class Effects {
       this.g.spawn({ x: c.x, y: c.y + 0.6, z: c.z, vx: Math.cos(a) * sp, vy: R(1.5, 4), vz: Math.sin(a) * sp, color: i % 3 ? hi : pale, size: R(0.15, 0.3), life: R(0.6, 1.2), drag: 2.2, grav: -0.5 });
     }
     const durations = { sparkle: 8, spiral: 10, pillar: 7, rings: 10, fireflies: 12, stars: 8, hearts: 10, rainbow: 12,
-      aurora: 14, fireworks: 13, petals: 13, galaxy: 14, butterflies: 14, lanterns: 15, cheers: 12 }; // 아래 줄은 ✦ 특별한 가루
+      aurora: 14, fireworks: 13, petals: 13, galaxy: 14, butterflies: 14, lanterns: 15, cheers: 12, festival: 16, stagepyro: 6 }; // 아래 줄은 ✦ 특별한 가루
     const e = { type, c: c.clone(), color, hi, pale, t: 0, dur: durations[type] || 8, acc: 0, n: 0 };
     this.emitters.push(e);
     if (type === 'sparkle') {
@@ -244,7 +244,7 @@ export class Effects {
             e.n++;
             const ang = e.t * 2.2 + e.n * 0.7;
             tmp.setHSL((e.n * 0.013) % 1, 1, 0.6).multiplyScalar(2.2);
-            this.g.spawn({ x: c.x, y: c.y + 0.5, z: c.z, vy: R(1.0, 1.6), color: tmp.clone(), size: R(0.14, 0.24), life: 3.2,
+            this.g.spawn({ x: c.x, y: c.y + 0.5, z: c.z, vy: R(1.0, 1.6), color: tmp, size: R(0.14, 0.24), life: 3.2,
               orbit: { cx: c.x, cz: c.z, ang, angVel: 1.4, rad: R(0.4, 0.9), radVel: 0.35 } });
           }
           break;
@@ -260,7 +260,7 @@ export class Effects {
             const hue = 0.36 + (Math.sin(u * 2.2 + e.t * 0.9) + 1) * 0.2; // 초록 ↔ 하늘 ↔ 보라
             tmp.setHSL(hue % 1, 0.95, 0.6).multiplyScalar(1.9);
             const base = 1.2 + Math.sin(u * 3 + e.t * 2.2) * 0.45;
-            this.g.spawn({ x: c.x + Math.cos(ang) * r, y: base + R(0, 0.2), z: c.z + Math.sin(ang) * r, vy: R(1.3, 1.8), color: tmp.clone(),
+            this.g.spawn({ x: c.x + Math.cos(ang) * r, y: base + R(0, 0.2), z: c.z + Math.sin(ang) * r, vy: R(1.3, 1.8), color: tmp,
               size: R(0.12, 0.18), life: R(1.2, 1.7), alpha: 0.7 });
           }
           break;
@@ -296,12 +296,12 @@ export class Effects {
           for (let i = 0; i < n; i++) {
             e.n++;
             tmp.set(['#ffc2dd', '#ff8fc8', '#fff0f6', '#ffb0d0'][e.n % 4]).multiplyScalar(1.5);
-            this.s.spawn({ x: c.x, y: c.y + 0.4, z: c.z, vy: R(0.7, 1.2), color: tmp.clone(), size: R(0.14, 0.22), life: R(4, 5.5), shape: 2, spin: R(-5, 5), alpha: 0.95,
+            this.s.spawn({ x: c.x, y: c.y + 0.4, z: c.z, vy: R(0.7, 1.2), color: tmp, size: R(0.14, 0.22), life: R(4, 5.5), shape: 2, spin: R(-5, 5), alpha: 0.95,
               orbit: { cx: c.x, cz: c.z, ang: e.t * 2.4 + e.n * 0.9, angVel: R(1.6, 2.4), rad: 0.5, radVel: R(0.45, 0.75) } });
           }
           if (rate(8)) {
             const a = Math.random() * 6.28, r = R(1, 4);
-            this.s.spawn({ x: c.x + Math.cos(a) * r, y: R(3.5, 5), z: c.z + Math.sin(a) * r, vx: R(-0.4, 0.4), vy: -0.5, vz: R(-0.4, 0.4), color: tmp.clone(), size: 0.18, life: 6, shape: 2, spin: R(-3, 3), bob: 0.8 });
+            this.s.spawn({ x: c.x + Math.cos(a) * r, y: R(3.5, 5), z: c.z + Math.sin(a) * r, vx: R(-0.4, 0.4), vy: -0.5, vz: R(-0.4, 0.4), color: tmp, size: 0.18, life: 6, shape: 2, spin: R(-3, 3), bob: 0.8 });
           }
           break;
         }
@@ -333,7 +333,7 @@ export class Effects {
             }
             for (let k = 0; k < 10; k++) { // 색종이: 천천히 빙글빙글 내려온다
               tmp.setHSL(Math.random(), 0.9, 0.62).multiplyScalar(1.5);
-              this.g.spawn({ x: bx, y: by, z: bz, vx: R(-1.4, 1.4), vy: R(0.6, 1.8), vz: R(-1.4, 1.4), grav: 1.1, drag: 1.6, color: tmp.clone(), size: R(0.12, 0.18), life: R(2.2, 3), shape: 1, spin: R(-5, 5) });
+              this.g.spawn({ x: bx, y: by, z: bz, vx: R(-1.4, 1.4), vy: R(0.6, 1.8), vz: R(-1.4, 1.4), grav: 1.1, drag: 1.6, color: tmp, size: R(0.12, 0.18), life: R(2.2, 3), shape: 1, spin: R(-5, 5) });
             }
           }
           break;
@@ -350,6 +350,77 @@ export class Effects {
           if (rate(4)) { // 등 사이로 내려앉는 따뜻한 빛가루
             const a = Math.random() * 6.28, r = R(0.5, 2.6);
             this.g.spawn({ x: c.x + Math.cos(a) * r, y: R(2, 4.5), z: c.z + Math.sin(a) * r, vy: -0.25, color: e.pale, size: R(0.05, 0.09), life: R(2, 3) });
+          }
+          break;
+        }
+        case 'stagepyro': { // 🎆 무대 연출 (곡이 나올 때 가끔): c = 무대 앞 가운데. 무대 앞 불꽃 분수 + 지붕 위 부채꼴 폭죽 (따뜻한 금 · 붉은빛)
+          if (e.t < 3.2) { // 1) 무대 앞 불꽃 분수 8개
+            const k = Math.max(1, Math.round(dt * 55)); // (최적화: 110 → 55, 대신 조금 크게)
+            for (let j = 0; j < 8; j++) {
+              const x = c.x - 13 + (j * 26) / 7;
+              for (let q = 0; q < k; q++) {
+                tmp.setHSL(R(0.08, 0.13), 0.9, R(0.68, 0.82)).multiplyScalar(2.6);
+                this.g.spawn({ x: x + R(-0.12, 0.12), y: c.y + 1.65, z: c.z - 0.4, vx: R(-0.7, 0.7), vy: R(8, 12), vz: R(-0.4, 0.4), grav: 7, drag: 0.35, color: tmp, size: R(0.2, 0.3), life: R(0.9, 1.3) });
+              }
+            }
+          }
+          e.fans = e.fans || [0.4, 1.1, 1.8, 2.6]; // 2) 지붕 위 부채꼴 폭죽 (차례로)
+          while (e.fans.length && e.t >= e.fans[0]) {
+            e.fans.shift(); e.n++;
+            for (const fx of [-9, 0, 9]) {
+              const hue = [0.02, 0.08, 0.98][e.n % 3];
+              for (let q = 0; q < 24; q++) { // (최적화: 34 → 24)
+                const a = (q / 23 - 0.5) * 2.2 + R(-0.05, 0.05), sp = R(12, 16);
+                tmp.setHSL(hue + R(-0.02, 0.02), 0.95, R(0.6, 0.72)).multiplyScalar(2.4);
+                this.g.spawn({ x: c.x + fx, y: 14, z: c.z - 6, vx: Math.sin(a) * sp, vy: Math.cos(a) * sp, vz: R(-1, 1), grav: 6, drag: 0.7, color: tmp, size: R(0.32, 0.46), life: R(1.4, 1.9) });
+              }
+            }
+          }
+          break;
+        }
+        case 'festival': { // ✦ 페스티벌 가루 (아레나): c = 뿌린 객석 모닥불. 불 둘레 불기둥 · 머리 위 축포 · 스팟 둘레 반짝이 꽃가루 (깜빡이지 않고 천천히)
+          // 1) 모닥불 둘레 불기둥 6개 (의자 바깥 원): 1.6초마다 0.6초 동안 길게 뿜어 오른다
+          e.facc = (e.facc || 0) + dt;
+          if (e.t < 11 && (e.n === 0 || e.facc > 1.6)) { e.facc = 0; e.n++; e.jetUntil = e.t + 0.6; }
+          if (e.t < (e.jetUntil || 0)) {
+            const k = Math.max(1, Math.round(dt * 100)); // 한 기둥에 1초 100알 (v1.23 최적화: 220 → 100, 대신 조금 크고 오래)
+            for (let j = 0; j < 6; j++) {
+              const a = (j / 6) * Math.PI * 2 + e.n * 0.25, jx = Math.cos(a) * 3.6, jz = Math.sin(a) * 3.6;
+              for (let q = 0; q < k; q++) {
+                tmp.setHSL(R(0.03, 0.11), 1, R(0.52, 0.64)).multiplyScalar(2.2);
+                this.g.spawn({ x: c.x + jx + R(-0.12, 0.12), y: c.y + 0.1, z: c.z + jz + R(-0.12, 0.12), vx: R(-0.25, 0.25), vy: R(9, 13), vz: R(-0.25, 0.25), grav: 5, drag: 1.0, color: tmp, size: R(0.28, 0.42), life: R(0.8, 1.2) });
+              }
+            }
+          }
+          // 2) 축포: 모닥불에서 쏘아 올려 머리 위 하늘에서 크게 터진다
+          e.wacc = (e.wacc || 0) + dt;
+          if (e.t < e.dur - 3 && e.wacc > 0.8) {
+            e.wacc = 0;
+            const bx = c.x + R(-6, 6), bz = c.z + R(-6, 6), by = R(10, 14); // 앉은 눈높이에서도 보이게
+            const col = tmp.setHSL(Math.random(), 1, 0.62).clone().multiplyScalar(2.4), col2 = col.clone().lerp(WHITE, 0.6);
+            for (let k = 0; k < 10; k++) {
+              const tt = 0.8 + k * 0.01;
+              this.g.spawn({ x: c.x, y: c.y + 0.8, z: c.z, vx: (bx - c.x) / tt, vy: (by - c.y - 0.8) / tt + 4.5 * tt, vz: (bz - c.z) / tt, grav: 9, color: col2, size: 0.14, life: tt });
+            }
+            e.bursts = e.bursts || [];
+            e.bursts.push({ at: e.t + 0.8, x: bx, y: by, z: bz, col, col2 });
+          }
+          for (const b of e.bursts || []) {
+            if (b.done || e.t < b.at) continue;
+            b.done = true;
+            for (let k = 0; k < 100; k++) { // (최적화: 160 → 100)
+              const th = Math.random() * 6.28, ph = Math.acos(R(-1, 1)), sp = R(5.5, 7.5);
+              this.g.spawn({ x: b.x, y: b.y, z: b.z, vx: Math.sin(ph) * Math.cos(th) * sp, vy: Math.cos(ph) * sp, vz: Math.sin(ph) * Math.sin(th) * sp,
+                grav: 2.6, drag: 1.1, color: k % 4 ? b.col : b.col2, size: R(0.26, 0.42), life: R(1.6, 2.3), shape: k % 8 === 0 ? 1 : 0 });
+            }
+          }
+          // 3) 스팟 둘레로 쏟아지는 반짝이 꽃가루 (옆 스팟까지 살짝 닿게)
+          if (e.t > 1 && e.t < e.dur - 2) {
+            for (let i = rate(35); i > 0; i--) { // (최적화: 55 → 35)
+              const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * 9;
+              tmp.setHSL([0.92, 0.75, 0.52, 0.12][i % 4] + R(-0.03, 0.03), 0.95, 0.66).multiplyScalar(1.5);
+              this.g.spawn({ x: c.x + Math.cos(a) * r, y: R(7, 10), z: c.z + Math.sin(a) * r, vx: R(-0.5, 0.5), vy: R(-1.2, -0.7), vz: R(-0.5, 0.5), grav: 0.25, drag: 0.6, color: tmp, size: R(0.15, 0.24), life: R(4.5, 6.5), shape: 1, spin: R(-5, 5) });
+            }
           }
           break;
         }

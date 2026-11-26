@@ -49,6 +49,8 @@ export function searchesLeft() {
 
 // ---------------------------------------------------------------- 캐시 / 곡 정보
 const cache = new Map(); // 검색어 -> { at, items }
+/** 모닥불 · 텐트 음악은 20분 이하 영상만 (정책서 제6조) — 검색 · 링크 모두 */
+export const MAX_MUSIC_SEC = 20 * 60;
 export const known = new Map(); // vid -> { vid, title, channel, thumb, duration }
 const recent = []; // 최근 재생한 곡 (한도 안 쓰고 다시 틀 수 있게)
 export function addRecent(info) {
@@ -132,7 +134,7 @@ export async function search(q, who) {
     const ids = (j.items || []).map((it) => it.id?.videoId).filter(Boolean);
     const infos = await videoInfo(ids).catch(() => []);
     const byId = new Map(infos.map((i) => [i.vid, i]));
-    const items = ids.map((id) => byId.get(id)).filter((i) => i && i.embeddable && !i.live && i.duration > 0 && i.duration <= 20 * 60);
+    const items = ids.map((id) => byId.get(id)).filter((i) => i && i.embeddable && !i.live && i.duration > 0 && i.duration <= MAX_MUSIC_SEC);
     cache.set(ck, { at: Date.now(), items });
     if (cache.size > 300) cache.delete(cache.keys().next().value);
     return { ok: true, items, left: searchesLeft(), cached: false };

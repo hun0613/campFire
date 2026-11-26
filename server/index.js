@@ -7,8 +7,9 @@ import crypto from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import {
   CFG, FIRES, seatsOf, STUMPS, EMOTES, LOUNGE_SEATS, NPC, KEEPER, QUESTS, LEGEND_POWDERS, SHOP_LEGENDS, legendPowder, BOUNDS, SPAWN, RANGE, LOOKS, seatPos, randomPowder,
-  TENTS, tentAt, tentLocal, kstDay, EGG,
+  TENTS, tentAt, tentLocal, kstDay, EGG, ARENA, BALLOON, balloonState, basketSlot, rideOf, inArena,
 } from '../shared/config.js';
+import * as arena from './arena.js';
 import * as guestbook from './guestbook.js';
 import * as weather from './weather.js';
 import * as daily from './daily.js';
@@ -17,7 +18,7 @@ import { handleAdmin, adminOn } from './admin.js';
 import * as board from './board.js';
 import { handleDs } from './dscheck.js';
 import { RESIDENTS, ALWAYS, STAMP_GOALS, RESIDENT_RANGE, MOODS, residentPos, residentActive, residentPowder } from '../shared/residents.js';
-import { search, searchesLeft, nextReset, videoInfo, known, addRecent, recentList, hasKey, quotaState, restoreQuota } from './youtube.js';
+import { search, searchesLeft, nextReset, videoInfo, known, addRecent, recentList, hasKey, quotaState, restoreQuota, MAX_MUSIC_SEC } from './youtube.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -56,7 +57,7 @@ server.on('request', (req, res) => {
   if (req.url === '/admin' || req.url === '/admin/') req.url = '/admin.html';
   if (req.url === '/lab' || req.url === '/lab/') req.url = '/lab.html'; // 불멍 디자인 시스템
   if (!isProd && req.url?.startsWith('/api/ds/')) handleDs(req, res); // 불멍 디자인 시스템의 디자인 점검 → 노션 (로컬 서버에서만)
-  if (req.url?.startsWith('/api/admin/')) handleAdmin(req, res, () => ({ players: players.size }), { onBoardChange: () => broadcast({ t: 'boardUpdate' }) });
+  if (req.url?.startsWith('/api/admin/')) handleAdmin(req, res, () => ({ players: players.size }), { onBoardChange: () => broadcast({ t: 'boardUpdate' }), arenaAdd: adminAddShow });
 });
 const passThrough = (handler) => (req, res) => {
   if (req.url !== '/api/info' && !req.url?.startsWith('/api/admin/') && !(!isProd && req.url?.startsWith('/api/ds/'))) handler(req, res);
@@ -92,6 +93,7 @@ const players = new Map(); // id -> player
 let nextId = 1;
 
 // 바깥 화로 12곳 + 텐트 벽난로 12곳 (벽난로는 텐트 안에 있어야 쓸 수 있다)
+// 🎤 아레나 객석 모닥불도 캠핑장 화로와 같은 규칙 (장작 5개 · 불 붙이기 · 10분 · 장작 더 넣기)
 const pits = new Map(FIRES.map((p) => [p.id, {
   id: p.id, state: 'empty', owner: null, litAt: 0, endsAt: 0, music: null,
   seats: Array(seatsOf(p)).fill(null),
@@ -209,7 +211,90 @@ setInterval(() => {
 }, 3600 * 1000);
 
 function publicPlayer(p) {
-  return { id: p.id, name: p.name, look: p.look, x: p.x, z: p.z, ry: p.ry, anim: p.anim, carry: p.wood, tag: p.tag };
+  return { id: p.id, name: p.name, look: p.look, x: p.x, z: p.z, ry: p.ry, anim: p.anim, carry: p.wood, tag: p.tag, ride: p.ride ?? null };
+}
+
+// ---------------------------------------------------------------- 🎈 열기구 (캠핑장 ↔ 아레나)
+// 한 대가 정해진 시각표대로 오간다 (shared/config.js balloonState). 승강장에 내려앉아 있을 때만 탈 수 있고,
+// 출발하면 바구니에 탄 사람은 함께 날아가 도착한 쪽 승강장 옆에 내린다
+const riders = Array.from({ length: BALLOON.fleet }, () => Array(BALLOON.cap).fill(null)); // 열기구마다 · 자리마다 player id
+const zoneBounds = (p) => (p.zone === 'arena' ? ARENA.bounds : BOUNDS);
+function clampZone(p) {
+  const b = zoneBounds(p);
+  p.x = Math.min(b.maxX, Math.max(b.minX, p.x));
+  p.z = Math.min(b.maxZ, Math.max(b.minZ, p.z));
+}
+function unride(p, land) {
+  if (p.ride == null) return;
+  const rr = rideOf(p.ride);
+  if (riders[rr.k]?.[rr.slot] === p.id) riders[rr.k][rr.slot] = null;
+  p.ride = null;
+  p.anim = 'idle';
+  if (land) { // 승강장 옆 (바구니 자리 방향으로 조금 떨어져) 에 내린다
+    const st = BALLOON[land], a = Math.random() * Math.PI * 2, r = 3.4 + Math.random() * 0.8;
+    p.zone = land;
+    p.x = st.x + Math.sin(a) * r; p.z = st.z + Math.cos(a) * r;
+    clampZone(p);
+  }
+  broadcast({ t: 'ride', id: p.id, slot: null, x: p.x, z: p.z, zone: p.zone });
+}
+const balloonWas = Array(BALLOON.fleet).fill(null);
+function balloonTick(now) {
+  for (let k = 0; k < BALLOON.fleet; k++) {
+    const b = balloonState(now, k);
+    const key = b.at || `${b.from}>${b.to}`;
+    if (key !== balloonWas[k]) {
+      const prev = balloonWas[k];
+      balloonWas[k] = key;
+      if (prev && prev.includes('>') && b.at) { // 막 도착: 탄 사람은 내린다
+        for (const id of riders[k]) { const q = id && players.get(id); if (q) { unride(q, b.at); if (q.ws) send(q.ws, { t: 'arrive', zone: b.at }); } }
+      } else if (prev && !prev.includes('>') && !b.at) { // 막 출발
+        if (riders[k].some(Boolean)) broadcast({ t: 'sys', text: `🎈 열기구가 ${b.to === 'arena' ? '불멍 아레나로' : '캠핑장으로'} 출발했어요` });
+      }
+    }
+    // 탄 사람은 바구니와 함께 움직인다 (스냅샷 · 거리 계산용)
+    riders[k].forEach((id, i) => { const q = id && players.get(id); if (!q) return; const sl = basketSlot(i); q.x = b.x + sl.x; q.z = b.z + sl.z; });
+  }
+}
+/** 지금 이 승강장(zone)에 내려앉아 있는 열기구 (없으면 null) */
+function dockedAt(zone, now) {
+  for (let k = 0; k < BALLOON.fleet; k++) { const b = balloonState(now, k); if (b.at === zone) return { k, b }; }
+  return null;
+}
+
+// ---------------------------------------------------------------- 🎤 아레나 무대
+/** 무대에 올릴 수 있는 영상인지 (외부 재생 허용 · 라이브 아님) + 제목 · 길이 */
+async function checkStageVideo(vid) {
+  let info = known.get(vid);
+  if (!info && hasKey()) info = (await videoInfo([vid]).catch(() => []))[0];
+  if (info) {
+    if (!info.embeddable) return { ok: false, why: '이 곡은 업로더가 외부 재생을 막아 뒀어요 😢' };
+    if (info.live) return { ok: false, why: '라이브 방송은 무대에 올릴 수 없어요' };
+    return { ok: true, ...info };
+  }
+  const o = await lookupVideo(vid);
+  return o.ok ? { ok: true, vid, title: o.title, channel: '', duration: 0 } : o;
+}
+/** 관리실 「무대 바로 올리기」 */
+async function adminAddShow(body) {
+  const vid = parseYouTubeId(body?.url);
+  if (!vid) throw new Error('잘못된 링크: 유튜브 링크를 확인해 주세요');
+  const info = await checkStageVideo(vid);
+  if (!info.ok) throw new Error(`잘못된 곡: ${info.why}`);
+  return arena.addByAdmin({ vid, title: info.title || body.title, channel: info.channel, dur: info.duration || 0, by: body.by, msg: body.msg, at: Number(body.at) });
+}
+let showWas = '';
+const arenaState = () => ({ show: arena.current(), table: arena.timetable() });
+arena.setOnChange(() => broadcast({ t: 'arena', ...arenaState() }));
+function showTick(now) {
+  arena.tick();
+  const cur = arena.current(now);
+  const key = cur ? `${cur.id}|${cur.startedAt}|${cur.endsAt}` : '';
+  if (key === showWas) return;
+  const started = cur && !showWas.startsWith(cur.id);
+  showWas = key;
+  broadcast({ t: 'arena', ...arenaState() });
+  if (started) broadcast({ t: 'sys', text: `🎤 불멍 아레나 무대: ${cur.byName}님의 「${cur.title}」가 시작됐어요! (광장 열기구 승강장에서 1분마다 출발)` });
 }
 
 // ---------------------------------------------------------------- 글램핑 텐트
@@ -388,6 +473,10 @@ function handle(ws, ctx, m) {
       p.z = Math.min(BOUNDS.maxZ, Math.max(BOUNDS.minZ, saved.z));
     }
     if (tentAt(p.x, p.z)) { p.x = SPAWN.x; p.z = SPAWN.z; } // 다시 들어올 때 텐트 안이면 광장에서 (인원 확인을 건너뛰지 않게)
+    p.zone = 'camp';
+    if (saved?.fresh && Number.isFinite(saved.x) && inArena(saved.x, saved.z)) { p.zone = 'arena'; p.x = saved.x; p.z = saved.z; } // 아레나에서 새로고침하면 아레나에서
+    else if (saved?.fresh && Number.isFinite(saved.x) && !inArena(saved.x, saved.z) && (saved.x > BOUNDS.maxX + 5 || saved.z > BOUNDS.maxZ + 5)) { p.x = SPAWN.x; p.z = SPAWN.z; } // 열기구를 타던 중이면 광장에서
+    clampZone(p);
     ctx.me = p;
     p.ws = ws; // 퀘스트 진행을 이 사람에게 바로 알려 주려고 (저장 · 공개되지 않음)
     players.set(p.id, p);
@@ -399,7 +488,7 @@ function handle(ws, ctx, m) {
         if (key === pid && pit.state !== 'empty') { pit.owner = p.id; broadcast({ t: 'pit', pit }); }
       }
     }
-    send(ws, { t: 'welcome', id: p.id, me: publicPlayer(p), restored: saved ? { wood: p.wood, stored: p.stored, powders: p.powders.length } : null });
+    send(ws, { t: 'welcome', id: p.id, zone: p.zone, me: publicPlayer(p), restored: saved ? { wood: p.wood, stored: p.stored, powders: p.powders.length } : null });
     send(ws, inv(p));
     send(ws, quotaMsg());
     broadcast({ t: 'join', player: publicPlayer(p) }, ws);
@@ -412,11 +501,11 @@ function handle(ws, ctx, m) {
 
   switch (m.t) {
     case 'move': {
-      if (me.seat) return;
+      if (me.seat || me.ride != null) return;
       const x = Number(m.x), z = Number(m.z), ry = Number(m.ry);
       if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(ry)) return;
-      me.x = Math.min(BOUNDS.maxX, Math.max(BOUNDS.minX, x));
-      me.z = Math.min(BOUNDS.maxZ, Math.max(BOUNDS.minZ, z));
+      me.x = x; me.z = z;
+      clampZone(me); // 캠핑장 · 아레나 사이는 열기구로만 오간다
       me.ry = ry;
       me.anim = ['idle', 'walk', 'run'].includes(m.anim) ? m.anim : 'idle';
       if (m.anim === 'sit' && LOUNGE_SEATS.some((st) => dist(me, st.x, st.z) < 1.0)) me.anim = 'sit'; // 흔들의자 · 벤치
@@ -576,8 +665,9 @@ function handle(ws, ctx, m) {
       send(ws, inv(me));
       break;
     }
-    case 'store': { // 장작 창고: op 'put' 맡기기 / 'take' 찾기
-      if (dist(me, KEEPER.x, KEEPER.z) > RANGE.keeper + 1.5) return;
+    case 'store': { // 장작 창고: op 'put' 맡기기 / 'take' 찾기 (캠핑장 보리 · 아레나 콩이: 같은 창고)
+      const kp = me.zone === 'arena' ? ARENA.keeper : KEEPER;
+      if (dist(me, kp.x, kp.z) > RANGE.keeper + 1.5) return;
       const want = Math.max(1, Math.min(CFG.MAX_STORED, m.n | 0));
       let n = 0, reason = '';
       if (m.op === 'put') {
@@ -681,6 +771,7 @@ function handle(ws, ctx, m) {
       const idx = m.idx | 0;
       const powder = me.powders[idx];
       if (!powder) return;
+      if (powder.effect === 'festival' && pitDef.get(pit.id)?.kind !== 'arena') { send(ws, { t: 'toast', text: '✦ 페스티벌 가루는 불멍 아레나 객석 모닥불에서만 뿌릴 수 있어요 🎤' }); return; }
       me.powders.splice(idx, 1);
       broadcast({ t: 'fx', pit: pit.id, powder, by: me.id, name: me.name });
       send(ws, inv(me));
@@ -706,6 +797,7 @@ function handle(ws, ctx, m) {
       const pit = inTent ? tentRooms.get(me.tent) : me.seat && pits.get(me.seat.pit);
       if (!pit || pit.id !== m.pit) { send(ws, { t: 'toast', text: '모닥불이나 텐트 의자에 앉아서 음악을 틀 수 있어요' }); return; }
       if (!inTent && pit.state !== 'lit') { send(ws, { t: 'toast', text: '불이 붙어 있어야 음악을 틀 수 있어요' }); return; }
+      if (pitDef.get(pit.id)?.kind === 'arena') { send(ws, { t: 'toast', text: '아레나에선 무대 음악을 함께 들어요 🎤 (무대 신청은 승강장 앞 부스에서)' }); return; }
       if (pit.music) { send(ws, { t: 'toast', text: '지금 곡이 끝나면 다른 곡을 틀 수 있어요 🎵' }); return; }
       if (now - (me.lastMusic || 0) < 3000 || ctx.musicPending) return;
       const vid = parseYouTubeId(m.vid || m.url);
@@ -719,6 +811,7 @@ function handle(ws, ctx, m) {
         if (info) {
           if (!info.embeddable) return { ok: false, why: '이 곡은 업로더가 외부 재생을 막아 뒀어요 😢' };
           if (info.live) return { ok: false, why: '라이브 방송은 틀 수 없어요' };
+          if (info.duration > MAX_MUSIC_SEC) return { ok: false, why: `${MAX_MUSIC_SEC / 60}분이 넘는 영상은 모닥불에서 틀 수 없어요 ⏱️` };
           return { ok: true, ...info };
         }
         const o = await lookupVideo(vid);
@@ -748,14 +841,23 @@ function handle(ws, ctx, m) {
       break;
     }
     case 'musicInfo': { // 클라이언트가 알려주는 영상 길이 → 끝나는 시각
+      if (m.pit === 'arena') { const cur = arena.current(now); if (cur && cur.vid === m.vid) arena.setDuration(cur.id, Number(m.duration)); return; }
       const pit = roomOf(m.pit);
       const d = Number(m.duration);
       if (!pit?.music || pit.music.vid !== m.vid || pit.music.endsAt || !Number.isFinite(d)) return;
       if (d < 3 || d > 6 * 3600) return;
+      if (d > MAX_MUSIC_SEC + 5) { // 링크로 넣어 길이를 미리 몰랐던 긴 영상: 재생해 보니 20분이 넘으면 멈춘다
+        const dj = players.get(pit.music.by);
+        if (dj?.ws) send(dj.ws, { t: 'toast', text: `⏱️ ${MAX_MUSIC_SEC / 60}분이 넘는 영상이라 멈췄어요 · 모닥불에서는 ${MAX_MUSIC_SEC / 60}분 이하 곡만 틀 수 있어요` });
+        clearMusic(pit, 'long');
+        syncRoom(pit);
+        return;
+      }
       pit.music.endsAt = pit.music.startedAt + d * 1000 + 2000;
       break;
     }
     case 'musicEnd': { // 영상 끝 / 재생 오류 보고
+      if (m.pit === 'arena') return; // 아레나 무대는 시각표대로 (한 사람 기기의 재생 오류로 끝내지 않는다)
       const pit = roomOf(m.pit);
       if (!pit?.music || pit.music.vid !== m.vid) return;
       const isDJ = pit.music.by === me.id;
@@ -769,6 +871,63 @@ function handle(ws, ctx, m) {
         clearMusic(pit, 'ended');
         syncRoom(pit);
       }
+      break;
+    }
+    case 'rideOn': { // 🎈 열기구 타기: 승강장에 내려앉아 있을 때, 바구니 가까이에서
+      if (me.ride != null || me.seat || me.tent) return;
+      const dk = dockedAt(me.zone, now);
+      if (!dk) { send(ws, { t: 'toast', text: '🎈 열기구가 아직 도착하지 않았어요. 승강장 전광판을 확인해 주세요' }); return; }
+      const { k, b } = dk;
+      if (dist(me, b.x, b.z) > BALLOON.range + 1.5) return;
+      if (b.next < 2) { send(ws, { t: 'toast', text: '🎈 막 출발하는 중이에요. 다음 열기구를 타 주세요' }); return; }
+      const slot = riders[k].indexOf(null);
+      if (slot < 0) { send(ws, { t: 'toast', text: `🎈 바구니가 꽉 찼어요 (${BALLOON.cap}명). 1분 뒤 다음 열기구를 타 주세요` }); return; }
+      riders[k][slot] = me.id;
+      me.ride = k * BALLOON.cap + slot;
+      me.anim = 'idle';
+      const sl = basketSlot(slot);
+      me.x = b.x + sl.x; me.z = b.z + sl.z;
+      broadcast({ t: 'ride', id: me.id, slot: me.ride, x: me.x, z: me.z, zone: me.zone });
+      break;
+    }
+    case 'rideOff': { // 출발 전에 내리기
+      if (me.ride == null || !balloonState(now, rideOf(me.ride).k).at) return;
+      unride(me, me.zone);
+      break;
+    }
+    case 'festBuy': { // 🎤 아레나 부스: 장작 10개 → ✦ 페스티벌 가루
+      if (me.zone !== 'arena' || dist(me, ARENA.booth.x, ARENA.booth.z) > RANGE.npc + 2) return;
+      if (now - (me.lastBuy || 0) < 400) return;
+      me.lastBuy = now;
+      if (me.wood < CFG.FESTIVAL_PRICE) { send(ws, { t: 'festFail', reason: 'wood' }); return; }
+      if (me.powders.length >= CFG.MAX_POWDERS) { send(ws, { t: 'festFail', reason: 'full' }); return; }
+      me.wood -= CFG.FESTIVAL_PRICE;
+      const powder = legendPowder('festival');
+      me.powders.push(powder);
+      send(ws, { t: 'festBought', powder });
+      send(ws, inv(me));
+      break;
+    }
+    case 'arenaOpen': { // 🎤 무대 신청 부스: 타임테이블 + 내 신청
+      send(ws, { t: 'arenaMenu', ...arenaState(), mine: arena.mine(me.tag, now), slotMin: arena.SLOT_MIN, maxDays: arena.MAX_DAYS, perDevice: arena.PER_DEVICE, hasKey: hasKey(), left: searchesLeft() });
+      break;
+    }
+    case 'arenaApply': {
+      if (dist(me, ARENA.apply.x, ARENA.apply.z) > RANGE.npc + 3 || me.zone !== 'arena') return; // 무대 신청은 아레나 부스에서
+      if (ctx.arenaPending || now - (me.lastApply || 0) < 5000) { send(ws, { t: 'arenaFail', text: '조금만 천천히 신청해 주세요' }); return; }
+      const vid = parseYouTubeId(m.vid || m.url);
+      if (!vid) { send(ws, { t: 'arenaFail', text: '유튜브 링크를 다시 확인해 주세요' }); return; }
+      if (!me.tag) { send(ws, { t: 'arenaFail', text: '이 기기에서는 신청할 수 없어요 (저장 공간을 확인해 주세요)' }); return; }
+      const at = Number(m.at);
+      me.lastApply = now;
+      ctx.arenaPending = true;
+      checkStageVideo(vid).then(async (info) => {
+        if (!info.ok) { ctx.arenaPending = false; send(ws, { t: 'arenaFail', text: info.why }); return; }
+        const r = await arena.apply({ vid, title: info.title || m.title, channel: info.channel, dur: info.duration || 0, by: me.name, msg: m.msg, at, tag: me.tag });
+        ctx.arenaPending = false;
+        if (!r.ok) { send(ws, { t: 'arenaFail', text: r.why }); return; }
+        send(ws, { t: 'arenaApplied', item: { id: r.item.id, title: r.item.title, at: r.item.at, status: r.item.status }, mine: arena.mine(me.tag) });
+      }).catch((e) => { ctx.arenaPending = false; console.error('[arena]', e.message); send(ws, { t: 'arenaFail', text: '신청하지 못했어요. 잠시 후 다시 시도해 주세요' }); });
       break;
     }
     case 'boardGet': { // 캠핑장 소식 게시판
@@ -853,6 +1012,7 @@ wss.on('connection', (ws) => {
     pits: [...pits.values()],
     tentMusic: [...tentRooms.values()].filter((r) => r.music).map((r) => ({ tent: r.id, music: r.music })),
     theme: weather.currentTheme(),
+    arena: arenaState(),
     players: [...players.values()].map(publicPlayer),
   });
   ws.on('message', (raw) => {
@@ -868,6 +1028,7 @@ wss.on('connection', (ws) => {
     remember(me);
     daily.leave(Date.now() - me.joinedAt);
     leaveSeat(me);
+    if (me.ride != null) { const rr = rideOf(me.ride); if (riders[rr.k][rr.slot] === me.id) riders[rr.k][rr.slot] = null; }
     const tr = me.tent && tentRooms.get(me.tent);
     if (tr?.music?.by === me.id) { clearMusic(tr, 'left'); syncRoom(tr); }
     players.delete(me.id);
@@ -906,6 +1067,8 @@ setInterval(() => {
   for (const tr of tentRooms.values()) {
     if (tr.music?.endsAt && now >= tr.music.endsAt + 5000) { clearMusic(tr, 'ended'); syncRoom(tr); }
   }
+  balloonTick(now);
+  showTick(now);
   for (const pit of pits.values()) {
     if (pit.music?.endsAt && now >= pit.music.endsAt + 5000) {
       clearMusic(pit, 'ended');

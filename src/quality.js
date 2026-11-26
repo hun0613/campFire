@@ -5,11 +5,11 @@
 // - 그래픽 가속이 꺼진 브라우저(소프트웨어 렌더러)는 처음부터 가벼움 + 안내
 export const LEVELS = ['high', 'mid', 'low'];
 export const LABEL = { auto: '자동', high: '높음', mid: '보통', low: '가벼움' };
-/** 단계별 설정: 픽셀 예산 · 최대 배율 · 멀티샘플 · 그림자(0 = 끔) · 빛 번짐 해상도 나눗수 · 실제 조명 수 · 비/눈 양(만들어 둔 개수 중) */
+/** 단계별 설정: 픽셀 예산 · 최대 배율 · 멀티샘플 · 그림자(0 = 끔) · 빛 번짐 해상도 나눗수 · 실제 조명 수 · 비/눈 양(만들어 둔 개수 중) · 가루 · 연출 파티클 한도 · 만드는 양 */
 export const PRESET = {
-  high: { pixels: 3.2e6, maxPR: 1.5, samples: 4, shadow: 2048, bloomDiv: 2, lamps: 3, fires: 4, precip: 1 },
-  mid: { pixels: 2.2e6, maxPR: 1.5, samples: 2, shadow: 1024, bloomDiv: 2, lamps: 2, fires: 3, precip: 1 },
-  low: { pixels: 1.3e6, maxPR: 1.0, samples: 0, shadow: 0, bloomDiv: 4, lamps: 1, fires: 2, precip: 0.5 },
+  high: { pixels: 3.2e6, maxPR: 1.5, samples: 4, shadow: 2048, bloomDiv: 2, lamps: 3, fires: 4, precip: 1, fx: 5000, fxDensity: 1 },
+  mid: { pixels: 2.2e6, maxPR: 1.5, samples: 2, shadow: 1024, bloomDiv: 2, lamps: 2, fires: 3, precip: 1, fx: 3200, fxDensity: 0.8 },
+  low: { pixels: 1.3e6, maxPR: 1.0, samples: 0, shadow: 0, bloomDiv: 4, lamps: 1, fires: 2, precip: 0.5, fx: 1800, fxDensity: 0.55 },
 };
 const KEY = 'gfx';
 const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { return {}; } };
