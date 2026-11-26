@@ -63,6 +63,7 @@ export class Precip {
         fragmentShader: `varying float vA; uniform float uAmount; void main(){ gl_FragColor = vec4(0.72, 0.78, 0.9, (0.12 + 0.3 * vA) * min(1.0, uAmount * 1.5)); }`,
       }));
       this.rain.frustumCulled = false;
+      this.rainN = n * 2;
       this.rain.visible = false;
       this.rain.userData.ds = 'fx-rain'; // 디자인 시스템 이름표
       scene.add(this.rain);
@@ -87,17 +88,26 @@ export class Precip {
             float keep = step(aSeed, uAmount);
             if (p.y < 0.0 || sheltered(p) || keep < 0.5) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); vA = 0.0; return; }
             vec4 mv = viewMatrix * vec4(p, 1.0);
-            gl_PointSize = (0.08 + aSeed * 0.07) * uScale / -mv.z;
+            // 카메라 바로 앞 눈송이는 화면에 수백 픽셀로 커져 겹쳐 그리는 부담이 크다 → 1.3m 안은 숨기고, 크기도 화면 높이의 약 5%까지 (v1.22.9)
+            if (-mv.z < 1.3) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); vA = 0.0; return; }
+            gl_PointSize = min((0.08 + aSeed * 0.07) * uScale / -mv.z, uScale * 0.04);
             gl_Position = projectionMatrix * mv;
             vA = smoothstep(${(-H * 0.45).toFixed(1)}, 0.0, -abs(mv.z) + 2.0) * min(1.0, uAmount * 1.5);
           }`,
         fragmentShader: `varying float vA; void main(){ float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_FragColor = vec4(0.95, 0.97, 1.0, smoothstep(0.5, 0.15, d) * 0.9 * vA); }`,
       }));
       this.snow.frustumCulled = false;
+      this.snowN = n;
       this.snow.visible = false;
       this.snow.userData.ds = 'fx-snow';
       scene.add(this.snow);
     }
+  }
+
+  /** 화질에 따라 내리는 양 (0~1): 그리는 개수만 줄인다 (v1.22.9) */
+  setDensity(k) {
+    this.rain.geometry.setDrawRange(0, Math.round(this.rainN * k / 2) * 2);
+    this.snow.geometry.setDrawRange(0, Math.round(this.snowN * k));
   }
 
   /** 지붕들: [{x, z, r, h}] (텐트 · 천막) */

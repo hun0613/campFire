@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { toon, glow, radialTexture, textTexture, mulberry32 } from './toon.js';
 import { createSky } from './sky.js';
 import { fingerpost, hangingSign } from './signs.js';
@@ -684,28 +685,25 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     const capPostGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.55, 5);
     const trimGeo = new THREE.BoxGeometry(7.4, 0.12, 0.08);
     const poleMat = toon('#4a3626');
+    // v1.22.9: 천막 하나 = 부품 14개 → 3개 (기둥 · 지붕 · 테두리를 각각 한 도형으로). 모양은 그대로
+    const at = (geo, x, y, z, ry = 0) => geo.clone().rotateY(ry).translate(x, y, z);
+    const postsGeo = mergeGeometries([
+      ...[[-3.6, -3.6], [3.6, -3.6], [-3.6, 3.6], [3.6, 3.6]].map(([x, z]) => at(poleGeo, x, (TARP_H + 0.05) / 2, z)),
+      ...[[0.75, 0.75], [-0.75, 0.75], [0.75, -0.75], [-0.75, -0.75]].map(([x, z]) => at(capPostGeo, x, TARP_H + 0.95 + 0.2, z)), // 작은 지붕을 받치는 짧은 기둥 (사이로 연기가 빠진다)
+    ].map((g) => g.toNonIndexed()));
+    const roofsGeo = mergeGeometries([at(roofGeo, 0, TARP_H + 0.47, 0, Math.PI / 4), at(capGeo, 0, TARP_H + 0.95 + 0.42 + 0.3, 0, Math.PI / 4)].map((g) => g.toNonIndexed()));
+    const trimsGeo = mergeGeometries([[0, -3.7, 0], [0, 3.7, 0], [-3.7, 0, Math.PI / 2], [3.7, 0, Math.PI / 2]].map(([x, z, ry]) => at(trimGeo, x, TARP_H + 0.02, z, ry).toNonIndexed())); // 처마 테두리
     for (const p of PITS) {
       const g = new THREE.Group();
       g.position.set(p.x, 0, p.z);
       g.visible = false;
-      const mat = toon('#3f5d68', { side: THREE.DoubleSide, emissive: new THREE.Color('#1a1410'), emissiveIntensity: 0.3, transparent: true, opacity: 1 });
-      const trimMat = toon('#d9c7a2', { transparent: true, opacity: 1 });
-      for (const [x, z] of [[-3.6, -3.6], [3.6, -3.6], [-3.6, 3.6], [3.6, 3.6]]) {
-        const pole = new THREE.Mesh(poleGeo, poleMat); pole.position.set(x, (TARP_H + 0.05) / 2, z); pole.castShadow = true; g.add(pole);
-      }
-      const roof = new THREE.Mesh(roofGeo, mat);
-      roof.rotation.y = Math.PI / 4; roof.position.y = TARP_H + 0.47;
-      roof.castShadow = true; roof.receiveShadow = true;
-      const cap = new THREE.Mesh(capGeo, mat);
-      cap.rotation.y = Math.PI / 4; cap.position.y = TARP_H + 0.95 + 0.42 + 0.3;
-      cap.castShadow = true;
-      g.add(roof, cap);
-      for (const [x, z] of [[0.75, 0.75], [-0.75, 0.75], [0.75, -0.75], [-0.75, -0.75]]) { // 작은 지붕을 받치는 짧은 기둥 (사이로 연기가 빠진다)
-        const cp = new THREE.Mesh(capPostGeo, poleMat); cp.position.set(x, TARP_H + 0.95 + 0.2, z); g.add(cp);
-      }
-      for (const [x, z, ry] of [[0, -3.7, 0], [0, 3.7, 0], [-3.7, 0, Math.PI / 2], [3.7, 0, Math.PI / 2]]) { // 처마 테두리
-        const t = new THREE.Mesh(trimGeo, trimMat); t.position.set(x, TARP_H + 0.02, z); t.rotation.y = ry; g.add(t);
-      }
+      // 반투명은 카메라가 위에서 내려다볼 때만 켠다 (평소엔 불투명으로 그려 정렬 · 겹쳐 그리기를 줄인다, update)
+      const mat = toon('#3f5d68', { side: THREE.DoubleSide, emissive: new THREE.Color('#1a1410'), emissiveIntensity: 0.3, transparent: false, opacity: 1 });
+      const trimMat = toon('#d9c7a2', { transparent: false, opacity: 1 });
+      const posts = new THREE.Mesh(postsGeo, poleMat); posts.castShadow = true;
+      const roofs = new THREE.Mesh(roofsGeo, mat); roofs.castShadow = true; roofs.receiveShadow = true;
+      const trims = new THREE.Mesh(trimsGeo, trimMat);
+      g.add(posts, roofs, trims);
       scene.add(g);
       themeParts.tarps.push({ g, mats: [mat, trimMat], x: p.x, z: p.z, fade: 1 });
     }
@@ -806,7 +804,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
       m.visible = false; scene.add(m); themeParts.snow.push(m);
     }
     const caps = blobs.map((b) => ({ x: b.x, y: b.y + b.s * 0.42, z: b.z, sx: b.s * 0.92, sy: b.s * 0.5, sz: b.s * 0.92 }));
-    const capMesh = instanced(new THREE.SphereGeometry(1, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), snowMat, caps, { cast: false });
+    const capMesh = instanced(new THREE.SphereGeometry(1, 10, 4, 0, Math.PI * 2, 0, Math.PI / 2), snowMat, caps, { cast: false }); // v1.22.9: 14×8 → 10×4 (설산 면 수 줄이기)
     capMesh.visible = false; scene.add(capMesh); themeParts.snow.push(capMesh);
     // 크리스마스: 바늘잎나무마다 색색 전구 (캠핑장 안 · 가까운 숲만)
     T.set('xmas-tree-lights');
@@ -1033,7 +1031,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
     scene.add(tag(tuftMesh, 'grass'), tag(flowerMesh, 'flower'));
     themeParts.grass.push(tuftMesh, flowerMesh); // 눈이 쌓이면 풀 · 꽃은 덮인다
     // 덤불 위 눈
-    const bushCaps = instanced(new THREE.SphereGeometry(1, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), toon('#f4f7fd', { emissive: new THREE.Color('#2a3350'), emissiveIntensity: 0.35 }),
+    const bushCaps = instanced(new THREE.SphereGeometry(1, 9, 4, 0, Math.PI * 2, 0, Math.PI / 2), toon('#f4f7fd', { emissive: new THREE.Color('#2a3350'), emissiveIntensity: 0.35 }),
       bushes.map((b) => ({ x: b.x, y: b.y + b.s * 0.38, z: b.z, sx: b.s * 0.95, sy: b.s * 0.55, sz: b.s * 0.95 })), { cast: false });
     bushCaps.visible = false; scene.add(bushCaps); themeParts.snow.push(bushCaps);
     scene.add(tag(instanced(new THREE.DodecahedronGeometry(1, 0), toon('#ffffff'), rocks), 'rock'));
@@ -1166,7 +1164,8 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
         const d = Math.hypot(camera.position.x - tp.x, camera.position.z - tp.z);
         const want = camera.position.y > TARP_H - 0.2 && d < 11 ? 0.2 : 1;
         tp.fade += (want - tp.fade) * Math.min(1, dt * 5);
-        for (const m of tp.mats) { m.opacity = tp.fade; m.depthWrite = tp.fade > 0.95; }
+        const see = tp.fade < 0.99; // 흐려질 때만 반투명 (재질 종류가 바뀌면 다시 준비)
+        for (const m of tp.mats) { m.opacity = tp.fade; m.depthWrite = tp.fade > 0.95; if (m.transparent !== see) { m.transparent = see; m.needsUpdate = true; } }
       }
     },
   };

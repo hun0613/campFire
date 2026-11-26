@@ -128,6 +128,7 @@ function applyQuality(level) {
   if (ml.castShadow !== P.shadow > 0) ml.castShadow = P.shadow > 0;
   if (P.shadow && ml.shadow.mapSize.x !== P.shadow) { ml.shadow.mapSize.setScalar(P.shadow); ml.shadow.map?.dispose(); ml.shadow.map = null; }
   lampPool.setCount(P.lamps);
+  precip.setDensity(P.precip); // 비 · 눈 양 (가벼움은 절반)
   fireN = P.fires;
   firePool.forEach((L, i) => { L.visible = i < fireN; if (i >= fireN) L.intensity = 0; });
   gfx.level = level;
@@ -391,10 +392,8 @@ function renderGfxBtn() {
   b.title = t; b.setAttribute('aria-label', t);
   b.dataset.level = gfx.level;
 }
-$('gfxBtn').onclick = (e) => {
-  e.currentTarget.blur();
-  const modes = ['auto', ...LEVELS.filter((l) => !(isTouch && l === 'high'))];
-  const mode = modes[(modes.indexOf(gfx.mode) + 1) % modes.length];
+/** 화질 고르기: 자동 · 높음 · 보통 · 가벼움 */
+function setGfxMode(mode) {
   gfx.mode = mode;
   saveMode(mode);
   autoQ.on = mode === 'auto';
@@ -406,7 +405,31 @@ $('gfxBtn').onclick = (e) => {
   const lowNow = level !== 'high' || isTouch;
   UI.toast(`🖥️ 화질 「${LABEL[mode]}」${mode === 'auto' ? ' · 버벅이면 알아서 낮춰요' : ''}${lowNow !== lowSpec ? ' · 풀 · 꽃 밀도는 다시 들어오면 바뀌어요' : ''}`, 3200);
   track('gfx_set', { mode });
-};
+}
+function renderGfxMenu() {
+  for (const b of $('gfxMenu').querySelectorAll('.gfx-opt')) b.classList.toggle('on', b.dataset.mode === gfx.mode);
+  $('gfxAutoNow').textContent = gfx.mode === 'auto' ? `버벅이면 알아서 낮춰요 · 지금 ${LABEL[gfx.level]}` : '버벅이면 알아서 낮춰요';
+}
+function setGfxMenu(open) {
+  const m = $('gfxMenu');
+  if (!open) { m.classList.add('hidden'); return; }
+  renderGfxMenu();
+  m.classList.remove('hidden');
+  // 버튼 바로 아래 (화면 밖으로 나가지 않게). 휴대폰 메뉴가 접혀 버튼이 안 보이면 오른쪽 위에
+  const r = $('gfxBtn').getBoundingClientRect(), w = m.offsetWidth;
+  const left = r.width ? Math.min(innerWidth - w - 10, Math.max(10, r.right - w)) : innerWidth - w - 16;
+  m.style.left = `${left}px`; m.style.right = 'auto';
+  m.style.top = `${(r.height ? r.bottom : 60) + 8}px`;
+}
+$('gfxBtn').onclick = (e) => { e.currentTarget.blur(); setGfxMenu($('gfxMenu').classList.contains('hidden')); };
+$('gfxMenu').addEventListener('click', (e) => {
+  const b = e.target.closest('.gfx-opt');
+  if (!b) return;
+  if (b.dataset.mode !== gfx.mode) setGfxMode(b.dataset.mode);
+  setGfxMenu(false);
+});
+addEventListener('pointerdown', (e) => { if (!e.target.closest('#gfxMenu, #gfxBtn')) setGfxMenu(false); }, true);
+addEventListener('keydown', (e) => { if (e.key === 'Escape') setGfxMenu(false); });
 renderGfxBtn();
 $('soundBtn').onclick = (e) => {
   sound.init();

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { toon } from './toon.js';
 import { makeHalf, makeLog } from './woodcut.js';
@@ -43,6 +44,9 @@ const G = {
   sleeve: new THREE.CapsuleGeometry(0.085, 0.2, 4, 10),
   boot: new THREE.CylinderGeometry(0.1, 0.105, 0.2, 12),
   puffBand: new THREE.SphereGeometry(1, 20, 12),
+  // v1.22.9: 패딩 볼록 줄 3개 · 우비 단추 3개를 한 도형으로 (옷 한 벌 그리기 횟수 줄이기)
+  puffBands: mergeGeometries([[0.42, 0.31], [0.58, 0.32], [0.74, 0.29]].map(([y, r]) => new THREE.SphereGeometry(1, 18, 10).scale(r, 0.11, r * 0.95).translate(0, y, 0))),
+  coatBtns: mergeGeometries([0, 1, 2].map((i) => new THREE.SphereGeometry(0.022, 8, 6).translate(0, 0.76 - i * 0.14, 0.27 + i * 0.012))),
   puffCore: new THREE.CylinderGeometry(0.25, 0.29, 0.5, 16),
   puffCollar: new THREE.TorusGeometry(0.17, 0.065, 8, 20),
   puffSleeve: new THREE.CapsuleGeometry(0.1, 0.18, 4, 10),
@@ -652,13 +656,13 @@ export class Character {
     const parts = [];
     const coat = new THREE.Mesh(G.coat, m); coat.position.y = 0.6; coat.castShadow = true;
     this.body.add(coat); parts.push(coat);
-    for (let i = 0; i < 3; i++) { const b = new THREE.Mesh(G.coatBtn, dark); b.position.set(0, 0.76 - i * 0.14, 0.27 + i * 0.012); this.body.add(b); parts.push(b); }
+    { const b = new THREE.Mesh(G.coatBtns, dark); this.body.add(b); parts.push(b); } // 단추 3개 (한 도형)
     const hood = new THREE.Mesh(G.hood, toon(col, { side: THREE.DoubleSide }));
     hood.position.set(0, 0.04, -0.03); hood.rotation.x = -0.25; hood.castShadow = true;
     const rim = new THREE.Mesh(G.hoodRim, m);
     rim.position.set(0, 0.04, 0.1); rim.rotation.set(-0.25, 0, -0.025 * Math.PI);
     this.head.add(hood, rim); parts.push(hood, rim);
-    for (const pivot of this.arms) { const s = new THREE.Mesh(G.sleeve, m); s.position.y = -0.13; s.castShadow = true; pivot.add(s); parts.push(s); }
+    for (const pivot of this.arms) { const s = new THREE.Mesh(G.sleeve, m); s.position.y = -0.13; pivot.add(s); parts.push(s); } // 소매 그림자는 팔이 대신한다
     for (const pivot of this.legs) { const b = new THREE.Mesh(G.boot, dark); b.position.y = -0.24; pivot.add(b); parts.push(b); }
     return parts;
   }
@@ -682,18 +686,16 @@ export class Character {
     const parts = [];
     const core = new THREE.Mesh(G.puffCore, shade); core.position.y = 0.6; core.castShadow = true;
     this.body.add(core); parts.push(core);
-    [[0.42, 0.31], [0.58, 0.32], [0.74, 0.29]].forEach(([y, r]) => { // 볼록한 패딩 줄
-      const band = new THREE.Mesh(G.puffBand, m); band.scale.set(r, 0.11, r * 0.95); band.position.y = y; band.castShadow = true;
-      this.body.add(band); parts.push(band);
-    });
-    const collar = new THREE.Mesh(G.puffCollar, m); collar.rotation.x = Math.PI / 2; collar.position.y = 0.86;
-    this.body.add(collar); parts.push(collar);
+    // 볼록한 패딩 줄 3개 + 목깃 (같은 천, 한 도형)
+    G.puffBandsCollar ||= mergeGeometries([G.puffBands, G.puffCollar.clone().rotateX(Math.PI / 2).translate(0, 0.86, 0)].map((g) => (g.index ? g.toNonIndexed() : g)));
+    { const bands = new THREE.Mesh(G.puffBandsCollar, m); bands.castShadow = true; this.body.add(bands); parts.push(bands); }
     const scarfCol = new THREE.Color(col).offsetHSL(0.5, 0.15, 0.12);
     const sm = toon(scarfCol);
-    const scarf = new THREE.Mesh(G.scarf, sm); scarf.rotation.x = Math.PI / 2; scarf.position.y = 0.93;
-    const tail = new THREE.Mesh(G.scarfTail, sm); tail.position.set(0.1, 0.8, 0.27); tail.rotation.z = 0.15;
-    this.body.add(scarf, tail); parts.push(scarf, tail);
-    for (const pivot of this.arms) { const s = new THREE.Mesh(G.puffSleeve, m); s.position.y = -0.13; s.castShadow = true; pivot.add(s); parts.push(s); }
+    // 목도리 + 늘어진 끝 (한 도형)
+    G.scarfAll ||= mergeGeometries([G.scarf.clone().rotateX(Math.PI / 2).translate(0, 0.93, 0), G.scarfTail.clone().rotateZ(0.15).translate(0.1, 0.8, 0.27)].map((g) => (g.index ? g.toNonIndexed() : g)));
+    const scarf = new THREE.Mesh(G.scarfAll, sm);
+    this.body.add(scarf); parts.push(scarf);
+    for (const pivot of this.arms) { const s = new THREE.Mesh(G.puffSleeve, m); s.position.y = -0.13; pivot.add(s); parts.push(s); } // 소매 그림자는 팔이 대신한다
     return parts;
   }
 

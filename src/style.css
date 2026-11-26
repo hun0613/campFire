@@ -1391,3 +1391,17 @@ body.touch .dchoice { font-size: 15px; padding: 8px 13px; }
 #warmGlow { position: fixed; inset: 0; z-index: 6; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 50% 70%, rgba(255, 170, 90, .28), rgba(255, 130, 60, .1) 60%, transparent 85%); }
 #warmGlow.on { animation: warmGlow 4.5s ease-out forwards; }
 @keyframes warmGlow { 0% { opacity: 0; } 18% { opacity: 1; } 100% { opacity: 0; } }
+
+/* 🖥️ 화질 고르기 메뉴 (v1.22.9) */
+.gfx-menu { z-index: 30; width: 236px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.gfx-menu.hidden { display: none; }
+.gfx-title { font-size: 14px; color: var(--brown-2); padding: 2px 6px 4px; }
+.gfx-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 8px 12px; border-radius: 14px;
+  border: 2px solid #f1dfba; background: #fffdf6; color: var(--brown); font: inherit; text-align: left; cursor: pointer; }
+.gfx-opt b { font-weight: normal; font-size: 15px; }
+.gfx-opt b small { font-size: 11px; color: var(--orange-2); margin-left: 4px; }
+.gfx-opt span { font-size: 12px; color: var(--brown-2); }
+.gfx-opt:hover { border-color: var(--orange); }
+.gfx-opt.on { border-color: var(--orange); background: #fff1dc; }
+.gfx-opt.on b::after { content: ' ✓'; color: var(--orange-2); }
+body.touch .gfx-opt[data-mode="high"] { display: none; } /* 휴대폰 · 태블릿은 보통이 가장 높은 단계 */

@@ -73,6 +73,14 @@
       <button id="helpBtn" class="icon-btn" title="도움말" data-icon="help"></button>
     </div>
 
+    <!-- 🖥️ 화질 고르기 (화질 버튼을 누르면) -->
+    <div id="gfxMenu" class="panel gfx-menu hidden" role="menu" aria-label="화질">
+      <div class="gfx-title">🖥️ 화질</div>
+      <button class="gfx-opt" data-mode="auto" role="menuitemradio"><b>자동 <small>추천</small></b><span id="gfxAutoNow">버벅이면 알아서 낮춰요</span></button>
+      <button class="gfx-opt" data-mode="high" role="menuitemradio"><b>높음</b><span>그림자 · 빛 번짐 가장 예쁘게</span></button>
+      <button class="gfx-opt" data-mode="mid" role="menuitemradio"><b>보통</b><span>휴대폰과 같은 설정</span></button>
+      <button class="gfx-opt" data-mode="low" role="menuitemradio"><b>가벼움</b><span>그림자 끔 · 가장 부드럽게</span></button>
+    </div>
     <div id="mapPanel" class="panel"><canvas id="minimap"></canvas><button id="mapClose" class="icon-btn map-close" title="지도 닫기" aria-label="지도 닫기" data-icon="close"></button></div>
     <!-- 걸을 때 잠깐 뜨는 작은 원형 레이더 (모바일 · 좁은 PC 창): 내 주변만, 갈 곳은 테두리 화살표로 -->
     <canvas id="radar" aria-hidden="true"></canvas>
