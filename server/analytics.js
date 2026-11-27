@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 const PROPERTY = String(process.env.GA_PROPERTY_ID || '').trim();
 const KEY = parseKey(process.env.GA_SA_KEY || '');
 const API = `https://analyticsdata.googleapis.com/v1beta/properties/${PROPERTY}`;
-const GAME_EVENTS = ['game_join', 'wood_chop', 'wood_store', 'fire_light', 'fire_sit', 'fire_stand', 'powder_use', 'guestbook_write', 'music_play', 'view_toggle', 'stargaze', 'board_open', 'quest_done', 'share', 'shop_open', 'powder_buy', 'coin_share_bonus', 'tent_enter', 'tent_sit', 'block', 'fire_feed', 'emote', 'trail_enter', 'trail_spot', 'npc_talk', 'gfx_set', 'gfx_auto', 'balloon_board', 'balloon_arrive', 'arena_timetable', 'arena_booth', 'arena_apply', 'festival_buy']; // v1.23.1: 주민 · 화질 · 열기구 · 아레나
+const GAME_EVENTS = ['game_join', 'wood_chop', 'wood_store', 'fire_light', 'fire_sit', 'fire_stand', 'powder_use', 'guestbook_write', 'music_play', 'view_toggle', 'stargaze', 'board_open', 'quest_done', 'share', 'shop_open', 'powder_buy', 'coin_share_bonus', 'tent_enter', 'tent_sit', 'block', 'fire_feed', 'emote', 'trail_enter', 'trail_spot', 'npc_talk', 'gfx_set', 'gfx_auto', 'balloon_board', 'balloon_arrive', 'arena_timetable', 'arena_booth', 'arena_apply', 'festival_buy', 'jump']; // v1.23.1 (jump: v1.23.4): 주민 · 화질 · 열기구 · 아레나
 
 function parseKey(raw) {
   const s = String(raw).trim();
@@ -130,7 +130,7 @@ export function report(range = '7d') {
   return cached(`r:${range}`, 5 * 60_000, async () => {
     const dateRanges = [{ startDate: start, endDate: 'today' }];
     const trendRange = [{ startDate: '13daysAgo', endDate: 'today' }];
-    const [a, b, c, h, d, em, sp] = await Promise.all([
+    const [a, b, c, h, d, em, sp, ar] = await Promise.all([
       call('batchRunReports', {
         requests: [
           // 0 요약
@@ -192,6 +192,13 @@ export function report(range = '7d') {
           { dateRanges, dimensions: [{ name: 'customEvent:spot' }], metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }], dimensionFilter: inList('eventName', ['trail_spot']) },
         ],
       }).catch((e) => ({ error: e.message })),
+      // 🎤 아레나 (v1.23.4 · 맞춤 측정기준 zone · from): 위치별 머문 시간(1분 신호 수 = 분) · 열기구 출발지
+      call('batchRunReports', {
+        requests: [
+          { dateRanges, dimensions: [{ name: 'customEvent:zone' }], metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }], dimensionFilter: inList('eventName', ['heartbeat']) },
+          { dateRanges, dimensions: [{ name: 'customEvent:from' }], metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }], dimensionFilter: inList('eventName', ['balloon_board']) },
+        ],
+      }).catch((e) => ({ error: e.message })),
     ]);
 
     // 부탁별 완료 · 창고 동작 · 공유 방식 ('(not set)'은 맞춤 측정기준 등록 전 데이터)
@@ -205,6 +212,9 @@ export function report(range = '7d') {
     if (em.error) extras.emoteError = em.error;
     extras.spots = sp.error ? null : pick(sp.reports[0], 'customEvent:spot');
     if (sp.error) extras.spotError = sp.error;
+    extras.zones = ar.error ? null : pick(ar.reports[0], 'customEvent:zone');
+    extras.balloonFrom = ar.error ? null : pick(ar.reports[1], 'customEvent:from');
+    if (ar.error) extras.arenaError = ar.error;
 
     // 0~23시를 빈 시간까지 채운다. 요일은 0=일요일
     let hours = null, weekdays = null, timeZone = null;

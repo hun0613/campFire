@@ -257,7 +257,7 @@ const statsState = { range: '7d', loaded: false, timer: null };
 const EVENT_LABEL = {
   game_join: '🏕️ 입장', wood_chop: '🪓 장작 패기', wood_store: '📦 장작 창고', fire_light: '🔥 불 붙이기', fire_sit: '🪵 모닥불 앉기', fire_stand: '🚶 일어나기',
   powder_use: '✨ 마법 가루', guestbook_write: '📖 방명록', music_play: '🎶 노래 틀기', view_toggle: '👁️ 시점 전환', stargaze: '🌌 하늘 보기', board_open: '📌 게시판 열기', quest_done: '💜 루미의 부탁', share: '💌 친구 초대',
-  shop_open: '✨ 루미 공방 열기', powder_buy: '🪙 가루 사기', coin_share_bonus: '🪙 공유 보너스', tent_enter: '🏕️ 텐트 들어가기', tent_sit: '🛋️ 텐트 소파', block: '🚫 차단', fire_feed: '🪵 장작 더 넣기', emote: '😊 감정 표현', trail_enter: '🌲 숲길 들어가기', trail_spot: '⭐ 숲길 쉼터', npc_talk: '🏡 주민과 이야기', gfx_set: '🖥️ 화질 고르기', gfx_auto: '🖥️ 자동 화질 낮춤', balloon_board: '🎈 열기구 타기', balloon_arrive: '🎈 열기구 도착', arena_timetable: '🎤 타임테이블 팻말', arena_booth: '🎤 무대 신청 부스', arena_apply: '🎤 무대 신청', festival_buy: '✦ 페스티벌 가루',
+  shop_open: '✨ 루미 공방 열기', powder_buy: '🪙 가루 사기', coin_share_bonus: '🪙 공유 보너스', tent_enter: '🏕️ 텐트 들어가기', tent_sit: '🛋️ 텐트 소파', block: '🚫 차단', fire_feed: '🪵 장작 더 넣기', emote: '😊 감정 표현', trail_enter: '🌲 숲길 들어가기', trail_spot: '⭐ 숲길 쉼터', npc_talk: '🏡 주민과 이야기', gfx_set: '🖥️ 화질 고르기', gfx_auto: '🖥️ 자동 화질 낮춤', balloon_board: '🎈 열기구 타기', balloon_arrive: '🎈 열기구 도착', arena_timetable: '🎤 타임테이블 팻말', arena_booth: '🎤 무대 신청 부스', arena_apply: '🎤 무대 신청', festival_buy: '✦ 페스티벌 가루', jump: '🦘 점프',
 };
 const DEVICE_LABEL = { mobile: '📱 모바일', desktop: '💻 PC', tablet: '📟 태블릿' };
 const NVR_LABEL = { new: '🌱 처음 온 사람', returning: '🔁 다시 온 사람' };
@@ -481,6 +481,39 @@ function questSection(r) {
     </div>`;
 }
 
+// 🎤 불멍 아레나 (v1.23.4): 어디서 시간을 보내는지 · 열기구 → 아레나 → 무대 신청까지 어디서 멈추는지
+function arenaSection(r) {
+  const ev = (n) => r.events.find((e) => e.name === n) || { count: 0, users: 0 };
+  const x = r.extras || {};
+  const ZONE = { camp: '🏕️ 캠핑장', arena: '🎤 아레나', sky: '🎈 열기구 (하늘길)' }, FROM = { camp: '🏕️ 캠핑장에서', arena: '🎤 아레나에서' };
+  const zones = (x.zones || []).filter((z) => ZONE[z.name]);
+  const totalMin = zones.reduce((t, z) => t + z.count, 0);
+  const zoneBody = zones.length
+    ? barList(zones.sort((a, b) => b.count - a.count).map((z) => ({ label: ZONE[z.name], value: z.count, users: z.users })), { valueFmt: (n) => `${num(n)}분 (${pct(totalMin ? n / totalMin : 0)})`, sub: (v) => `${num(v.users)}명` })
+    : `<p class="hint">${x.arenaError ? '⏳ GA4 맞춤 측정기준(zone)이 막 등록돼 하루쯤 지나면 보여요' : '⏳ 데이터가 쌓이는 중이에요 (v1.23 이후 접속부터)'}</p>`;
+  const steps = [['balloon_board', '🎈 열기구 타기'], ['balloon_arrive', '🛬 아레나 도착'], ['arena_booth', '🎤 무대 신청 부스 열기'], ['arena_apply', '✅ 무대 신청']].map(([n, label]) => ({ label, ...ev(n) }));
+  const max = Math.max(1, ...steps.map((v) => v.users));
+  const funnel = `<ol class="quest-funnel">${steps.map((v, i) => `<li title="${esc(v.label)}: ${num(v.users)}명 · ${num(v.count)}번">
+      <span class="qf-no">${i + 1}</span><span class="bar-label">${esc(v.label)}</span>
+      <span class="bar-track"><span class="bar-fill${v.users ? '' : ' zero'}" style="width:${(v.users / max) * 100}%"></span></span>
+      <span class="bar-val">${num(v.users)}명</span></li>`).join('')}</ol>`;
+  const from = (x.balloonFrom || []).map((f) => ({ label: FROM[f.name] || f.name, value: f.count, users: f.users }));
+  const tt = ev('arena_timetable'), fest = ev('festival_buy'), jump = ev('jump');
+  return `<div class="card">
+      <h2>🎤 불멍 아레나 <small>${RANGE_LABEL[r.range]}</small>${help('아레나가 실제로 쓰이는지 보는 칸이에요. 왼쪽은 열기구를 타고 아레나에 가서 무대 신청까지 몇 명이 가는지(막대가 갑자기 짧아지는 곳에서 멈춰요), 오른쪽은 캠핑장 · 아레나 · 하늘길에서 머문 시간이에요 (1분마다 남기는 기록이라 분 단위).')}</h2>
+      <p class="peak">🎈 열기구 <b>${num(ev('balloon_board').count)}번</b> · 📋 광장 팻말에서 타임테이블 ${num(tt.count)}번 · ✦ 페스티벌 가루 ${num(fest.count)}번 · 🦘 점프 ${num(jump.count)}번</p>
+      <div class="hours-2">
+        <div><p class="hint" style="margin:0">아레나까지 가는 길 (사람 수)</p>${funnel}</div>
+        <div>
+          <p class="hint" style="margin:0">어디서 시간을 보내나요${help('캠핑장 · 아레나 · 열기구(하늘길)에 있는 동안 1분마다 남긴 기록 수예요. 화면을 보고 있을 때만 세요.')}</p>
+          ${zoneBody}
+          <p class="hint" style="margin:14px 0 0">열기구를 어디서 탔나요</p>
+          ${from.length ? barList(from, { valueFmt: (n) => `${num(n)}번`, sub: (v) => `${num(v.users)}명` }) : '<p class="hint">⏳ 데이터가 쌓이는 중이에요</p>'}
+        </div>
+      </div>
+    </div>`;
+}
+
 function renderStats$(d) {
   if (!d.status?.on) { $('statsBody').innerHTML = setupGuide(d.status || {}); $('statsUpdated').textContent = ''; return; }
   const r = d.report, rt = d.realtime;
@@ -519,6 +552,7 @@ function renderStats$(d) {
     ${hourSection(r)}
 
     ${questSection(r)}
+    ${arenaSection(r)}
 
     <div class="stats-2">
       <div class="card">

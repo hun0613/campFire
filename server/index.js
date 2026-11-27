@@ -82,7 +82,22 @@ if (!isProd) {
     let file = path.normalize(path.join(DIST, urlPath));
     if (!file.startsWith(DIST)) { res.writeHead(403).end(); return; }
     if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(DIST, 'index.html');
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+    const size = fs.statSync(file).size;
+    const head = { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Accept-Ranges': 'bytes' };
+    // 📻 조각 요청(Range): 아이폰 · 아이패드 사파리는 <audio> · <video> 를 틀기 전에 꼭 「파일 일부」를 달라고 한다.
+    //    전체(200)로 답하면 재생 자체를 하지 않는다 → 그 부분만 206 으로 (v1.23.5, 아레나 대기 음악이 iOS 에서 안 들리던 문제)
+    const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    if (m && (m[1] || m[2])) {
+      let start = m[1] ? Number(m[1]) : size - Number(m[2]), end = m[1] && m[2] ? Number(m[2]) : size - 1;
+      start = Math.max(0, start); end = Math.min(size - 1, end);
+      if (start > end || start >= size) { res.writeHead(416, { 'Content-Range': `bytes */${size}` }).end(); return; }
+      res.writeHead(206, { ...head, 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': end - start + 1 });
+      if (req.method === 'HEAD') { res.end(); return; }
+      fs.createReadStream(file, { start, end }).pipe(res);
+      return;
+    }
+    res.writeHead(200, { ...head, 'Content-Length': size });
+    if (req.method === 'HEAD') { res.end(); return; }
     fs.createReadStream(file).pipe(res);
   }));
 }

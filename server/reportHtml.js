@@ -4,7 +4,7 @@ const LABEL = {
   game_join: '🏕️ 입장', wood_chop: '🪓 장작 패기', wood_store: '📦 장작 창고', fire_light: '🔥 불 붙이기', fire_sit: '🪵 모닥불 앉기', fire_stand: '🚶 일어나기',
   powder_use: '✨ 마법 가루', guestbook_write: '📖 방명록', music_play: '🎶 노래 틀기', view_toggle: '👁️ 시점 전환', stargaze: '🌌 하늘 보기', board_open: '📌 게시판 열기', quest_done: '💜 루미의 부탁', share: '💌 친구 초대',
   shop_open: '✨ 루미 공방 열기', powder_buy: '🪙 가루 사기', coin_share_bonus: '🪙 공유 보너스', tent_enter: '🏕️ 텐트 들어가기', tent_sit: '🛋️ 텐트 소파', block: '🚫 차단', fire_feed: '🪵 장작 더 넣기',
-  emote: '😊 감정 표현', trail_enter: '🌲 숲길 들어가기', trail_spot: '⭐ 숲길 쉼터', npc_talk: '🏡 주민과 이야기', gfx_set: '🖥️ 화질 고르기', gfx_auto: '🖥️ 자동 화질 낮춤', balloon_board: '🎈 열기구 타기', balloon_arrive: '🎈 열기구 도착', arena_timetable: '🎤 타임테이블 팻말', arena_booth: '🎤 무대 신청 부스', arena_apply: '🎤 무대 신청', festival_buy: '✦ 페스티벌 가루',
+  emote: '😊 감정 표현', trail_enter: '🌲 숲길 들어가기', trail_spot: '⭐ 숲길 쉼터', npc_talk: '🏡 주민과 이야기', gfx_set: '🖥️ 화질 고르기', gfx_auto: '🖥️ 자동 화질 낮춤', balloon_board: '🎈 열기구 타기', balloon_arrive: '🎈 열기구 도착', arena_timetable: '🎤 타임테이블 팻말', arena_booth: '🎤 무대 신청 부스', arena_apply: '🎤 무대 신청', festival_buy: '✦ 페스티벌 가루', jump: '🦘 점프',
 };
 const DEVICE = { mobile: '모바일', desktop: 'PC', tablet: '태블릿' };
 const WEEK = '일월화수목금토';
