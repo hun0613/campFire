@@ -585,6 +585,7 @@ net.on('welcome', (m) => {
   if (state.zone === 'arena') cam.yaw = 0; // 아레나에서 다시 들어오면 무대 쪽을 본다
   $('join').classList.add('hidden');
   preview.dispose();
+  music.warm(); // 📱 iOS: 누르기 전에 유튜브 플레이어를 미리 만들어 둔다 (누른 순간 소리를 켤 수 있게)
   $('hud').classList.remove('hidden');
   const firstTime = !store.get('helpSeen', false);
   requestBoard();
@@ -1000,7 +1001,12 @@ net.on('sat', (m) => {
   const mon = monitors.get(m.pit);
   const pd = FIRES.find((d) => d.id === m.pit);
   if (pd?.kind === 'stove') track('tent_sit', { tent: pd.tent });
-  if (view.fp && pd) {
+  if (view.fp && pd?.kind === 'arena') {
+    // 🎤 아레나 객석 (v1.23.6): 무대를 보러 앉는 자리 → 대형 전광판 쪽을 보고 불은 화면 아래에 걸리게 (불만 보면 옆 줄에선 전광판이 화면 밖)
+    const sx = ARENA.stage.x - m.x, sz = ARENA.stage.z - m.z;
+    cam.yaw = Math.atan2(sx, sz) + Math.PI; // (1인칭 카메라는 yaw + π 쪽을 본다)
+    cam.look = Math.min(0.22, Math.max(0.06, Math.atan2(7.5, Math.hypot(sx, sz)) * 0.55)); // 전광판이 높이 있어 살짝 위로 (멀수록 덜)
+  } else if (view.fp && pd) {
     cam.yaw = Math.atan2(-(pd.x - m.x), -(pd.z - m.z));
     cam.look = -0.14;
   } else if (pd?.kind === 'stove') {
@@ -1194,6 +1200,7 @@ function playSong(it, el) {
   music$.busy = true;
   el?.classList.add('loading');
   net.send({ t: 'music', pit: pit.id, vid: it.vid });
+  if (!pit.tent) music.kick(pit.id, { vid: it.vid, startedAt: serverNow() }); // 📱 iOS: 「틀기」를 누른 이 순간에 소리와 함께 시작
 }
 $('musicForm').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -1604,15 +1611,36 @@ function updateTentTags(dt) {
 }
 
 // 연주 중인 모닥불 TV 켜기, 내가 앉은 모닥불의 음악 재생 (음표 효과는 없다)
+/**
+ * 📺 1인칭으로 앉았을 때 TV 가 화면 밖이던 문제 (v1.23.6): 의자에 따라 TV 는 불 옆 27° · 90° 에 있어서
+ * 불만 바라보면(특히 휴대폰 세로) 영상이 안 보였다 → 곡이 나오면 불과 TV 가 함께 보이는 쪽으로 고개를 돌린다.
+ * 둘 다 담기엔 화면이 좁으면 TV 가 화면 안에 들어오는 쪽을 우선. 그 뒤로는 끌어서 마음대로 둘러볼 수 있다
+ */
+function aimAtTv(pitId) {
+  const pd = FIRES.find((d) => d.id === pitId), mon = monitors.get(pitId);
+  if (!pd || !mon || !me) return;
+  const fireA = Math.atan2(pd.x - me.x, pd.z - me.z), tvA = Math.atan2(mon.pos.x - me.x, mon.pos.z - me.z);
+  const delta = Math.atan2(Math.sin(tvA - fireA), Math.cos(tvA - fireA));
+  const vf = THREE.MathUtils.degToRad(innerWidth < innerHeight ? 82 : 72);
+  const hh = Math.atan(Math.tan(vf / 2) * (innerWidth / innerHeight)); // 가로 시야의 절반
+  const margin = 0.22;
+  const look = Math.abs(delta) + 2 * margin <= 2 * hh ? fireA + delta / 2 : tvA - Math.sign(delta) * (hh - margin);
+  cam.yaw = look + Math.PI; // (1인칭 카메라는 yaw + π 쪽을 본다)
+  cam.look = -0.1;
+}
+let lastMusicKey = '';
 function updateMusicFx(dt) {
   for (const p of pitList) monitors.get(p.id)?.update(dt, !!(p.state === 'lit' && p.music));
   if (me) {
     music.clockOffset = state.clockOffset;
     const pit = myMusicPit();
+    const mk = pit && !state.tent && pit.state === 'lit' && pit.music ? `${pit.id}|${pit.music.vid}|${pit.music.startedAt}` : '';
+    if (mk !== lastMusicKey) { lastMusicKey = mk; if (mk && view.fp && state.sitting) aimAtTv(pit.id); } // 곡이 시작되거나, 곡이 나오는 불에 앉으면
     const now = serverNow();
     const show = arena.show && now >= arena.show.startedAt ? arena.show : null;
     const onStage = state.zone === 'arena' && state.ride == null && !!show;
     if (state._hintStage !== onStage) { state._hintStage = onStage; $('musicHint').textContent = onStage ? '🎤 무대 전광판 가운데 ▶를 한 번 눌러 같이 들어요' : '📺 옆 TV 화면 가운데 ▶를 한 번 눌러 같이 들어요'; }
+    if (!show && (state.zone === 'arena' || state.ride != null)) { const nx = arena.next(now); if (nx?.vid) music.prepare(nx.vid); } // 🎤📱 iOS: 다음 무대 곡을 미리 올려 두고 터치 순간 잠금을 풀어 둔다
     if (onStage) music.update(dt, { id: 'arena', state: 'lit', music: show }, arena, now, camera); // 🎤 아레나 무대: 대형 전광판
     else music.update(dt, pit, pit && (pit.tent ? tentRoom : monitors.get(pit.id)), now, camera);
     // 곡을 고를 수 있으면 LP(텐트는 스피커) 위에 작은 안내
@@ -1837,7 +1865,7 @@ function interact(it) {
       me.char.play('light', { onImpact: () => {} });
       net.send({ t: 'light', pit: p.id });
       track('fire_light', { pit: p.id });
-    } else if (p.state === 'lit') net.send({ t: 'sit', pit: p.id });
+    } else if (p.state === 'lit') { net.send({ t: 'sit', pit: p.id }); if (p.music) music.armKick(p.id, p.music); } // 📱 iOS: 곡이 나오는 불에 앉으면 손을 떼는 순간 소리와 함께
   } else if (it.type === 'seated') standUp();
   else if (it.type === 'chair') sitChair(it.i);
   else if (it.type === 'lounge') leaveChair();
@@ -3142,4 +3170,4 @@ function hideCamp(hide) {
 const campPits = pitList.filter((p) => !isArenaPit(p));
 
 // 디버그용
-window.__game = { scene, pits, state, effects, camera, net, cam, preview, monitors, tentRoom, THREE, renderer, composer, bloom, grade, remotes, arena, radio, get me() { return me; } };
+window.__game = { scene, pits, state, effects, camera, net, cam, preview, monitors, tentRoom, THREE, renderer, composer, bloom, grade, remotes, arena, radio, music, get me() { return me; } };
