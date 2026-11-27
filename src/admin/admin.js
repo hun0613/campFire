@@ -1,4 +1,5 @@
 // 캠핑장 관리실: 방명록 답글 · 삭제, UTM 링크와 채널별 안내 문구 만들기
+import { drawPoster, parseTitle, kstDay, hhmm, dateLabel } from './poster.js';
 import { QUESTS, EMOTES, SPOTS } from '../../shared/config.js';
 const $ = (id) => document.getElementById(id);
 const BASE = 'https://campfire-game.onrender.com/';
@@ -909,6 +910,7 @@ async function loadArena() {
     arena$.items = r.items; arena$.now = r.now; arena$.dur = r.defaultDur;
     if (!r.notion) $('arenaHint').dataset.local = '1';
     renderArena();
+    renderPoster(); // 포스터가 펼쳐져 있으면 새 타임테이블로
   } catch (e) { if (e.message !== 'unauthorized') $('arenaList').innerHTML = `<p class="hint">불러오지 못했어요: ${esc(e.message)}</p>`; }
 }
 function renderArena() {
@@ -945,6 +947,62 @@ $('arenaFilter').addEventListener('click', (e) => {
   renderArena();
 });
 $('arenaReload').onclick = loadArena;
+
+// ---------------------------------------------------------------- 🖼️ 타임테이블 포스터 (v1.23.3)
+const poster$ = { edits: {}, day: '', busy: false, again: false };
+function posterRows(day) {
+  return arena$.items.filter((e) => e.status === '승인' && e.at && kstDay(e.at) === day).sort((a, b) => a.at - b.at).map((e) => ({
+    id: e.id, raw: e.title,
+    time: e.dur ? `${hhmm(e.at)} – ${hhmm(e.at + e.dur * 1000)}` : hhmm(e.at),
+    ...(poster$.edits[e.id] || parseTitle(e.title)),
+  }));
+}
+async function drawPosterNow() {
+  if (poster$.busy) { poster$.again = true; return; }
+  poster$.busy = true;
+  try {
+    const day = $('posterDay').value || kstDay(Date.now());
+    const { height } = await drawPoster($('posterCv'), { date: dateLabel(day, kstDay(Date.now())), rows: posterRows(day) });
+    $('posterSize').textContent = `1080 × ${height} (내려받는 파일은 2배 해상도)`;
+  } finally { poster$.busy = false; if (poster$.again) { poster$.again = false; drawPosterNow(); } }
+}
+function renderPoster() {
+  if (!$('posterBox').open) return;
+  if (!$('posterDay').value) $('posterDay').value = kstDay(Date.now());
+  const rows = posterRows($('posterDay').value);
+  // 무대가 있는 날 (오늘부터): 눌러서 바로 그 날 포스터로
+  const today = kstDay(Date.now()), days = new Map();
+  for (const e of arena$.items) if (e.status === '승인' && e.at && kstDay(e.at) >= today) days.set(kstDay(e.at), (days.get(kstDay(e.at)) || 0) + 1);
+  const dayBtns = [...days.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([d, c]) => {
+    const w = '일월화수목금토'[new Date(`${d}T00:00:00Z`).getUTCDay()];
+    return `<button type="button" data-day="${d}" class="${d === $('posterDay').value ? 'on' : ''}">${Number(d.slice(5, 7))}/${Number(d.slice(8))} ${w} · ${c}곡</button>`;
+  }).join('');
+  $('posterDays').innerHTML = dayBtns ? `<span class="hint">무대 있는 날</span>${dayBtns}` : '<span class="hint">앞으로 잡힌 무대가 없어요</span>';
+  $('posterRows').innerHTML = rows.length ? rows.map((r) => `<div class="poster-row" data-id="${esc(r.id)}">
+      <b>${esc(r.time)}</b><input data-k="artist" value="${esc(r.artist)}" placeholder="가수 · 무대 이름" /><input data-k="song" value="${esc(r.song)}" placeholder="곡 (비워 두면 한 줄)" />
+      <small title="${esc(r.raw)}">${esc(r.raw)}</small></div>`).join('') : '<p class="hint" style="margin:0">이 날은 승인된 무대가 없어요. 포스터에는 「아직 잡힌 무대가 없어요」로 나와요.</p>';
+  drawPosterNow();
+}
+// 펼칠 때 · 날짜를 바꿀 때마다 서버에서 최신 타임테이블을 다시 받아 그린다 (관리실을 열어 둔 사이 바뀐 무대도 바로)
+$('posterBox').addEventListener('toggle', () => { if ($('posterBox').open) loadArena(); });
+$('posterDay').addEventListener('change', loadArena);
+$('posterDays').addEventListener('click', (e) => { const b = e.target.closest('button[data-day]'); if (!b) return; $('posterDay').value = b.dataset.day; loadArena(); });
+$('posterRows').addEventListener('input', (e) => {
+  const inp = e.target.closest('input'); if (!inp) return;
+  const row = inp.closest('.poster-row'), id = row.dataset.id;
+  poster$.edits[id] = { artist: row.querySelector('[data-k="artist"]').value, song: row.querySelector('[data-k="song"]').value };
+  drawPosterNow();
+});
+$('posterDown').addEventListener('click', () => {
+  const day = $('posterDay').value || kstDay(Date.now());
+  $('posterCv').toBlob((b) => {
+    if (!b) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b); a.download = `불멍아레나_타임테이블_${day}.png`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }, 'image/png');
+});
 $('arenaList').addEventListener('click', async (e) => {
   const b = e.target.closest('button[data-a]'); if (!b) return;
   const row = b.closest('.arena-item'), id = row.dataset.id, a = b.dataset.a;

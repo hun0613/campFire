@@ -319,3 +319,23 @@ table.daily .rep-open:hover { background: rgba(255,179,107,.12); }
 .arena-add { margin: 0 0 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .arena-add-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .arena-add-row input { flex: 1; min-width: 160px; font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); }
+
+/* 🖼️ 타임테이블 포스터 (v1.23.3) */
+.poster-card { margin: 0 0 12px; padding: 12px 14px; }
+.poster-card summary { cursor: pointer; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; list-style: none; }
+.poster-card summary::-webkit-details-marker { display: none; }
+.poster-card summary::before { content: '▸'; color: var(--muted, #8a7a6a); transition: transform .15s; }
+.poster-card[open] summary::before { transform: rotate(90deg); }
+.poster-body { display: flex; gap: 16px; margin-top: 12px; align-items: flex-start; flex-wrap: wrap; }
+.poster-side { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 10px; }
+.poster-day input { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); margin-left: 6px; }
+.poster-rows { display: flex; flex-direction: column; gap: 8px; }
+.poster-row { display: grid; grid-template-columns: 96px 1fr 1fr; gap: 6px; align-items: center; }
+.poster-row b { font-size: 13px; color: #c9620f; font-variant-numeric: tabular-nums; }
+.poster-row input { min-width: 0; font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); }
+.poster-row small { grid-column: 2 / 4; font-size: 11px; color: var(--muted, #8a7a6a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.poster-cv { width: 320px; max-width: 100%; height: auto; border-radius: 12px; box-shadow: 0 6px 24px rgba(0, 0, 0, .25); background: #0b0a14; }
+.poster-days { display: flex; flex-wrap: wrap; gap: 6px; }
+.poster-days button { font: inherit; font-size: 12.5px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+.poster-days button.on { background: #e0761c; border-color: #e0761c; color: #fff; }
+.poster-days .hint { margin: 0; font-size: 12px; }
