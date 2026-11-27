@@ -116,7 +116,19 @@ export class Music {
     this.css.render(this.scene3, camera);
     if (!this.ready) return;
 
-    if (this.muted) this.player.mute(); else if (this._wasMuted !== false) { this.player.unMute(); this.player.setVolume(100); }
+    // 🎤 아레나 무대: 곡이 시작하면 3초 동안 서서히 커지고, 끝나기 5초 전부터 서서히 작아진다 (대기 음악과 엇갈려 넘어가게)
+    let vol = 100;
+    if (pit.id === 'arena') {
+      const k1 = Math.min(1, Math.max(0, (now - m.startedAt) / 3000));
+      const end = m.endsAt ? m.endsAt - 2000 : 0;
+      const k2 = end ? Math.min(1, Math.max(0, (end - now) / 5000)) : 1;
+      vol = Math.round(100 * Math.min(k1, k2) / 5) * 5; // 5 단위로만 바꾼다 (자주 부르지 않게)
+    }
+    if (this.muted) this.player.mute();
+    else {
+      if (this._wasMuted !== false) { this.player.unMute(); this._vol = null; }
+      if (vol !== this._vol) { this._vol = vol; this.player.setVolume(vol); }
+    }
     this._wasMuted = this.muted;
 
     // 폰은 자동재생이 막혀서 화면을 한 번 눌러야 한다
@@ -155,7 +167,7 @@ export class Music {
     const c = this.cur;
     const at = Math.max(0, (Date.now() + (this.clockOffset || 0) - c.startedAt) / 1000);
     this.player.loadVideoById({ videoId: c.vid, startSeconds: at });
-    this._wasMuted = null;
+    this._wasMuted = null; this._vol = null;
   }
 
   #onState(s) {

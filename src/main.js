@@ -34,6 +34,7 @@ import { createArenaCrowd } from './arenaCrowd.js';
 import { createArenaFans } from './arenaFans.js';
 import { createArenaBand } from './arenaBand.js';
 import { marquee, marqueeAll } from './marquee.js';
+import { ArenaRadio, distanceLevel, showLevel } from './arenaRadio.js';
 import {
   CFG, PITS, STUMPS, NPC, KEEPER, BOUNDS, RANGE, LOOKS, GUESTBOOK, BOARD, QUESTS, LEGEND_POWDERS, TENTS, FIRES, tentAt, tentLocal, EGG, kstDay, EMOTES, FENCE, GATES, SPOTS, LOUNGE_SEATS, SUNSET, ZONES, zonePath,
   ARENA, ARENA_PITS, BALLOON, TT_SIGN, inArena,
@@ -115,6 +116,10 @@ const glowFx = new Particles(scene, shared, { max: 5000, additive: true });
 const softFx = new Particles(scene, shared, { max: 1500, additive: false });
 const effects = new Effects(glowFx, softFx, scene);
 const sound = new Sound();
+const radio = new ArenaRadio(sound); // 📻 아레나 대기 음악 (공연이 없을 때)
+const radioDir = new THREE.Vector3();
+// 휴대폰은 손으로 누른 순간에만 소리를 틀 수 있다 → 누를 때마다(잠금이 풀릴 때까지) 한 번 틀었다 멈춰 둔다
+for (const t of ['pointerdown', 'touchend', 'click', 'keydown']) addEventListener(t, () => { if (sound.ctx) radio.prime(); }, { passive: true });
 const guide = new Guide(scene);
 
 const monitors = new Map(PITS.map((d) => [d.id, new Monitor(d, scene)]));
@@ -2038,11 +2043,18 @@ function throwPowder(i) {
 }
 
 // ---------------------------------------------------------------- 입력
+/** 🦘 점프 (v1.23.4): 서 있을 때만 (앉아 있거나 열기구 · 텐트 소파에서는 안 됨). 다른 사람 화면에도 보인다 */
+function canJump() { return !!me && !state.sitting && !state.lounge && state.ride == null; }
+function doJump() {
+  if (!canJump()) return;
+  if (me.char.jump()) { net.send({ t: 'jump' }); track('jump'); }
+}
 function pressAction() {
   if (!me) return;
   if (UI.dialogOpen()) { UI.dialogNext(); return; }
-  keys.add('KeyE');
   const it = findInteraction();
+  if (!it && canJump()) { doJump(); return; } // 모바일: 할 일이 없는 곳에서는 행동 버튼이 「점프」
+  keys.add('KeyE');
   if (it?.type !== 'chop') interact(it);
 }
 const touch = isTouch ? new TouchControls({
@@ -2146,6 +2158,7 @@ function doEmote(id) {
   setEmotePanel(false);
   if (isTouch) closeChat(); // 휴대폰: 채팅 시트를 닫아 내 캐릭터가 보이게
 }
+net.on('jump', (m) => { remotes.get(m.id)?.ch.jump(); });
 net.on('emote', (m) => {
   const x = EMOTES.find((q) => q.id === m.e);
   const r = remotes.get(m.id);
@@ -2270,7 +2283,7 @@ addEventListener('keydown', (e) => {
     if (it?.type !== 'chop') interact(it);
   }
   if (/^Digit[1-9]$/.test(e.code)) { const g = groupPowders(state.inv.powders)[Number(e.code.slice(5)) - 1]; if (g) throwPowder(g.idxs[0]); } // 숫자 = 가루 칸 순서 (같은 가루는 한 칸)
-  if (e.code === 'Space') e.preventDefault();
+  if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) doJump(); } // 🦘 스페이스바 점프
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
@@ -2432,7 +2445,7 @@ function updateLocal(dt) {
   }
 
   const r = me.char.root;
-  r.position.set(me.x, riding ? rideTmp.y : world.heightAt(me.x, me.z), me.z);
+  r.position.set(me.x, riding ? rideTmp.y : world.heightAt(me.x, me.z) + me.char.jumpLift, me.z); // 🦘 점프 높이
   r.rotation.y = state.sitting || state.lounge ? me.ry : lerpAngle(r.rotation.y, me.ry, Math.min(1, dt * 16));
 
   // 고개 방향: 1인칭은 내 시야(카메라가 보는 방향)를 따라 고개를 돌린다.
@@ -2478,7 +2491,7 @@ function updateRemotes(dt) {
     } else {
       p.x += (r.tx - p.x) * k;
       p.z += (r.tz - p.z) * k;
-      p.y = world.heightAt(p.x, p.z);
+      p.y = world.heightAt(p.x, p.z) + r.ch.jumpLift; // 🦘
       const rt = tentAt(r.tx, r.tz);
       r.ch.root.visible = (!rt || rt === state.tent) // 다른 텐트 안 사람은 벽 · 지붕에 가려지므로 이름표 · 말풍선까지 숨긴다
         && (state.ride != null || inArena(p.x, p.z) === (state.zone === 'arena')); // 다른 곳(캠핑장 · 아레나)에 있는 사람은 그리지 않는다
@@ -2700,6 +2713,16 @@ function updateFires(t, dt) {
     level = Math.max(level, p.intensity * Math.max(0, 1 - (dc - 4) / 16));
   }
   sound.update(dt, level);
+  // 📻 아레나 대기 음악: 무대(객석 가운데)와의 거리 × 공연 상태. 열기구로 다가가면 서서히 커지고 떠나면 작아진다
+  if (me) {
+    const now = serverNow();
+    const d = Math.hypot(me.x - ARENA.stage.x, me.z - (ARENA.stage.z + 20));
+    // 🏟️ 좌우: 카메라 오른쪽 방향과 무대 쪽 방향의 내적 (무대가 화면 오른쪽이면 오른쪽 소리가 크다)
+    const cp = camera.position, sx = ARENA.stage.x - cp.x, sz = ARENA.stage.z - cp.z, sl = Math.hypot(sx, sz) || 1;
+    camera.getWorldDirection(radioDir);
+    const pan = Math.max(-0.6, Math.min(0.6, (-radioDir.z * sx + radioDir.x * sz) / sl * 0.6));
+    radio.update(dt, distanceLevel(d) * showLevel(now, arena.show, arena.next(now)), { dist: d, pan });
+  } else radio.update(dt, 0);
 }
 
 function updateNpc(dt) {
@@ -2739,6 +2762,11 @@ function updateNpc(dt) {
     band.update(dt, performance.now() / 1000, playing, onStage);
     const key = show ? Math.floor((now - show.startedAt) / 18000) : -1; // 18초마다 무대 불꽃 (곡이 시작할 때부터)
     if (key !== pyroKey) { pyroKey = key; if (playing && state.zone === 'arena') effects.play('stagepyro', new THREE.Vector3(ARENA.stage.x, 0, ARENA.stage.z + 5.5), '#ffcf8a'); }
+    // 🎉 무대 시작 연출 (v1.23.4): 곡이 시작되는 순간 한 번 — CO2 · 스파크 → 하늘 폭죽 → 콘페티 캐논 · 리본 → 비눗방울 (시작 12초 안에 들어와 있을 때만)
+    if (show && state.openedShow !== show.id) {
+      state.openedShow = show.id;
+      if (state.zone === 'arena' && now - show.startedAt < 12000) effects.play('stageopen', new THREE.Vector3(ARENA.stage.x, 0, ARENA.stage.z + 5.5), '#ffcf8a');
+    }
   }
 }
 
@@ -2861,7 +2889,7 @@ function updateHud() {
       .replace(/<kbd>\d<\/kbd>(~<kbd>\d<\/kbd>)?\s*가루 뿌리기/, '아래 가루를 탭해서 뿌리기')
       .replace('(꾹 누르기)', '(버튼 꾹)');
   }
-  const action = actionFor(it);
+  const action = actionFor(it) || (isTouch && !it && canJump() && !UI.dialogOpen() ? { icon: '🦘', label: '점프' } : null); // 모바일: 평소엔 점프 버튼
   // 모바일: 액션 버튼에 이미 표시되는 안내는 중복으로 띄우지 않는다
   UI.setPrompt(UI.dialogOpen() || (isTouch && action && !dim) ? null : html, dim);
   touch?.setAction(action);
@@ -3114,4 +3142,4 @@ function hideCamp(hide) {
 const campPits = pitList.filter((p) => !isArenaPit(p));
 
 // 디버그용
-window.__game = { scene, pits, state, effects, camera, net, cam, preview, monitors, tentRoom, THREE, renderer, composer, bloom, grade, remotes, arena, get me() { return me; } };
+window.__game = { scene, pits, state, effects, camera, net, cam, preview, monitors, tentRoom, THREE, renderer, composer, bloom, grade, remotes, arena, radio, get me() { return me; } };

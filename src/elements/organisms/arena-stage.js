@@ -2,7 +2,8 @@
 // 가운데 대형 전광판 + 양옆 보조 전광판, 위 조명 트러스(무빙 라이트 빛줄기) · 기와 지붕 · 이름 현수막 · 깃발 줄, 스피커 기둥
 // 요소 틀: create(opts) → { group, update, setTheme, colliders, seats, screens }. 바닥 y=0, 무대 가운데가 기준점, 정면(객석) +z
 //   screens.main · left · right : 전광판 면 (게임이 영상 구멍 · 안내 그림을 붙인다). MAIN: 가운데 전광판 크기 · 자리
-//   update(t, { energy }) : energy 0~1 (무대에 곡이 나오면 1) — 빛줄기가 조금 밝아진다. 움직임은 늘 천천히 · 작게, 깜빡임 없음 (광과민성 · 어지럼 안전)
+//   update(t, { energy, focus, open }) : energy 0~1 (곡이 나오면 1) · focus 0~1 (시작 10초 전부터 1로: 빛줄기가 무대 가운데로 모인다) · open 곡 시작 뒤 초(-1 = 아님: 처음 6초는 다 같이 객석으로 펼친다)
+//   움직임은 늘 천천히, 깜빡임 없음 (광과민성 · 어지럼 안전)
 import * as THREE from 'three';
 import { plank, color } from '../atoms/index.js';
 import { toon, glow, textTexture } from '../../toon.js';
@@ -209,9 +210,10 @@ export function create(opts = {}) {
   return {
     group,
     screens,
-    update(t, { energy = 0 } = {}) {
-      // 곡이 없으면: 아래를 은은하게 비추며 아주 천천히 흔들린다
-      // 곡이 나오면: 8초마다 무대 패턴이 바뀐다 (관객 쪽 쓸기 · 부채꼴 · 엇갈리기 · 물결 · 무대 바닥) — 바뀔 땐 2~3초에 걸쳐 부드럽게
+    update(t, { energy = 0, focus = 0, open = -1 } = {}) {
+      // 대기(곡 없음): 핀 조명이 빙글빙글 원을 그린다 (v1.23.4, 한 바퀴 약 7초)
+      // 시작 10초 전(focus): 원이 작아지며 무대 가운데로 모이고 조금 빨라진다 — 실제 공연처럼 「모아 두었다가」
+      // 곡 시작(open 0~6초): 모았던 빛을 다 같이 객석 쪽으로 부채꼴로 펼친다 → 그 뒤 8초마다 패턴 (관객 쪽 쓸기 · 부채꼴 · 엇갈리기 · 물결 · 무대 바닥)
       // 깜빡임 · 빠른 회전 없음 (어지럼 · 광과민성 안전). 속도는 바꾸지 않고 위상만 쌓아서 곡 시작 · 끝에 휙 돌지 않는다
       const dt = lastT == null ? 0 : Math.min(0.1, Math.max(0, t - lastT)); lastT = t;
       e += (energy - e) * Math.min(1, dt * 0.6);
@@ -219,18 +221,24 @@ export function create(opts = {}) {
       beams.forEach((b, i) => {
         b.p = (b.p ?? b.ph) + dt * (0.12 + 0.18 * e);
         const u = i / (n - 1) - 0.5; // -0.5 (왼쪽) ~ 0.5 (오른쪽)
-        let px = -0.6, pz = b.side * 0.12; // 쉴 때: 객석 쪽으로 살짝
-        if (e > 0.3) {
+        let px, pz;
+        if (open >= 0 && open < 6) { const k = Math.min(1, open / 2.5); px = -0.35 - 0.8 * k; pz = u * (0.25 + 1.35 * k); } // 펼치기
+        else if (e <= 0.3) { // 대기 · 카운트다운: 빙글빙글 원을 그린다 (조명마다 시작을 엇갈려). 카운트다운이면 원이 작아지며 무대 가운데로 모이고 조금 빨라진다
+          b.q = (b.q ?? i * 0.785) + dt * (0.9 + 0.7 * focus); // 한 바퀴 약 7초 → 카운트다운 끝엔 약 4초
+          const r = 0.34 * (1 - 0.7 * focus);
+          px = -0.8 + 0.3 * focus + r * Math.cos(b.q); pz = u * 0.7 * (1 - 0.6 * focus) + r * Math.sin(b.q);
+        }
+        else {
           if (P === 0) { px = -1.15 + 0.12 * Math.sin(b.p); pz = Math.sin(b.p * 0.8 + u * 3) * 0.55; }        // 관객 쪽으로 쓸기
           else if (P === 1) { px = -0.75; pz = u * 1.5 + Math.sin(b.p) * 0.08; }                                // 부채꼴로 펼치기
           else if (P === 2) { px = -0.85; pz = -u * 1.1 + Math.sin(b.p * 0.7) * 0.1; }                          // 서로 엇갈리기
           else if (P === 3) { px = -0.9 + 0.25 * Math.sin(b.p * 1.2 + i * 0.6); pz = Math.sin(b.p + i * 0.6) * 0.35; } // 물결
           else { px = -0.25; pz = u * 0.5; }                                                                     // 무대 바닥 비추기
         }
-        const kk = Math.min(1, dt * 0.9); // 천천히 따라간다
+        const kk = Math.min(1, dt * (open >= 0 && open < 6 ? 1.6 : e <= 0.3 && open < 0 ? 3 : 0.9)); // 천천히 따라간다 (펼칠 때만 조금 빠르게)
         b.piv.rotation.x += (px + 0.04 * Math.sin(b.p * 1.3) - b.piv.rotation.x) * kk;
         b.piv.rotation.z += (pz - b.piv.rotation.z) * kk;
-        b.mat.opacity = 0.045 + 0.075 * e + 0.012 * Math.sin(b.p * 1.3);
+        b.mat.opacity = 0.055 + 0.065 * e + 0.03 * focus + 0.012 * Math.sin(b.p * 1.3);
       });
     },
     setTheme() {},

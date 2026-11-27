@@ -62,6 +62,7 @@ const easeIn = (t) => t * t * t;
 const lerp = (a, b, t) => a + (b - a) * t;
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 // 고개 돌리기: 상체와 머리가 함께 돌아 정면에서 좌우 LOOK_MAX 까지 (머리 75% · 상체 25%)
+const JUMP_T = 0.62, JUMP_H = 0.85; // 점프 시간 · 높이(m)
 const EMOTE_ACTS = new Set(['wave', 'hop', 'laugh', 'love', 'clap', 'wow', 'sad', 'sleepy']);
 const WORK_ACTS = new Set(['chop', 'place', 'gather', 'throw', 'light']); // 하던 일을 보는 동작
 const LOOK_MAX = 1.4; // 약 80°
@@ -360,6 +361,10 @@ export class Character {
 
   busy() { return !!this.action; }
 
+  /** 🦘 점프 (v1.23.4): 0.62초 동안 포물선으로 뛰어오른다. 높이는 jumpLift — 부르는 쪽(main)이 발 높이에 더한다 */
+  jump() { if (this.jumpT == null && this.anim !== 'sit' && this.anim !== 'guitar') { this.jumpT = 0; return true; } return false; }
+  get jumpLift() { if (this.jumpT == null) return 0; const p = this.jumpT / JUMP_T; return 4 * JUMP_H * p * (1 - p); }
+
   /** 'chop' | 'throw' | 'wave' 같은 단발 동작 */
   play(name, opts = {}) {
     const dur = { chop: 0.62, throw: 0.55, wave: 1.2, light: 0.7, place: 1.0, gather: 0.6, hop: 0.9, laugh: 1.5, love: 1.6, clap: 1.4, wow: 1.0, sad: 2.0, sleepy: 2.2 }[name] || 0.5;
@@ -603,6 +608,13 @@ export class Character {
     this.carryBounce = Math.max(0, this.carryBounce - dt * 5);
     const cb = this.carryBounce;
     this.carry.scale.set(1 + cb * 0.12, 1 - cb * 0.12, 1 + cb * 0.12);
+    if (this.jumpT != null) { // 🦘 점프: 무릎을 살짝 접고 팔을 벌려 들었다가 내려앉는다
+      this.jumpT += dt;
+      const p = Math.min(1, this.jumpT / JUMP_T), up = Math.sin(p * Math.PI);
+      lL = -0.55 * up; lR = -0.35 * up;
+      if (!A) { zL = -0.35 - 0.5 * up; zR = 0.35 + 0.5 * up; aL = aR = -0.25 * up; }
+      if (this.jumpT >= JUMP_T) this.jumpT = null;
+    }
     const k = Math.min(1, dt * 14);
     legL.rotation.x = lerp(legL.rotation.x, lL, k);
     legR.rotation.x = lerp(legR.rotation.x, lR, k);

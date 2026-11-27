@@ -962,6 +962,17 @@ function handle(ws, ctx, m) {
         .finally(() => { me.gbPending = false; });
       break;
     }
+    case 'jump': { // 🦘 점프 (v1.23.4): 근처 사람들 화면에도 뛰어오르게. 텐트 안이면 그 텐트 안에만. 0.5초에 한 번
+      if (now - (me.lastJump || 0) < 500 || me.ride != null) return;
+      me.lastJump = now;
+      updateTent(me, ws);
+      const msg = { t: 'jump', id: me.id };
+      if (me.tent) {
+        const data = JSON.stringify(msg);
+        for (const q of players.values()) if (q !== me && q.tent === me.tent && q.ws?.readyState === 1) q.ws.send(data);
+      } else broadcast(msg, ws);
+      break;
+    }
     case 'emote': { // 감정 표현: 채팅처럼 텐트 안이면 그 텐트 안에만. 1.2초에 한 번
       const e = EMOTES.find((x) => x.id === m.e);
       if (!e || now - (me.lastEmote || 0) < 1200) return;

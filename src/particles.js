@@ -36,10 +36,17 @@ void main(){
     vec2 q = p * 2.6; q.y = -q.y + 0.15;
     float v = pow(q.x * q.x + q.y * q.y - 1.0, 3.0) - q.x * q.x * q.y * q.y * q.y;
     a = smoothstep(0.05, -0.15, v);
-  } else {
+  } else if (vShape < 3.5) {
     // 부드러운 연기
     float d = length(p);
     a = smoothstep(0.5, 0.1, d);
+  } else if (vShape < 4.5) {
+    // 🫧 비눗방울: 얇은 테두리 + 왼쪽 위 반짝 + 아주 옅은 속 (v1.23.4)
+    float d = length(p);
+    a = smoothstep(0.5, 0.45, d) * smoothstep(0.33, 0.45, d) * 0.85 + smoothstep(0.11, 0.0, length(p - vec2(-0.17, 0.17))) * 0.9 + 0.07 * smoothstep(0.5, 0.3, d);
+  } else {
+    // 🎊 꽃가루: 작은 직사각형 색종이 (돌면서 팔랑인다)
+    a = step(abs(p.x), 0.42) * step(abs(p.y), 0.19);
   }
   if (a <= 0.001) discard;
   gl_FragColor = vec4(vColor * uGlow, a * vAlpha);

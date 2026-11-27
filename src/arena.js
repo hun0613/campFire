@@ -226,7 +226,8 @@ export class Arena {
   #drawInfo(now) {
     const show = this.show && now >= this.show.startedAt ? this.show : null;
     const nx = this.next(now);
-    const key = `${show?.id || ''}|${nx?.id || ''}|${Math.floor(now / 30000)}`;
+    const cd = !show && nx && nx.at > now && nx.at - now <= 10000 ? Math.ceil((nx.at - now) / 1000) : 0; // ⏳ 시작 10초 전 카운트다운
+    const key = `${show?.id || ''}|${nx?.id || ''}|${Math.floor(now / 30000)}|${cd}`;
     if (key === this._info) return;
     this._info = key;
     const g = this.infoCv.getContext('2d'), W = 1024, H = 576;
@@ -239,7 +240,12 @@ export class Arena {
     g.fillStyle = '#fff1d8';
     const clip = (t, n) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
     const title = (text, y, c = '#fff1d8') => { this.mainTitle.set(text, c); this.mainTitle.mesh.position.y = (0.5 - y / 576) * MAIN.h; }; // 흐르는 제목 띠
-    if (show) {
+    if (cd) { // ⏳ 카운트다운: 큰 숫자 + 곡 제목 (숫자만 1초마다 다시 그린다)
+      g.font = '42px Moneygraphy, sans-serif'; g.fillText('곧 무대가 시작돼요', W / 2, 172);
+      g.save(); g.fillStyle = '#ffb347'; g.shadowColor = 'rgba(255,170,70,.75)'; g.shadowBlur = 40;
+      g.font = '210px Moneygraphy, sans-serif'; g.fillText(String(cd), W / 2, 320); g.restore();
+      title(`「${nx.title}」`, 450, '#fff1d8');
+    } else if (show) {
       g.font = '44px Moneygraphy, sans-serif'; g.fillText('지금 무대', W / 2, 220);
       title(`「${show.title}」`, 300);
       g.font = '36px Moneygraphy, sans-serif'; g.fillText(`🎤 ${show.byName}`, W / 2, 380);
@@ -361,7 +367,9 @@ export class Arena {
     }
     this.arenaDock.setBoard(boardFor('arena'));
     if (this.root.visible) {
-      this.stage.update(t, { energy });
+      const sh = this.show && now >= this.show.startedAt ? this.show : null, nx = this.next(now);
+      const focus = !sh && nx && nx.at - now < 10000 ? Math.min(1, Math.max(0, 1 - (nx.at - now) / 10000)) : 0; // 시작 10초 전부터 빛을 모은다
+      this.stage.update(t, { energy, focus, open: sh ? (now - sh.startedAt) / 1000 : -1 });
       this.#drawInfo(now);
       this.#drawSide(now);
       this.mainTitle.update(dt);
